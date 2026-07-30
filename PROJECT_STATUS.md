@@ -1,7 +1,7 @@
 # RiftCrowd LIVE — Project Status
 
 - **Working title:** RiftCrowd LIVE
-- **Current phase:** Phase 1 — Repository Bootstrap and Development Tooling
+- **Current phase:** Phase 2 — Shared Protocol and Schema Validation
 - **Status:** COMPLETED
 - **Last updated:** 30 July 2026
 
@@ -10,8 +10,8 @@
 - Phase 0 — Product Lock, Legal Boundaries, and Acceptance Tests: **not started** (product spec
   ships here as a draft; the full lock is Phase 0 work)
 - Phase 1 — Repository Bootstrap and Development Tooling: **COMPLETED**
-- Phase 2 — Shared Protocol and Schema Validation: **not started** (next)
-- Phase 3 — Godot Portrait Foundation: not started
+- Phase 2 — Shared Protocol and Schema Validation: **COMPLETED**
+- Phase 3 — Godot Portrait Foundation: **not started** (next)
 - Phase 4 — Content-Pack System and Four Launch Packs: not started
 - Phase 5 — Autonomous Arena Simulation: not started
 - Phase 6 — Match Director and Round Lifecycle: not started
@@ -73,7 +73,49 @@ Content and tools:
   `gift-mappings/default.json`.
 - [x] Tools: `event-replay` and `asset-validation` (deferred).
 
-## Quality gate results
+## Phase 2 — completed work
+
+Shared protocol and schema validation:
+
+- [x] Versioned Zod schemas in `shared/schemas/`: `NormalizedLiveEventSchema` and
+  `GameCommandSchema` carry a required `schemaVersion: 1` literal; all objects are `.strict()`.
+- [x] String length and numeric range bounds on every untrusted field (overlong input is
+  rejected, not truncated).
+- [x] Deterministic identity helpers in `shared/schemas/identity.ts`: `stableStringify`,
+  `computeRawHash` (`sha256:` + 64 hex), `deterministicEventId` / `deterministicCommandId`
+  (collision-proof tuple derivation via `stableStringify`, `evt_`/`cmd_` + 24 hex). Node-only,
+  exposed ONLY via the `@riftcrowd/shared/identity` subpath so the root export stays browser-safe.
+- [x] Six protocol message kinds under `PROTOCOL_VERSION = 1` (`event`, `command`, `ack`, `error`,
+  `snapshot`, `heartbeat`), discriminated on `kind`, documented in `docs/EVENT_PROTOCOL.md`.
+- [x] Four fixture files in `shared/fixtures/`: 8 valid events, 10 invalid events, 6 valid
+  messages (one per kind), 7 invalid messages — each invalid entry labelled with its
+  `expectedInvalidPath`.
+- [x] TypeScript tests (`gateway/test/`): fixtures parse/reject at the documented Zod issue path;
+  identity helper stability, divergence, and delimiter-collision cases.
+- [x] GDScript mirror `game/scripts/protocol/protocol_validator.gd` (accepts any Variant root,
+  rejects non-object JSON) + headless fixture test `game/tests/test_protocol.gd` consuming the
+  same shared fixtures.
+
+Commands run and results:
+
+- `npm run lint` — **PASS** (zero errors/warnings)
+- `npm run typecheck` — **PASS** (shared, gateway, dashboard all clean)
+- `npm test` — **PASS** (21 tests in 4 files: identity 15, messages 3, schemas 2, health 1)
+- Godot headless test — **MANUAL STEP REQUIRED** (Godot not installed; see limitations)
+
+Phase 2 known limitations:
+
+- **Godot headless test pending manual run.** Godot is not installed on this machine. Run from
+  the `game/` directory: `godot --headless --script res://tests/test_protocol.gd` (exits 0 on
+  success).
+- **`snapshot.state` is untyped** (`Record<string, unknown>`) until the WebSocket integration
+  firms it up in Phase 10.
+- **GDScript datetime regex is shape-only.** It mirrors what Zod's `z.string().datetime()`
+  accepts structurally but does not validate calendar semantics (e.g. month 13 passes the shape).
+- **Game test depends on the monorepo layout.** `game/tests/test_protocol.gd` loads fixtures from
+  `../shared/fixtures` relative to `game/`; it will not run from an exported/relocated game build.
+
+## Phase 1 — quality gate results
 
 - `npm install` — **PASS** (322 packages, 6 audit advisories — upstream deps, non-blocking)
 - `npm run lint` — **PASS** (zero errors/warnings)
@@ -96,12 +138,5 @@ Content and tools:
 
 ## Next phase
 
-**Phase 2 — Shared Protocol and Schema Validation.**
-
-- Implement `NormalizedLiveEvent` and `GameCommand` schemas with version fields (extend existing
-  `shared/` work).
-- Add deterministic IDs and raw-payload hashes.
-- Document ack, error, snapshot, and heartbeat messages.
-- Generate or mirror matching typed GDScript DTO parsing helpers.
-- Acceptance gate: malformed messages rejected; fixtures parse consistently in TypeScript and
-  Godot.
+**Phase 3 — Godot Portrait Foundation** (per the phase list in
+`docs/RiftCrowd_LIVE_Complete_Qoder_Implementation_Guide.md`).

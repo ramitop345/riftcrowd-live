@@ -32,11 +32,18 @@ describe('NormalizedLiveEvent schema validation', () => {
     }
   });
 
-  it('invalid fixtures all reject', () => {
+  it('invalid fixtures all reject at the documented path', () => {
     expect(invalidEvents.length).toBeGreaterThan(0);
     for (const entry of invalidEvents) {
       const result = NormalizedLiveEventSchema.safeParse(entry.event);
       expect(result.success, `expected invalid fixture to reject: ${entry.label}`).toBe(false);
+      if (result.success) continue;
+      const expectedPath = JSON.stringify(entry.expectedInvalidPath);
+      const issuePaths = result.error.issues.map((issue) => JSON.stringify(issue.path));
+      expect(
+        issuePaths,
+        `expected an issue at ${expectedPath} for ${entry.label}, got ${issuePaths.join(', ')}`,
+      ).toContain(expectedPath);
     }
   });
 });

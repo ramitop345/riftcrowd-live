@@ -1,0 +1,72 @@
+[
+  {
+    "protocolVersion": 1,
+    "kind": "event",
+    "event": {
+      "schemaVersion": 1,
+      "id": "evt-0001",
+      "provider": "mock",
+      "type": "chat",
+      "receivedAt": "2026-07-30T18:00:00.000Z",
+      "user": {
+        "id": "viewer-1001",
+        "handle": "ramses.kx",
+        "displayName": "Ramses"
+      },
+      "comment": "lions",
+      "rawHash": "sha256:b21f4c7a9d0e5136a8c4f2071e9b3d55b21f4c7a9d0e5136a8c4f2071e9b3d55"
+    }
+  },
+  {
+    "protocolVersion": 1,
+    "kind": "command",
+    "command": {
+      "schemaVersion": 1,
+      "id": "cmd-0001",
+      "type": "ADD_ENERGY",
+      "createdAt": "2026-07-30T18:00:00.500Z",
+      "factionId": "faction-lions",
+      "viewerId": "viewer-1001",
+      "displayName": "Ramses",
+      "amount": 5,
+      "sourceEventIds": ["evt-0001"],
+      "expiresAt": "2026-07-30T18:00:10.500Z",
+      "metadata": {
+        "origin": "chat",
+        "burst": false
+      }
+    }
+  },
+  {
+    "protocolVersion": 1,
+    "kind": "ack",
+    "commandId": "cmd-0001",
+    "receivedAt": "2026-07-30T18:00:00.750Z"
+  },
+  {
+    "protocolVersion": 1,
+    "kind": "error",
+    "code": "INVALID_MESSAGE",
+    "message": "Frame rejected: payload failed schema validation.",
+    "relatedId": "cmd-0002"
+  },
+  {
+    "protocolVersion": 1,
+    "kind": "snapshot",
+    "sentAt": "2026-07-30T18:00:05.000Z",
+    "state": {
+      "round": 3,
+      "phase": "battle",
+      "factions": {
+        "faction-lions": { "energy": 120, "shield": 40 },
+        "faction-wolves": { "energy": 95, "shield": 60 }
+      }
+    }
+  },
+  {
+    "protocolVersion": 1,
+    "kind": "heartbeat",
+    "sentAt": "2026-07-30T18:00:06.000Z",
+    "sequence": 42
+  }
+]

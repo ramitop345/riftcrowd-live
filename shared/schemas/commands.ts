@@ -20,10 +20,10 @@ export const GameCommandTypeSchema = z.enum([
   'END_ROUND',
 ]);
 
-/** Flat primitives only: no nested objects, no arrays, no functions. */
+/** Flat primitives only: no nested objects, no arrays, no functions. Keys and strings are bounded. */
 export const GameCommandMetadataSchema = z.record(
-  z.string().min(1),
-  z.union([z.string(), z.number(), z.boolean()]),
+  z.string().min(1).max(128),
+  z.union([z.string().max(500), z.number().finite(), z.boolean()]),
 );
 
 /**
@@ -32,15 +32,16 @@ export const GameCommandMetadataSchema = z.record(
  */
 export const GameCommandSchema = z
   .object({
-    id: z.string().min(1),
+    schemaVersion: z.literal(COMMAND_SCHEMA_VERSION),
+    id: z.string().min(1).max(128),
     type: GameCommandTypeSchema,
     createdAt: z.string().datetime(),
-    factionId: z.string().min(1).optional(),
-    viewerId: z.string().min(1).optional(),
-    displayName: z.string().min(1).optional(),
-    amount: z.number().optional(),
-    abilityId: z.string().min(1).optional(),
-    sourceEventIds: z.array(z.string().min(1)),
+    factionId: z.string().min(1).max(128).optional(),
+    viewerId: z.string().min(1).max(128).optional(),
+    displayName: z.string().min(1).max(64).optional(),
+    amount: z.number().finite().optional(),
+    abilityId: z.string().min(1).max(128).optional(),
+    sourceEventIds: z.array(z.string().min(1).max(128)).max(1000),
     expiresAt: z.string().datetime().optional(),
     metadata: GameCommandMetadataSchema.optional(),
   })

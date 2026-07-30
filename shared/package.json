@@ -10,8 +10,12 @@
     ".": "./schemas/index.ts",
     "./events": "./schemas/events.ts",
     "./commands": "./schemas/commands.ts",
+    "./identity": "./schemas/identity.ts",
+    "./messages": "./schemas/messages.ts",
     "./fixtures/valid-events.json": "./fixtures/valid-events.json",
-    "./fixtures/invalid-events.json": "./fixtures/invalid-events.json"
+    "./fixtures/invalid-events.json": "./fixtures/invalid-events.json",
+    "./fixtures/valid-messages.json": "./fixtures/valid-messages.json",
+    "./fixtures/invalid-messages.json": "./fixtures/invalid-messages.json"
   },
   "files": ["schemas", "fixtures"],
   "scripts": {

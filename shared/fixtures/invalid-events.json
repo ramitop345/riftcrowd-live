@@ -4,6 +4,7 @@
     "reason": "Required field `id` is absent.",
     "expectedInvalidPath": ["id"],
     "event": {
+      "schemaVersion": 1,
       "provider": "mock",
       "type": "chat",
       "receivedAt": "2026-07-30T18:10:00.000Z",
@@ -13,7 +14,7 @@
         "displayName": "Bad Sample One"
       },
       "comment": "lions",
-      "rawHash": "1a2b3c4d5e6f70819a2b3c4d5e6f7081"
+      "rawHash": "sha256:1a2b3c4d5e6f70819a2b3c4d5e6f70811a2b3c4d5e6f70819a2b3c4d5e6f7081"
     }
   },
   {
@@ -21,6 +22,7 @@
     "reason": "`type` is not a member of LiveEventType.",
     "expectedInvalidPath": ["type"],
     "event": {
+      "schemaVersion": 1,
       "id": "evt-bad-0002",
       "provider": "mock",
       "type": "superchat",
@@ -30,7 +32,7 @@
         "handle": "bad.sample.two",
         "displayName": "Bad Sample Two"
       },
-      "rawHash": "2b3c4d5e6f70819a2b3c4d5e6f708192"
+      "rawHash": "sha256:2b3c4d5e6f70819a2b3c4d5e6f7081922b3c4d5e6f70819a2b3c4d5e6f708192"
     }
   },
   {
@@ -38,6 +40,7 @@
     "reason": "`likeCount` must be a non-negative integer, not a string.",
     "expectedInvalidPath": ["likeCount"],
     "event": {
+      "schemaVersion": 1,
       "id": "evt-bad-0003",
       "provider": "mock",
       "type": "like",
@@ -48,7 +51,7 @@
         "displayName": "Bad Sample Three"
       },
       "likeCount": "25",
-      "rawHash": "3c4d5e6f70819a2b3c4d5e6f70819a2b"
+      "rawHash": "sha256:3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d5e6f70819a2b"
     }
   },
   {
@@ -56,6 +59,7 @@
     "reason": "`user.handle` is required.",
     "expectedInvalidPath": ["user", "handle"],
     "event": {
+      "schemaVersion": 1,
       "id": "evt-bad-0004",
       "provider": "mock",
       "type": "join",
@@ -64,7 +68,7 @@
         "id": "viewer-2004",
         "displayName": "Bad Sample Four"
       },
-      "rawHash": "4d5e6f70819a2b3c4d5e6f70819a2b3c"
+      "rawHash": "sha256:4d5e6f70819a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c"
     }
   },
   {
@@ -72,6 +76,7 @@
     "reason": "`gift.repeatCount` must be a positive integer; zero is rejected.",
     "expectedInvalidPath": ["gift", "repeatCount"],
     "event": {
+      "schemaVersion": 1,
       "id": "evt-bad-0005",
       "provider": "mock",
       "type": "gift",
@@ -86,7 +91,7 @@
         "name": "Rose",
         "repeatCount": 0
       },
-      "rawHash": "5e6f70819a2b3c4d5e6f70819a2b3c4d"
+      "rawHash": "sha256:5e6f70819a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d"
     }
   },
   {
@@ -94,6 +99,7 @@
     "reason": "`gift.repeatCount` must be a positive integer; negative values are rejected.",
     "expectedInvalidPath": ["gift", "repeatCount"],
     "event": {
+      "schemaVersion": 1,
       "id": "evt-bad-0006",
       "provider": "mock",
       "type": "gift",
@@ -109,14 +115,15 @@
         "repeatCount": -3,
         "streakEnded": true
       },
-      "rawHash": "6f70819a2b3c4d5e6f70819a2b3c4d5e"
+      "rawHash": "sha256:6f70819a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d5e"
     }
   },
   {
     "label": "unknown-extra-field",
-    "reason": "Unknown key `giftValueUsd` is rejected because the schema is strict().",
-    "expectedInvalidPath": ["giftValueUsd"],
+    "reason": "Unknown key `giftValueUsd` is rejected because the schema is strict(). Zod reports unrecognized_keys at the object root, so the expected path is [].",
+    "expectedInvalidPath": [],
     "event": {
+      "schemaVersion": 1,
       "id": "evt-bad-0007",
       "provider": "mock",
       "type": "chat",
@@ -128,7 +135,7 @@
       },
       "comment": "wolves",
       "giftValueUsd": 4.99,
-      "rawHash": "70819a2b3c4d5e6f70819a2b3c4d5e6f"
+      "rawHash": "sha256:70819a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d5e6f"
     }
   },
   {
@@ -136,6 +143,7 @@
     "reason": "`receivedAt` must be an ISO 8601 datetime string.",
     "expectedInvalidPath": ["receivedAt"],
     "event": {
+      "schemaVersion": 1,
       "id": "evt-bad-0008",
       "provider": "mock",
       "type": "follow",
@@ -145,7 +153,44 @@
         "handle": "bad.sample.eight",
         "displayName": "Bad Sample Eight"
       },
-      "rawHash": "819a2b3c4d5e6f70819a2b3c4d5e6f70"
+      "rawHash": "sha256:819a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d5e6f70"
+    }
+  },
+  {
+    "label": "missing-schema-version",
+    "reason": "Required field `schemaVersion` is absent.",
+    "expectedInvalidPath": ["schemaVersion"],
+    "event": {
+      "id": "evt-bad-0009",
+      "provider": "mock",
+      "type": "chat",
+      "receivedAt": "2026-07-30T18:10:08.000Z",
+      "user": {
+        "id": "viewer-2009",
+        "handle": "bad.sample.nine",
+        "displayName": "Bad Sample Nine"
+      },
+      "comment": "eagles",
+      "rawHash": "sha256:9a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d5e6f7081"
+    }
+  },
+  {
+    "label": "unsupported-schema-version",
+    "reason": "`schemaVersion` must be the literal 1; version 2 is unsupported.",
+    "expectedInvalidPath": ["schemaVersion"],
+    "event": {
+      "schemaVersion": 2,
+      "id": "evt-bad-0010",
+      "provider": "mock",
+      "type": "chat",
+      "receivedAt": "2026-07-30T18:10:09.000Z",
+      "user": {
+        "id": "viewer-2010",
+        "handle": "bad.sample.ten",
+        "displayName": "Bad Sample Ten"
+      },
+      "comment": "sharks",
+      "rawHash": "sha256:a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d5e6f70819"
     }
   }
 ]

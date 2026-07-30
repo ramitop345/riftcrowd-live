@@ -10,28 +10,41 @@ a real TikTok session, and no real viewer data is stored.
 
 - `valid-events.json` — one valid `NormalizedLiveEvent` per `LiveEventType`, eight in total
   (`chat`, `like`, `follow`, `share`, `gift`, `subscribe`, `join`, `provider_status`), with ids
-  `evt-0001` through `evt-0008`. Every entry must satisfy `NormalizedLiveEventSchema`. The `gift`
+  `evt-0001` through `evt-0008`. Every entry carries `schemaVersion: 1` and a
+  `sha256:<64 hex>`-shaped `rawHash`, and must satisfy `NormalizedLiveEventSchema`. The `gift`
   entry carries a complete gift object including `streakId`, `streakEnded`, and `providerValue`.
 - `invalid-events.json` — labelled rejection cases. Every entry must **fail**
   `NormalizedLiveEventSchema`, each for exactly one documented reason: missing `id`, unknown `type`,
   `likeCount` as a string, missing `user.handle`, `gift.repeatCount` of zero, negative
-  `gift.repeatCount`, an unknown extra field rejected by `.strict()`, and a non-ISO `receivedAt`.
+  `gift.repeatCount`, an unknown extra field rejected by `.strict()`, a non-ISO `receivedAt`,
+  a missing `schemaVersion`, and an unsupported `schemaVersion: 2`.
+- `valid-messages.json` — one valid `ProtocolMessage` per envelope kind, six in total (`event`,
+  `command`, `ack`, `error`, `snapshot`, `heartbeat`), all with `protocolVersion: 1`. Every entry
+  must satisfy `ProtocolMessageSchema`.
+- `invalid-messages.json` — labelled envelope rejection cases in the same wrapper format as
+  `invalid-events.json` (the invalid message payload lives under the `event` key), seven in total:
+  unknown `kind`, missing `protocolVersion`, unsupported `protocolVersion: 2`, `ack` without
+  `commandId`, `heartbeat` with a negative `sequence`, an `event` message embedding a malformed
+  event, and a `command` message embedding a malformed command (missing `sourceEventIds`).
 
-## Shape of `invalid-events.json`
+## Shape of `invalid-events.json` and `invalid-messages.json`
 
-Unlike `valid-events.json`, which is a plain array of events, each invalid entry is a wrapper so a
+Unlike the valid files, which are plain arrays of payloads, each invalid entry is a wrapper so a
 test can assert _why_ the sample is rejected:
 
 - `label` — short stable identifier, safe to use as a test name.
 - `reason` — human-readable explanation.
 - `expectedInvalidPath` — the Zod issue path the failure is expected to point at.
-- `event` — the malformed payload to feed into the schema.
+- `event` — the malformed payload to feed into the schema (an event in `invalid-events.json`, a
+  protocol message in `invalid-messages.json`).
 
 ## Who consumes these
 
-- **Gateway tests** (Phase 2 onward) parse both files and assert that every valid entry passes and
-  every invalid entry fails at the documented path. This is the regression net for the schemas in
-  `shared/schemas/`.
+- **Gateway tests** (Phase 2 onward) parse all four files and assert that every valid entry passes
+  and every invalid entry fails at the documented path. This is the regression net for the schemas
+  in `shared/schemas/`.
+- **Godot DTO tests** (Phase 2) parse the same files so TypeScript and GDScript accept and reject
+  identical payloads.
 - **`MockLiveAdapter`** (Phase 9) replays `valid-events.json` to drive fully offline rounds.
 - **Dashboard test buttons** (Phase 13) reuse the valid entries as canned events.
 

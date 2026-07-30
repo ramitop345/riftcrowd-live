@@ -1,5 +1,6 @@
 [
   {
+    "schemaVersion": 1,
     "id": "evt-0001",
     "provider": "mock",
     "type": "chat",
@@ -10,9 +11,10 @@
       "displayName": "Ramses"
     },
     "comment": "lions",
-    "rawHash": "b21f4c7a9d0e5136a8c4f2071e9b3d55"
+    "rawHash": "sha256:b21f4c7a9d0e5136a8c4f2071e9b3d55b21f4c7a9d0e5136a8c4f2071e9b3d55"
   },
   {
+    "schemaVersion": 1,
     "id": "evt-0002",
     "provider": "mock",
     "type": "like",
@@ -23,9 +25,10 @@
       "displayName": "Maya"
     },
     "likeCount": 25,
-    "rawHash": "0c8e1a63b74f29d5e03a7c1b8f6d4402"
+    "rawHash": "sha256:0c8e1a63b74f29d5e03a7c1b8f6d44020c8e1a63b74f29d5e03a7c1b8f6d4402"
   },
   {
+    "schemaVersion": 1,
     "id": "evt-0003",
     "provider": "mock",
     "type": "follow",
@@ -35,9 +38,10 @@
       "handle": "leo_defends",
       "displayName": "Leo"
     },
-    "rawHash": "7d3b0f95c1a8e264402fb7d19c5e8a31"
+    "rawHash": "sha256:7d3b0f95c1a8e264402fb7d19c5e8a317d3b0f95c1a8e264402fb7d19c5e8a31"
   },
   {
+    "schemaVersion": 1,
     "id": "evt-0004",
     "provider": "mock",
     "type": "share",
@@ -47,9 +51,10 @@
       "handle": "nina.rift",
       "displayName": "Nina"
     },
-    "rawHash": "e91a5c73f0d82b64a05c1e9d7b3f4682"
+    "rawHash": "sha256:e91a5c73f0d82b64a05c1e9d7b3f4682e91a5c73f0d82b64a05c1e9d7b3f4682"
   },
   {
+    "schemaVersion": 1,
     "id": "evt-0005",
     "provider": "mock",
     "type": "gift",
@@ -67,9 +72,10 @@
       "streakEnded": true,
       "providerValue": 1
     },
-    "rawHash": "3f6c8b21d09e5a74c1b8f2073d4e9a56"
+    "rawHash": "sha256:3f6c8b21d09e5a74c1b8f2073d4e9a563f6c8b21d09e5a74c1b8f2073d4e9a56"
   },
   {
+    "schemaVersion": 1,
     "id": "evt-0006",
     "provider": "mock",
     "type": "subscribe",
@@ -79,9 +85,10 @@
       "handle": "amara.plays",
       "displayName": "Amara"
     },
-    "rawHash": "c40d7e18a9b3f5620c7d1e8b4a95f302"
+    "rawHash": "sha256:c40d7e18a9b3f5620c7d1e8b4a95f302c40d7e18a9b3f5620c7d1e8b4a95f302"
   },
   {
+    "schemaVersion": 1,
     "id": "evt-0007",
     "provider": "mock",
     "type": "join",
@@ -91,9 +98,10 @@
       "handle": "kenji.wolf",
       "displayName": "Kenji"
     },
-    "rawHash": "58a1c9f30b76e2d4917c0b3f8e5a2d61"
+    "rawHash": "sha256:58a1c9f30b76e2d4917c0b3f8e5a2d6158a1c9f30b76e2d4917c0b3f8e5a2d61"
   },
   {
+    "schemaVersion": 1,
     "id": "evt-0008",
     "provider": "mock",
     "type": "provider_status",
@@ -104,6 +112,6 @@
       "displayName": "System"
     },
     "comment": "connected",
-    "rawHash": "9b2e6d14c8a0f7530e1d9c4b6a83f527"
+    "rawHash": "sha256:9b2e6d14c8a0f7530e1d9c4b6a83f5279b2e6d14c8a0f7530e1d9c4b6a83f527"
   }
 ]

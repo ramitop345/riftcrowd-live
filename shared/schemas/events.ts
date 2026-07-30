@@ -18,12 +18,15 @@ export const LiveEventTypeSchema = z.enum([
   'provider_status',
 ]);
 
-/** Viewer identity as it exists for the duration of a session. */
+/**
+ * Viewer identity as it exists for the duration of a session. Provider data is untrusted, so every
+ * string carries an upper bound; anything longer is rejected, not truncated.
+ */
 export const LiveUserSchema = z
   .object({
-    id: z.string().min(1),
-    handle: z.string().min(1),
-    displayName: z.string().min(1),
+    id: z.string().min(1).max(128),
+    handle: z.string().min(1).max(128),
+    displayName: z.string().min(1).max(64),
   })
   .strict();
 
@@ -33,12 +36,12 @@ export const LiveUserSchema = z
  */
 export const LiveGiftSchema = z
   .object({
-    id: z.string().min(1),
-    name: z.string().min(1),
-    repeatCount: z.number().int().positive(),
-    streakId: z.string().min(1).optional(),
+    id: z.string().min(1).max(128),
+    name: z.string().min(1).max(128),
+    repeatCount: z.number().int().min(1).max(100_000),
+    streakId: z.string().min(1).max(128).optional(),
     streakEnded: z.boolean().optional(),
-    providerValue: z.number().nonnegative().optional(),
+    providerValue: z.number().nonnegative().finite().optional(),
   })
   .strict();
 
@@ -49,15 +52,16 @@ export const LiveGiftSchema = z
  */
 export const NormalizedLiveEventSchema = z
   .object({
-    id: z.string().min(1),
-    provider: z.string().min(1),
+    schemaVersion: z.literal(EVENT_SCHEMA_VERSION),
+    id: z.string().min(1).max(128),
+    provider: z.string().min(1).max(128),
     type: LiveEventTypeSchema,
     receivedAt: z.string().datetime(),
     user: LiveUserSchema,
-    comment: z.string().optional(),
-    likeCount: z.number().int().nonnegative().optional(),
+    comment: z.string().max(500).optional(),
+    likeCount: z.number().int().min(0).max(1_000_000).optional(),
     gift: LiveGiftSchema.optional(),
-    rawHash: z.string().min(1),
+    rawHash: z.string().min(1).max(128),
   })
   .strict();
 
