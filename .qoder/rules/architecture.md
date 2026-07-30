@@ -1,0 +1,1 @@
+Always preserve the adapter architecture. The Godot game must never parse TikTok-specific payloads. Provider integrations belong in gateway/src/adapters. Shared messages are validated, versioned, and documented. Prefer data-driven content packs over hardcoded faction logic.

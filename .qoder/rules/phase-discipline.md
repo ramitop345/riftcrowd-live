@@ -1,0 +1,1 @@
+Work only on the requested phase. Inspect the repository and existing documentation first. Do not rewrite unrelated working code. Avoid placeholder implementations that always return success. Update documentation and PROJECT_STATUS.md. End with exact commands to verify the phase.

@@ -1,0 +1,28 @@
+{
+  "name": "riftcrowd-live",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Portrait TikTok LIVE interactive arena game: Godot client, Node event gateway, React creator dashboard.",
+  "license": "UNLICENSED",
+  "workspaces": ["shared", "gateway", "dashboard"],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "dev:gateway": "npm run dev --workspace=gateway",
+    "dev:dashboard": "npm run dev --workspace=dashboard"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.9.0",
+    "eslint": "^9.9.0",
+    "prettier": "^3.3.3",
+    "typescript": "^5.6.2",
+    "typescript-eslint": "^8.7.0"
+  }
+}

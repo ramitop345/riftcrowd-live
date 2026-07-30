@@ -1,0 +1,109 @@
+[
+  {
+    "id": "evt-0001",
+    "provider": "mock",
+    "type": "chat",
+    "receivedAt": "2026-07-30T18:00:00.000Z",
+    "user": {
+      "id": "viewer-1001",
+      "handle": "ramses.kx",
+      "displayName": "Ramses"
+    },
+    "comment": "lions",
+    "rawHash": "b21f4c7a9d0e5136a8c4f2071e9b3d55"
+  },
+  {
+    "id": "evt-0002",
+    "provider": "mock",
+    "type": "like",
+    "receivedAt": "2026-07-30T18:00:01.250Z",
+    "user": {
+      "id": "viewer-1002",
+      "handle": "maya.builds",
+      "displayName": "Maya"
+    },
+    "likeCount": 25,
+    "rawHash": "0c8e1a63b74f29d5e03a7c1b8f6d4402"
+  },
+  {
+    "id": "evt-0003",
+    "provider": "mock",
+    "type": "follow",
+    "receivedAt": "2026-07-30T18:00:02.500Z",
+    "user": {
+      "id": "viewer-1003",
+      "handle": "leo_defends",
+      "displayName": "Leo"
+    },
+    "rawHash": "7d3b0f95c1a8e264402fb7d19c5e8a31"
+  },
+  {
+    "id": "evt-0004",
+    "provider": "mock",
+    "type": "share",
+    "receivedAt": "2026-07-30T18:00:03.750Z",
+    "user": {
+      "id": "viewer-1004",
+      "handle": "nina.rift",
+      "displayName": "Nina"
+    },
+    "rawHash": "e91a5c73f0d82b64a05c1e9d7b3f4682"
+  },
+  {
+    "id": "evt-0005",
+    "provider": "mock",
+    "type": "gift",
+    "receivedAt": "2026-07-30T18:00:05.000Z",
+    "user": {
+      "id": "viewer-1005",
+      "handle": "tobi.crowns",
+      "displayName": "Tobi"
+    },
+    "gift": {
+      "id": "gift-rose",
+      "name": "Rose",
+      "repeatCount": 12,
+      "streakId": "streak-0005",
+      "streakEnded": true,
+      "providerValue": 1
+    },
+    "rawHash": "3f6c8b21d09e5a74c1b8f2073d4e9a56"
+  },
+  {
+    "id": "evt-0006",
+    "provider": "mock",
+    "type": "subscribe",
+    "receivedAt": "2026-07-30T18:00:06.250Z",
+    "user": {
+      "id": "viewer-1006",
+      "handle": "amara.plays",
+      "displayName": "Amara"
+    },
+    "rawHash": "c40d7e18a9b3f5620c7d1e8b4a95f302"
+  },
+  {
+    "id": "evt-0007",
+    "provider": "mock",
+    "type": "join",
+    "receivedAt": "2026-07-30T18:00:07.500Z",
+    "user": {
+      "id": "viewer-1007",
+      "handle": "kenji.wolf",
+      "displayName": "Kenji"
+    },
+    "rawHash": "58a1c9f30b76e2d4917c0b3f8e5a2d61"
+  },
+  {
+    "id": "evt-0008",
+    "provider": "mock",
+    "type": "provider_status",
+    "receivedAt": "2026-07-30T18:00:08.750Z",
+    "user": {
+      "id": "system",
+      "handle": "system",
+      "displayName": "System"
+    },
+    "comment": "connected",
+    "rawHash": "9b2e6d14c8a0f7530e1d9c4b6a83f527"
+  }
+]

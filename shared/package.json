@@ -1,0 +1,26 @@
+{
+  "name": "@riftcrowd/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Versioned Zod schemas and fixtures shared by the RiftCrowd LIVE gateway, dashboard, and tests.",
+  "main": "./schemas/index.ts",
+  "types": "./schemas/index.ts",
+  "exports": {
+    ".": "./schemas/index.ts",
+    "./events": "./schemas/events.ts",
+    "./commands": "./schemas/commands.ts",
+    "./fixtures/valid-events.json": "./fixtures/valid-events.json",
+    "./fixtures/invalid-events.json": "./fixtures/invalid-events.json"
+  },
+  "files": ["schemas", "fixtures"],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.2"
+  }
+}

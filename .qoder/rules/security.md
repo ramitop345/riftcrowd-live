@@ -1,0 +1,1 @@
+Bind local services to 127.0.0.1 by default. Validate all external data with Zod. Sanitize viewer names and comments before displaying them. Never log credentials, session cookies, API keys, or raw secrets. Keep .env ignored. Do not execute user-provided text.

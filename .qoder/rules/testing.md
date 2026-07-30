@@ -1,0 +1,1 @@
+Every feature requires tests or a deterministic manual test harness. Provider work must include fixtures. Event processing must be testable without TikTok or internet access. Do not claim completion until lint, typecheck, tests, and the relevant smoke test pass.
