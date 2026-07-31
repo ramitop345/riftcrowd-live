@@ -13,6 +13,7 @@ import { CommandParser } from './viewer/command_parser.js';
 import { ContributionTracker } from './viewer/contribution_tracker.js';
 import { Pipeline } from './pipeline/pipeline.js';
 import { registerGatewayRoutes } from './routes/gateway_routes.js';
+import { registerMockRoutes } from './routes/mock_routes.js';
 
 export interface BuildAppOptions {
   /** Set to false in tests to silence request logging. Defaults to true. */
@@ -24,6 +25,8 @@ export interface BuildAppOptions {
    * Set to false only for backward-compat tests that don't expect the pipeline.
    */
   enablePipeline?: boolean;
+  /** Enable Phase 9 mock adapter routes (/mock/*). Opt-in: defaults to false. */
+  enableMockRoutes?: boolean;
 }
 
 /**
@@ -177,6 +180,14 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
         app.log.level = level;
       },
     });
+
+    // Phase 9: Register mock adapter routes (opt-in via enableMockRoutes: true)
+    if (options.enableMockRoutes === true) {
+      registerMockRoutes(app, {
+        pipeline,
+        director,
+      });
+    }
   } else if (!enablePipeline) {
     // Legacy /health endpoint for tests that disable the pipeline
     app.get('/health', () => ({

@@ -20,7 +20,8 @@ export type LogComponent =
   | 'director'
   | 'viewer'
   | 'routes'
-  | 'shutdown';
+  | 'shutdown'
+  | 'mock_adapter';
 
 /**
  * Creates a pino logger instance configured for JSON output.

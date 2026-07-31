@@ -1,7 +1,7 @@
 # RiftCrowd LIVE — Project Status
 
 - **Working title:** RiftCrowd LIVE
-- **Current phase:** Phase 8 — Node Gateway Core
+- **Current phase:** Phase 9 — Mock LIVE Adapter and Event Studio
 - **Status:** COMPLETED
 - **Last updated:** 31 July 2026
 
@@ -17,7 +17,7 @@
 - Phase 6 — Match Director and Round Lifecycle: **COMPLETED**
 - Phase 7 — Viewer Identity and Faction Participation: **COMPLETED**
 - Phase 8 — Node Gateway Core: **COMPLETED**
-- Phase 9 — Mock LIVE Adapter and Event Studio: not started
+- Phase 9 — Mock LIVE Adapter and Event Studio: **COMPLETED**
 - Phase 10 — Gateway-to-Godot WebSocket Integration: not started
 - Phase 11 — Gift Economy, Streaks, and Burst Aggregation: not started
 - Phase 12 — Free Engagement Mechanics: not started
@@ -446,14 +446,78 @@ Phase 6 known limitations:
   future phases may add a build step if needed for non-tsx consumers.
 - **Audit advisories.** 6 npm audit advisories (all in upstream transitive dependencies).
 
+## Phase 9 — completed work
+
+Mock LIVE Adapter and Event Studio:
+
+- [x] **LiveAdapter Interface** (`gateway/src/adapters/live_adapter.ts`): abstract `LiveAdapter`
+  interface with `start()`, `stop()`, `onEvent()`, `isConnected()`. `TikTokLiveAdapter` placeholder
+  throws NotImplementedError from every method (Phase 14 territory).
+- [x] **TestClock** (`gateway/src/adapters/test_clock.ts`): deterministic clock with `now()`,
+  `advance(ms)`, `setTime(ms)`, `reset(ms)`, `onAdvance(handler)`. MockLiveAdapter uses TestClock
+  instead of `Date.now()` for reproducible scenarios.
+- [x] **Scripted Scenarios** (`gateway/src/adapters/scenarios.ts`): 7 deterministic scenarios —
+  `normal_traffic` (50 events, 10 viewers, 2 min), `gift_streak` (30 gifts, 1 viewer, 30 s),
+  `viral_burst` (200 events, 50 viewers, 10 s stress test), `malformed_payloads` (20 malformed +
+  10 valid events), `disconnect` (connection drop mid-stream), `reconnect` (disconnect + reconnect +
+  resume), `four_mode_round` (full round: mode vote → faction lobby → battle → results → next
+  mode vote, ~6 min). Builder helpers: `makeChatEvent`, `makeGiftEvent`, `makeLikeEvent`,
+  `makeJoinEvent`, `makeMalformedEvent`. Scenario registry with `getScenario(name)` and
+  `listScenarios()`.
+- [x] **MockLiveAdapter** (`gateway/src/adapters/mock_live_adapter.ts`): scenario-driven adapter
+  that plays back events at scheduled timestamps via TestClock. Integrates with Pipeline (processes
+  events) and MatchDirector (feeds chat events, advances time for state transitions). Disconnect/
+  reconnect markers toggle `isConnected()` state. `runToEnd(stepMs)` advances clock in increments
+  until all events are emitted.
+- [x] **Recording** (`gateway/src/adapters/recording.ts`): `RecordedSession` Zod schema
+  (schemaVersion 1: events, commands, directorSnapshots, recordedAt). `SessionBuilder` for
+  incremental construction. `saveSession(path)` uses atomic write (tmp + rename). `loadSession(path)`
+  reads and Zod-validates with clear error messages.
+- [x] **Replay** (`gateway/src/adapters/replay.ts`): `ReplayAdapter` replays a RecordedSession at
+  recorded timestamps. Deterministic: same session → same event sequence → same commands.
+- [x] **Dashboard Endpoints** (`gateway/src/routes/mock_routes.ts`): 6 token-protected endpoints —
+  POST `/mock/start`, `/mock/stop`, `/mock/advance`, `/mock/record`, `/mock/replay`; GET
+  `/mock/state`. Token auth on all `/mock/*` endpoints. Start/stop/advance/record/replay/state
+  with full observability.
+- [x] **CLI Tool** (`tools/cli/mock-live.ts`): `--scenario=<name>` or `--replay=<path>`, optional
+  `--record=<path>` and `--list`. Progress bar and live command count to stdout.
+- [x] **App Integration** (`gateway/src/app.ts`): mock routes registered when pipeline is enabled
+  (opt-out via `enableMockRoutes: false`).
+- [x] **74 tests** in `gateway/test/mock_adapter.test.ts`: LiveAdapter interface (4), TestClock (11),
+  Scenarios (12), MockLiveAdapter (9), Recording (8), Replay (5), Dashboard endpoints (11),
+  four_mode_round integration (14).
+- [x] Docs: `docs/MOCK_LIVE_ADAPTER.md` (interface, scenarios, CLI, dashboard endpoints,
+  recording/replay, TestClock semantics).
+
+Commands run and results:
+
+- `npm run lint` — **PASS** (zero errors/warnings)
+- `npm run typecheck` — **PASS** (shared, gateway, dashboard, tools all clean)
+- `npm test` — **PASS** (387 tests in 10 files: gateway_core 123, mock_adapter 74, viewer 74,
+  director 61, viewer_fixes 22, identity 15, packs 12, messages 3, schemas 2, health 1)
+- `npm run validate:packs` — **PASS** (exit 0; 4 packs checked, 4 passed, 0 warnings, 0 failed)
+
+Phase 9 known limitations:
+
+- **TikTokLiveAdapter is a stub.** Every method throws NotImplementedError. Real TikTok integration
+  is Phase 14 territory.
+- **Gift mechanics not implemented in Phase 9 scenarios.** Gift events are emitted (gift_streak
+  scenario) but Phase 11 will add gameplay effects (captain ultimates, energy bursts).
+- **Rate limiter uses real time.** The pipeline's RateLimiter uses `Date.now()`, not TestClock.
+  Rate limiting behavior during scenario playback depends on real wall-clock speed.
+- **Director time advancement is approximate.** The adapter advances director time in integer-second
+  increments based on TestClock delta, which may differ slightly from real-time pacing.
+- **Strategy commands have no game mechanics.** The CommandParser recognizes focus/defend/push/retreat
+  keywords (used in four_mode_round battle phase) but no gameplay effects are implemented.
+- **CRLF format drift is pre-existing.** Cosmetic only — lint, typecheck, and tests are unaffected.
+
 ## Next phase
 
-**Phase 9 — Mock LIVE Adapter and Event Studio** (per the guide):
-Make the project fully testable without a live account. Implement MockLiveAdapter
-with scripted scenarios (normal traffic, gift streak, viral burst, malformed
-payloads, disconnect, reconnect, four-mode round), CLI and dashboard test buttons,
-recording and replaying normalized event sessions, and deterministic timestamps
-or a test clock.
+**Phase 10 — Gateway-to-Godot WebSocket Integration** (per the guide):
+Connect real-time commands to the game safely. Implement localhost WebSocket server
+and Godot WebSocket client. Add handshake, protocol version, heartbeat, reconnect,
+command acknowledgment, snapshot, and error messages. Make command handling idempotent.
+Add a bounded retry buffer. Display non-intrusive connection status in the game.
 
 ## Phase 7 — completed work
 
