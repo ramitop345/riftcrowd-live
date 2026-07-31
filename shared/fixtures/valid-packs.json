@@ -1,0 +1,78 @@
+[
+  {
+    "schemaVersion": 1,
+    "id": "minimal_duel",
+    "displayName": "Minimal Duel",
+    "mode": "animals",
+    "factions": [
+      {
+        "id": "foxes",
+        "displayName": "Foxes",
+        "joinKeywords": ["fox", "foxes", "1"],
+        "primaryColor": "#C2571B",
+        "secondaryColor": "#F4E3D0",
+        "pattern": "ember_tail",
+        "captainScene": "res://scenes/units/captain_foxes.tscn",
+        "ultimateId": "ember_dash"
+      },
+      {
+        "id": "owls",
+        "displayName": "Owls",
+        "joinKeywords": ["owl", "owls", "2"],
+        "primaryColor": "#4B4237",
+        "secondaryColor": "#D8CBB3",
+        "pattern": "night_watch",
+        "captainScene": "res://scenes/units/captain_owls.tscn",
+        "ultimateId": "silent_dive"
+      }
+    ]
+  },
+  {
+    "schemaVersion": 1,
+    "id": "animals_launch",
+    "displayName": "Beasts of the Rift",
+    "mode": "animals",
+    "factions": [
+      {
+        "id": "lions",
+        "displayName": "Lions",
+        "joinKeywords": ["lion", "lions", "1"],
+        "primaryColor": "#D49A27",
+        "secondaryColor": "#3A2210",
+        "pattern": "sunburst",
+        "captainScene": "res://scenes/units/captain_lions.tscn",
+        "ultimateId": "solar_roar"
+      },
+      {
+        "id": "wolves",
+        "displayName": "Wolves",
+        "joinKeywords": ["wolf", "wolves", "2"],
+        "primaryColor": "#4A5A78",
+        "secondaryColor": "#C9D2E0",
+        "pattern": "moon_arc",
+        "captainScene": "res://scenes/units/captain_wolves.tscn",
+        "ultimateId": "moon_hunt"
+      },
+      {
+        "id": "eagles",
+        "displayName": "Eagles",
+        "joinKeywords": ["eagle", "eagles", "3"],
+        "primaryColor": "#3B82A0",
+        "secondaryColor": "#F2E8C9",
+        "pattern": "sky_talon",
+        "captainScene": "res://scenes/units/captain_eagles.tscn",
+        "ultimateId": "skyfall"
+      },
+      {
+        "id": "dragons",
+        "displayName": "Dragons",
+        "joinKeywords": ["dragon", "dragons", "4"],
+        "primaryColor": "#B03A2E",
+        "secondaryColor": "#5B2A86",
+        "pattern": "rift_flame_coil",
+        "captainScene": "res://scenes/units/captain_dragons.tscn",
+        "ultimateId": "rift_flame"
+      }
+    ]
+  }
+]

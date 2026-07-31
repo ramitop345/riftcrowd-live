@@ -26,8 +26,18 @@ a real TikTok session, and no real viewer data is stored.
   unknown `kind`, missing `protocolVersion`, unsupported `protocolVersion: 2`, `ack` without
   `commandId`, `heartbeat` with a negative `sequence`, an `event` message embedding a malformed
   event, and a `command` message embedding a malformed command (missing `sourceEventIds`).
+- `valid-packs.json` — two valid `ContentPack` samples: a minimal two-faction pack
+  (`minimal_duel`) and an inline copy of the shipping `animals_launch` pack (kept byte-identical
+  in content to `content/packs/animals/animals_launch.json` by the pack tests). Every entry must
+  satisfy `ContentPackSchema`.
+- `invalid-packs.json` — ten labelled pack rejection cases in the wrapper format below (the
+  malformed pack lives under the `pack` key): wrong `schemaVersion`, missing `mode`, unknown
+  `mode`, fewer than 2 factions, more than 4 factions, a non-`#RRGGBB` color, an uppercase
+  faction id, duplicate faction ids, a case-insensitive join-keyword collision across factions
+  (reported by `superRefine` at the colliding duplicate), and an unknown extra root key rejected
+  by `.strict()`.
 
-## Shape of `invalid-events.json` and `invalid-messages.json`
+## Shape of the `invalid-*.json` files
 
 Unlike the valid files, which are plain arrays of payloads, each invalid entry is a wrapper so a
 test can assert _why_ the sample is rejected:
@@ -36,11 +46,12 @@ test can assert _why_ the sample is rejected:
 - `reason` — human-readable explanation.
 - `expectedInvalidPath` — the Zod issue path the failure is expected to point at.
 - `event` — the malformed payload to feed into the schema (an event in `invalid-events.json`, a
-  protocol message in `invalid-messages.json`).
+  protocol message in `invalid-messages.json`). In `invalid-packs.json` the payload key is `pack`
+  instead of `event`.
 
 ## Who consumes these
 
-- **Gateway tests** (Phase 2 onward) parse all four files and assert that every valid entry passes
+- **Gateway tests** (Phase 2 onward) parse all six files and assert that every valid entry passes
   and every invalid entry fails at the documented path. This is the regression net for the schemas
   in `shared/schemas/`.
 - **Godot DTO tests** (Phase 2) parse the same files so TypeScript and GDScript accept and reject

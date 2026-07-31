@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "id": "countries_launch",
+  "displayName": "Nations of the Rift",
+  "mode": "countries",
+  "factions": [
+    {
+      "id": "germany",
+      "displayName": "Germany",
+      "joinKeywords": ["germany", "de", "1"],
+      "primaryColor": "#6E7B8B",
+      "secondaryColor": "#E8A33D",
+      "pattern": "gear_lattice",
+      "captainScene": "res://scenes/units/captain_germany.tscn",
+      "ultimateId": "iron_pulse"
+    },
+    {
+      "id": "france",
+      "displayName": "France",
+      "joinKeywords": ["france", "fr", "2"],
+      "primaryColor": "#2B5FD9",
+      "secondaryColor": "#BFE3F2",
+      "pattern": "crystal_arc",
+      "captainScene": "res://scenes/units/captain_france.tscn",
+      "ultimateId": "lumiere_wave"
+    },
+    {
+      "id": "brazil",
+      "displayName": "Brazil",
+      "joinKeywords": ["brazil", "br", "3"],
+      "primaryColor": "#1E8A4C",
+      "secondaryColor": "#E5C13D",
+      "pattern": "canopy_weave",
+      "captainScene": "res://scenes/units/captain_brazil.tscn",
+      "ultimateId": "canopy_surge"
+    },
+    {
+      "id": "nigeria",
+      "displayName": "Nigeria",
+      "joinKeywords": ["nigeria", "ng", "4"],
+      "primaryColor": "#0E9B6C",
+      "secondaryColor": "#B0762E",
+      "pattern": "storm_coil",
+      "captainScene": "res://scenes/units/captain_nigeria.tscn",
+      "ultimateId": "emerald_storm"
+    }
+  ]
+}

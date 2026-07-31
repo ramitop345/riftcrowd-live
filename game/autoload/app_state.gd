@@ -9,7 +9,8 @@ extends Node
 
 signal screen_changed(from_screen: int, to_screen: int)
 
-enum Screen { BOOT, MAIN_MENU, LOBBY, BATTLE, RESULTS }
+## PACK_PREVIEW is appended so the existing screen values stay stable.
+enum Screen { BOOT, MAIN_MENU, LOBBY, BATTLE, RESULTS, PACK_PREVIEW }
 
 const SCENE_PATHS: Dictionary = {
 	Screen.BOOT: "res://scenes/Boot.tscn",
@@ -17,15 +18,19 @@ const SCENE_PATHS: Dictionary = {
 	Screen.LOBBY: "res://scenes/Lobby.tscn",
 	Screen.BATTLE: "res://scenes/Battle.tscn",
 	Screen.RESULTS: "res://scenes/Results.tscn",
+	Screen.PACK_PREVIEW: "res://scenes/PackPreview.tscn",
 }
 
-## Allowed transitions: source screen -> array of reachable screens.
+## Allowed transitions: source screen -> array of reachable screens. The pack
+## preview is a menu side trip: it is reachable only from the main menu and only
+## returns there, so it can never be entered from or exit into a live round.
 const ALLOWED: Dictionary = {
 	Screen.BOOT: [Screen.MAIN_MENU],
-	Screen.MAIN_MENU: [Screen.LOBBY],
+	Screen.MAIN_MENU: [Screen.LOBBY, Screen.PACK_PREVIEW],
 	Screen.LOBBY: [Screen.BATTLE, Screen.MAIN_MENU],
 	Screen.BATTLE: [Screen.RESULTS],
 	Screen.RESULTS: [Screen.LOBBY, Screen.MAIN_MENU],
+	Screen.PACK_PREVIEW: [Screen.MAIN_MENU],
 }
 
 var current: Screen = Screen.BOOT

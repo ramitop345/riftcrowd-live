@@ -5,7 +5,11 @@
   "type": "module",
   "description": "Portrait TikTok LIVE interactive arena game: Godot client, Node event gateway, React creator dashboard.",
   "license": "UNLICENSED",
-  "workspaces": ["shared", "gateway", "dashboard"],
+  "workspaces": [
+    "shared",
+    "gateway",
+    "dashboard"
+  ],
   "engines": {
     "node": ">=22"
   },
@@ -13,8 +17,9 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc -p tools --noEmit",
     "test": "npm run test --workspaces --if-present",
+    "validate:packs": "tsx tools/asset-validation/validate-packs.ts",
     "dev:gateway": "npm run dev --workspace=gateway",
     "dev:dashboard": "npm run dev --workspace=dashboard"
   },

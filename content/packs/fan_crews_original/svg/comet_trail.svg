@@ -1,0 +1,8 @@
+<!-- Original placeholder artwork for RiftCrowd LIVE. Not derived from any third-party brand. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <rect width="256" height="256" fill="#8A5FD4"/>
+  <circle cx="180" cy="76" r="32" fill="#C9CDD6"/>
+  <path d="M156 100 L48 208" stroke="#C9CDD6" stroke-width="18" stroke-linecap="round"/>
+  <path d="M176 116 L96 196" stroke="#C9CDD6" stroke-width="10" stroke-linecap="round"/>
+  <path d="M140 84 L76 148" stroke="#C9CDD6" stroke-width="6" stroke-linecap="round"/>
+</svg>

@@ -1,7 +1,7 @@
 # RiftCrowd LIVE — Project Status
 
 - **Working title:** RiftCrowd LIVE
-- **Current phase:** Phase 3 — Godot Portrait Foundation
+- **Current phase:** Phase 4 — Content-Pack System and Four Launch Packs
 - **Status:** COMPLETED
 - **Last updated:** 31 July 2026
 
@@ -12,8 +12,8 @@
 - Phase 1 — Repository Bootstrap and Development Tooling: **COMPLETED**
 - Phase 2 — Shared Protocol and Schema Validation: **COMPLETED**
 - Phase 3 — Godot Portrait Foundation: **COMPLETED**
-- Phase 4 — Content-Pack System and Four Launch Packs: **not started** (next)
-- Phase 5 — Autonomous Arena Simulation: not started
+- Phase 4 — Content-Pack System and Four Launch Packs: **COMPLETED**
+- Phase 5 — Autonomous Arena Simulation: **not started** (next)
 - Phase 6 — Match Director and Round Lifecycle: not started
 - Phase 7 — Viewer Identity and Faction Participation: not started
 - Phase 8 — Node Gateway Core: not started
@@ -186,6 +186,94 @@ Phase 3 known limitations:
 - **Screen scripts are navigation-only stubs.** Battle regions, lobby factions, and results summary
   are placeholder labels until Phases 5–7 land.
 
+## Phase 4 — completed work
+
+Content-pack system and four launch packs:
+
+- [x] Versioned content-pack schema in `shared/schemas/packs.ts`: `ContentPackSchema` /
+  `FactionSchema` carry a required `schemaVersion: 1` literal, are `.strict()`, and bound every
+  authored string (ids snake_case, colors `#RRGGBB`, 2–4 factions, 1–8 keywords each).
+  `superRefine` enforces unique faction ids and case-insensitive keyword uniqueness across ALL
+  factions of a pack.
+- [x] Pure keyword helpers in the shared package: `buildKeywordIndex` (lowercased keyword →
+  faction id, throws on unvalidated collisions) and `matchJoinKeyword` (untrusted text: 200-char
+  inspection cap, trim, lowercase, first-token-only match, never throws; non-string input returns
+  `null`). `matchJoinKeyword` reuses a private per-pack-object `WeakMap` index cache;
+  `buildKeywordIndex` itself stays exported and pure.
+- [x] Four launch packs under `content/packs/<mode>/` (`countries`, `animals`,
+  `fan_crews_original`, `cities`), four factions each, plus 20 original placeholder SVGs
+  (4 × 4 patterns + 4 pack icons): hand-authored geometry, `viewBox 0 0 256 256`, self-contained,
+  each marked as original artwork.
+- [x] `npm run validate:packs` (`tools/asset-validation/validate-packs.ts`): schema validation,
+  pack-dir/mode match, pack-id uniqueness, `svg/pack_icon.svg` existence, pattern-SVG existence,
+  and an SVG self-containment check (`href`, `url(`, `<image`, `<script`, `data:`, `javascript:`,
+  `&#58;`, `&#40;` all forbidden, checked lowercased) for icons and patterns. Missing
+  `captainScene` files are warnings until Phase 5 ships the scenes.
+- [x] Fixtures in `shared/fixtures/`: 2 valid packs (one kept byte-identical to the shipping
+  animals pack by a test) and 10 invalid packs, each labelled with its `expectedInvalidPath`.
+- [x] TypeScript tests (`gateway/test/packs.test.ts`, 12 tests): launch packs parse with 4
+  factions, fixtures parse/reject at the documented Zod path, keyword index contents, collision
+  throw, cache purity (fresh index per `buildKeywordIndex` call, identical matches for repeated
+  calls and structural clones), matching rules, and hostile-input behavior.
+- [x] GDScript mirror `game/scripts/packs/pack_validator.gd` (strict keys, bounds, cross-faction
+  rules, error paths like `factions[1].joinKeywords[0]`; `match_join_keyword` takes a Variant and
+  returns `""` for non-string input, mirroring the TS guard) and loader
+  `game/scripts/packs/pack_loader.gd` (scans `../content/packs` resolved from `res://`, never
+  copies packs into `game/`, reports failures with file + reasons, rasterizes SVGs defensively).
+- [x] `PackRegistry` autoload (loads once at boot, exposes `packs` / `failures` /
+  `select_pack` / `find_pack`) and `PackPreview` screen (`scenes/PackPreview.tscn` +
+  `scripts/screens/pack_preview.gd`): one button per pack with the pack icon rasterized from
+  `svg/pack_icon.svg` beside it (missing icon degrades silently), faction cards with color
+  swatches, sanitized display text, join keywords, and pattern art; failure list below. Reached
+  through the new `PACK_PREVIEW` state in `AppState` (menu ↔ preview side trip).
+- [x] Headless test `game/tests/test_packs.gd` (61 assertions): shared fixtures parse/reject at
+  the documented paths, every launch pack ships 4 factions with `mode` == directory, every pack
+  directory carries `svg/pack_icon.svg` at the loader-provided path, `load_packs_from_dir`
+  returns 4 packs / 0 failures, keyword index and matching rules mirror TypeScript (including
+  the non-string guard), and non-object JSON roots are rejected.
+
+Commands run and results:
+
+- `npm run lint` — **PASS** (zero errors/warnings)
+- `npm run typecheck` — **PASS** (shared, gateway, dashboard, tools all clean)
+- `npm test` — **PASS** (33 tests in 5 files: identity 15, packs 12, messages 3, schemas 2,
+  health 1)
+- `npm run validate:packs` — **PASS** (exit 0; `4 pack(s) checked — 0 passed, 4 with warnings,
+  0 failed`; exactly 16 warnings, all `captainScene ... not found under game/ (expected —
+  captain scenes arrive in Phase 5)`; 0 errors)
+- Static validation of all `.tscn` / `.gd` files — **PASS** (desk-checked: `load_steps` match the
+  declared `ext_resource` counts, every `@onready` path resolves against its scene tree,
+  PackPreview builds its icon/button rows in code, autoload paths in `project.godot` exist)
+- Godot headless tests — **MANUAL STEP REQUIRED** (Godot not installed; see below)
+
+Phase 4 known limitations:
+
+- **Godot execution is MANUAL-PENDING.** Godot is not installed on this machine, so the three
+  headless suites are desk-checked only. Run manually:
+
+  ```powershell
+  cd "c:\Program Files\Developper\riftcrowd-live\game"
+  & "C:\path\to\Godot_v4.3-stable_win64.exe" --headless --script res://tests/test_shell.gd
+  & "C:\path\to\Godot_v4.3-stable_win64.exe" --headless --script res://tests/test_protocol.gd
+  & "C:\path\to\Godot_v4.3-stable_win64.exe" --headless --script res://tests/test_packs.gd
+  ```
+
+  Expected: `SHELL TESTS: 43 passed, 0 failed`, `PROTOCOL TESTS: 30 passed, 0 failed`, and
+  `PACK TESTS: 61 passed, 0 failed` (each exit 0).
+- **`captainScene` targets do not exist yet.** Every launch pack points at
+  `res://scenes/units/captain_*.tscn`; the validator reports these as 16 warnings by design.
+  Phase 5 ships the scenes, at which point missing targets get promoted to errors.
+- **Pack root assumes the repository layout.** The game loads packs from `../content/packs`
+  relative to `game/`, so exported/packaged builds need a copy step or a configurable pack root
+  in a later phase (documented in `docs/CONTENT_PACK_FORMAT.md` and
+  `tools/asset-validation/README.md`).
+- **CRLF format drift is pre-existing.** Files on this Windows checkout carry CRLF endings;
+  Prettier's check reports the drift repo-wide. Cosmetic only — lint, typecheck, and tests are
+  unaffected.
+- **SVG rasterization is not exercised headlessly.** `test_packs.gd` checks pack-icon existence
+  only; `load_svg_texture` needs the SVG module, so rasterization is verified in the interactive
+  PackPreview run.
+
 ## Phase 1 — quality gate results
 
 - `npm install` — **PASS** (322 packages, 6 audit advisories — upstream deps, non-blocking)
@@ -209,5 +297,10 @@ Phase 3 known limitations:
 
 ## Next phase
 
-**Phase 4 — Content-Pack System and Four Launch Packs** (per the phase list in
-`docs/RiftCrowd_LIVE_Complete_Qoder_Implementation_Guide.md`).
+**Phase 5 — Autonomous Arena Simulation** (per the phase list in
+`docs/RiftCrowd_LIVE_Complete_Qoder_Implementation_Guide.md`): implement the core game without
+any LIVE events — fortress, Rift Crown, capture zones, champions, guardians, strikers, captains,
+projectiles, and boss scenes; typed unit state machines; targeting, damage, death, pooling,
+capture pressure, Dominion, fortress health, and victory rules; deterministic seeded randomness;
+and a simulation sandbox with speed controls. Deliverable: a complete automatic battle using
+local bots.

@@ -12,12 +12,18 @@
     "./commands": "./schemas/commands.ts",
     "./identity": "./schemas/identity.ts",
     "./messages": "./schemas/messages.ts",
+    "./packs": "./schemas/packs.ts",
     "./fixtures/valid-events.json": "./fixtures/valid-events.json",
     "./fixtures/invalid-events.json": "./fixtures/invalid-events.json",
     "./fixtures/valid-messages.json": "./fixtures/valid-messages.json",
-    "./fixtures/invalid-messages.json": "./fixtures/invalid-messages.json"
+    "./fixtures/invalid-messages.json": "./fixtures/invalid-messages.json",
+    "./fixtures/valid-packs.json": "./fixtures/valid-packs.json",
+    "./fixtures/invalid-packs.json": "./fixtures/invalid-packs.json"
   },
-  "files": ["schemas", "fixtures"],
+  "files": [
+    "schemas",
+    "fixtures"
+  ],
   "scripts": {
     "typecheck": "tsc --noEmit"
   },

@@ -3,15 +3,7 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: [
-      'node_modules/**',
-      'dist/**',
-      'build/**',
-      'game/**',
-      'docs/**',
-      'content/**',
-      'tools/**',
-    ],
+    ignores: ['node_modules/**', 'dist/**', 'build/**', 'game/**', 'docs/**', 'content/**'],
   },
   {
     ...js.configs.recommended,

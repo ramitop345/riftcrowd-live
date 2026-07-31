@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "id": "fan_crews_launch",
+  "displayName": "Fan Crews",
+  "mode": "fan_crews_original",
+  "factions": [
+    {
+      "id": "crimson_forge",
+      "displayName": "Crimson Forge",
+      "joinKeywords": ["forge", "crimson", "1"],
+      "primaryColor": "#A5232E",
+      "secondaryColor": "#33363B",
+      "pattern": "forge_spark",
+      "captainScene": "res://scenes/units/captain_crimson_forge.tscn",
+      "ultimateId": "forge_breaker"
+    },
+    {
+      "id": "royal_comets",
+      "displayName": "Royal Comets",
+      "joinKeywords": ["comets", "royal", "2"],
+      "primaryColor": "#8A5FD4",
+      "secondaryColor": "#C9CDD6",
+      "pattern": "comet_trail",
+      "captainScene": "res://scenes/units/captain_royal_comets.tscn",
+      "ultimateId": "crownfall"
+    },
+    {
+      "id": "harbor_kings",
+      "displayName": "Harbor Kings",
+      "joinKeywords": ["harbor", "kings", "3"],
+      "primaryColor": "#1F3A5F",
+      "secondaryColor": "#B87333",
+      "pattern": "tide_crown",
+      "captainScene": "res://scenes/units/captain_harbor_kings.tscn",
+      "ultimateId": "tidal_wall"
+    },
+    {
+      "id": "northern_ravens",
+      "displayName": "Northern Ravens",
+      "joinKeywords": ["ravens", "northern", "4"],
+      "primaryColor": "#17191D",
+      "secondaryColor": "#A8D8E8",
+      "pattern": "raven_wing",
+      "captainScene": "res://scenes/units/captain_northern_ravens.tscn",
+      "ultimateId": "raven_eclipse"
+    }
+  ]
+}

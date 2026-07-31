@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "id": "cities_launch",
+  "displayName": "Metro Dominion",
+  "mode": "cities",
+  "factions": [
+    {
+      "id": "solaris_bay",
+      "displayName": "Solaris Bay",
+      "joinKeywords": ["solaris", "bay", "1"],
+      "primaryColor": "#E8863B",
+      "secondaryColor": "#1E6E8C",
+      "pattern": "sun_harbor",
+      "captainScene": "res://scenes/units/captain_solaris_bay.tscn",
+      "ultimateId": "solar_tide"
+    },
+    {
+      "id": "ironspire",
+      "displayName": "Ironspire",
+      "joinKeywords": ["ironspire", "spire", "2"],
+      "primaryColor": "#5A6470",
+      "secondaryColor": "#D9822B",
+      "pattern": "spire_grid",
+      "captainScene": "res://scenes/units/captain_ironspire.tscn",
+      "ultimateId": "spire_quake"
+    },
+    {
+      "id": "verdant_heights",
+      "displayName": "Verdant Heights",
+      "joinKeywords": ["verdant", "heights", "3"],
+      "primaryColor": "#2E8B57",
+      "secondaryColor": "#A7D08C",
+      "pattern": "terrace_bloom",
+      "captainScene": "res://scenes/units/captain_verdant_heights.tscn",
+      "ultimateId": "bloom_cascade"
+    },
+    {
+      "id": "mistral_harbor",
+      "displayName": "Mistral Harbor",
+      "joinKeywords": ["mistral", "harbor", "4"],
+      "primaryColor": "#6C7FA6",
+      "secondaryColor": "#E6EDF5",
+      "pattern": "wind_veil",
+      "captainScene": "res://scenes/units/captain_mistral_harbor.tscn",
+      "ultimateId": "gale_surge"
+    }
+  ]
+}

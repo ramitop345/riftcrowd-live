@@ -1,11 +1,11 @@
 # Headless application-shell smoke test. Run from the game/ directory:
 #   godot --headless --script res://tests/test_shell.gd
 # Verifies that every shell scene loads and instantiates with a Control root,
-# that the AppState transition table matches the Phase 3 design (allowed and
-# forbidden pairs), that every screen registered in SCENE_PATHS points at an
-# existing scene file, that the UiConfig safe-zone margins and typography sizes
-# are sane, and that ErrorOverlay message sanitization strips control characters
-# and enforces the length cap.
+# that the AppState transition table matches the Phase 3 design plus the Phase 4
+# pack-preview side trip (allowed and forbidden pairs), that every screen
+# registered in SCENE_PATHS points at an existing scene file, that the UiConfig
+# safe-zone margins and typography sizes are sane, and that ErrorOverlay message
+# sanitization strips control characters and enforces the length cap.
 # Exit code 0 on success, 1 on any failure.
 extends SceneTree
 
@@ -22,6 +22,7 @@ const SCENE_FILES: PackedStringArray = [
 	"res://scenes/Lobby.tscn",
 	"res://scenes/Battle.tscn",
 	"res://scenes/Results.tscn",
+	"res://scenes/PackPreview.tscn",
 	"res://scenes/ErrorOverlay.tscn",
 ]
 
@@ -59,7 +60,8 @@ func _check_scenes() -> void:
 		instance.free()
 
 
-## The static transition table must match the Phase 3 design exactly.
+## The static transition table must match the Phase 3 design plus the Phase 4
+## pack-preview side trip (menu <-> preview only).
 func _check_transitions() -> void:
 	var allowed: Array = [
 		[AppStateScript.Screen.BOOT, AppStateScript.Screen.MAIN_MENU],
@@ -69,11 +71,14 @@ func _check_transitions() -> void:
 		[AppStateScript.Screen.BATTLE, AppStateScript.Screen.RESULTS],
 		[AppStateScript.Screen.RESULTS, AppStateScript.Screen.LOBBY],
 		[AppStateScript.Screen.RESULTS, AppStateScript.Screen.MAIN_MENU],
+		[AppStateScript.Screen.MAIN_MENU, AppStateScript.Screen.PACK_PREVIEW],
+		[AppStateScript.Screen.PACK_PREVIEW, AppStateScript.Screen.MAIN_MENU],
 	]
 	var forbidden: Array = [
 		[AppStateScript.Screen.BOOT, AppStateScript.Screen.BATTLE],
 		[AppStateScript.Screen.BATTLE, AppStateScript.Screen.MAIN_MENU],
 		[AppStateScript.Screen.MAIN_MENU, AppStateScript.Screen.RESULTS],
+		[AppStateScript.Screen.PACK_PREVIEW, AppStateScript.Screen.BATTLE],
 	]
 	for pair: Array in allowed:
 		if AppStateScript.can_transition(pair[0], pair[1]):

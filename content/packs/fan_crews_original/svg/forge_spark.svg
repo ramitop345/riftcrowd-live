@@ -1,0 +1,9 @@
+<!-- Original placeholder artwork for RiftCrowd LIVE. Not derived from any third-party brand. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <rect width="256" height="256" fill="#33363B"/>
+  <polygon points="128,36 156,92 128,148 100,92" fill="#A5232E"/>
+  <rect x="72" y="156" width="112" height="20" rx="10" fill="#A5232E"/>
+  <polygon points="88,192 104,224 72,224" fill="#A5232E"/>
+  <polygon points="128,192 144,224 112,224" fill="#A5232E"/>
+  <polygon points="168,192 184,224 152,224" fill="#A5232E"/>
+</svg>
