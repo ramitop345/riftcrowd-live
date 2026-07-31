@@ -1,0 +1,100 @@
+[
+  {
+    "schemaVersion": 1,
+    "id": "p8-evt-001",
+    "provider": "mock",
+    "type": "chat",
+    "receivedAt": "2026-07-31T12:00:00.000Z",
+    "user": { "id": "viewer-001", "handle": "alice.test", "displayName": "Alice" },
+    "comment": "countries",
+    "rawHash": "sha256:aaaa000000000000000000000000000000000000000000000000000000000001"
+  },
+  {
+    "schemaVersion": 1,
+    "id": "p8-evt-002",
+    "provider": "mock",
+    "type": "chat",
+    "receivedAt": "2026-07-31T12:00:01.000Z",
+    "user": { "id": "viewer-002", "handle": "bob.test", "displayName": "Bob" },
+    "comment": "faction_alpha",
+    "rawHash": "sha256:aaaa000000000000000000000000000000000000000000000000000000000002"
+  },
+  {
+    "schemaVersion": 1,
+    "id": "p8-evt-003",
+    "provider": "mock",
+    "type": "like",
+    "receivedAt": "2026-07-31T12:00:02.000Z",
+    "user": { "id": "viewer-003", "handle": "carol.test", "displayName": "Carol" },
+    "likeCount": 10,
+    "rawHash": "sha256:aaaa000000000000000000000000000000000000000000000000000000000003"
+  },
+  {
+    "schemaVersion": 1,
+    "id": "p8-evt-004",
+    "provider": "mock",
+    "type": "follow",
+    "receivedAt": "2026-07-31T12:00:03.000Z",
+    "user": { "id": "viewer-004", "handle": "dave.test", "displayName": "Dave" },
+    "rawHash": "sha256:aaaa000000000000000000000000000000000000000000000000000000000004"
+  },
+  {
+    "schemaVersion": 1,
+    "id": "p8-evt-005",
+    "provider": "mock",
+    "type": "chat",
+    "receivedAt": "2026-07-31T12:00:04.000Z",
+    "user": { "id": "viewer-005", "handle": "eve.test", "displayName": "Eve" },
+    "comment": "!end_round",
+    "rawHash": "sha256:aaaa000000000000000000000000000000000000000000000000000000000005"
+  },
+  {
+    "schemaVersion": 1,
+    "id": "p8-evt-006",
+    "provider": "mock",
+    "type": "chat",
+    "receivedAt": "2026-07-31T12:00:05.000Z",
+    "user": { "id": "viewer-006", "handle": "frank.test", "displayName": "Frank" },
+    "comment": "!pause",
+    "rawHash": "sha256:aaaa000000000000000000000000000000000000000000000000000000000006"
+  },
+  {
+    "schemaVersion": 1,
+    "id": "p8-evt-007",
+    "provider": "mock",
+    "type": "gift",
+    "receivedAt": "2026-07-31T12:00:06.000Z",
+    "user": { "id": "viewer-007", "handle": "grace.test", "displayName": "Grace" },
+    "gift": { "id": "gift-rose", "name": "Rose", "repeatCount": 5 },
+    "rawHash": "sha256:aaaa000000000000000000000000000000000000000000000000000000000007"
+  },
+  {
+    "schemaVersion": 1,
+    "id": "p8-evt-008",
+    "provider": "mock",
+    "type": "chat",
+    "receivedAt": "2026-07-31T12:00:07.000Z",
+    "user": { "id": "viewer-008", "handle": "hank.test", "displayName": "Hank" },
+    "comment": "!kick viewer-999",
+    "rawHash": "sha256:aaaa000000000000000000000000000000000000000000000000000000000008"
+  },
+  {
+    "schemaVersion": 1,
+    "id": "p8-evt-009",
+    "provider": "mock",
+    "type": "join",
+    "receivedAt": "2026-07-31T12:00:08.000Z",
+    "user": { "id": "viewer-009", "handle": "iris.test", "displayName": "Iris" },
+    "rawHash": "sha256:aaaa000000000000000000000000000000000000000000000000000000000009"
+  },
+  {
+    "schemaVersion": 1,
+    "id": "p8-evt-010",
+    "provider": "mock",
+    "type": "chat",
+    "receivedAt": "2026-07-31T12:00:09.000Z",
+    "user": { "id": "viewer-010", "handle": "jack.test", "displayName": "Jack" },
+    "comment": "hello world",
+    "rawHash": "sha256:aaaa00000000000000000000000000000000000000000000000000000000000a"
+  }
+]

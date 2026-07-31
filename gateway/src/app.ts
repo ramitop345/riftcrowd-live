@@ -5,18 +5,25 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 
-import { config } from './config.js';
+import { config, sanitizeConfig } from './config.js';
 import { createAndRegisterDirector, type MatchDirector } from './director/index.js';
 import { SYNTHETIC_FACTIONS } from './director/match_director.js';
 import { ViewerRegistry } from './viewer/viewer_registry.js';
 import { CommandParser } from './viewer/command_parser.js';
 import { ContributionTracker } from './viewer/contribution_tracker.js';
+import { Pipeline } from './pipeline/pipeline.js';
+import { registerGatewayRoutes } from './routes/gateway_routes.js';
 
 export interface BuildAppOptions {
   /** Set to false in tests to silence request logging. Defaults to true. */
   logger?: boolean;
   /** Enable the Phase 6 Match Director with creator command routes. */
   enableDirector?: boolean;
+  /**
+   * Enable the Phase 8 pipeline and gateway routes (default: true).
+   * Set to false only for backward-compat tests that don't expect the pipeline.
+   */
+  enablePipeline?: boolean;
 }
 
 /**
@@ -31,12 +38,22 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   // Dev-only permissive CORS; everything binds to localhost so exposure is limited.
   void app.register(cors, { origin: true });
 
-  app.get('/health', () => ({
-    status: 'ok',
-    provider: config.liveProvider,
-    version: '0.1.0',
-    timestamp: new Date().toISOString(),
-  }));
+  // Phase 8: Create pipeline (always, unless explicitly disabled)
+  const enablePipeline = options.enablePipeline !== false;
+  let pipeline: Pipeline | null = null;
+
+  if (enablePipeline) {
+    pipeline = new Pipeline({
+      eventBusCapacity: config.pipeline.eventBusCapacity,
+      dedupeCapacity: config.pipeline.dedupeCapacity,
+      rateLimitPerViewer: config.pipeline.rateLimitPerViewer,
+      rateLimitBurst: config.pipeline.rateLimitBurst,
+      rateLimitGlobal: config.pipeline.rateLimitGlobal,
+      commandQueueCapacity: config.pipeline.commandQueueCapacity,
+      onWarn: (msg, fields) => app.log.warn({ ...fields }, msg),
+    });
+    app.decorate('pipeline', pipeline);
+  }
 
   // Phase 6: Match Director (optional)
   let director: MatchDirector | null = null;
@@ -130,12 +147,53 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     }
   }
 
+  // Phase 8: Register gateway routes (includes /health, /status, /config, etc.)
+  if (enablePipeline && pipeline) {
+    const startTime = new Date();
+
+    // Mutable runtime config mirror: POST /config mutates this; GET /config reads from it.
+    // FIX 4: ensures GET /config returns the latest config after POST /config updates.
+    const runtimeConfigMirror: Record<string, unknown> = sanitizeConfig(config);
+
+    registerGatewayRoutes(app, {
+      pipeline,
+      config,
+      director,
+      startTime,
+      runtimeConfigMirror,
+      onShutdown: () => {
+        // FIX 3: flush pipeline (command queue + event bus) before closing.
+        // This mirrors what server.ts gracefulShutdown does for signal-based shutdown.
+        if (pipeline) {
+          const queueDropped = pipeline.commandQueue.clear();
+          pipeline.eventBus.clear();
+          if (queueDropped > 0) {
+            app.log.warn({ dropped: queueDropped }, `Command queue flushed: ${queueDropped} commands dropped`);
+          }
+        }
+        void app.close();
+      },
+      setLogLevel: (level: string) => {
+        app.log.level = level;
+      },
+    });
+  } else if (!enablePipeline) {
+    // Legacy /health endpoint for tests that disable the pipeline
+    app.get('/health', () => ({
+      status: 'ok',
+      provider: config.liveProvider,
+      version: '0.1.0',
+      timestamp: new Date().toISOString(),
+    }));
+  }
+
   return app;
 }
 
-// Augment FastifyInstance with optional director
+// Augment FastifyInstance with optional director and pipeline
 declare module 'fastify' {
   interface FastifyInstance {
     director?: MatchDirector;
+    pipeline?: Pipeline;
   }
 }

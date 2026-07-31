@@ -1,7 +1,7 @@
 # RiftCrowd LIVE — Project Status
 
 - **Working title:** RiftCrowd LIVE
-- **Current phase:** Phase 7 — Viewer Identity and Faction Participation
+- **Current phase:** Phase 8 — Node Gateway Core
 - **Status:** COMPLETED
 - **Last updated:** 31 July 2026
 
@@ -16,7 +16,7 @@
 - Phase 5 — Autonomous Arena Simulation: **COMPLETED**
 - Phase 6 — Match Director and Round Lifecycle: **COMPLETED**
 - Phase 7 — Viewer Identity and Faction Participation: **COMPLETED**
-- Phase 8 — Node Gateway Core: not started
+- Phase 8 — Node Gateway Core: **COMPLETED**
 - Phase 9 — Mock LIVE Adapter and Event Studio: not started
 - Phase 10 — Gateway-to-Godot WebSocket Integration: not started
 - Phase 11 — Gift Economy, Streaks, and Burst Aggregation: not started
@@ -448,11 +448,12 @@ Phase 6 known limitations:
 
 ## Next phase
 
-**Phase 8 — Node Gateway Core** (per the guide):
-Fastify health, status, config, and control endpoints; event bus, normalization
-boundary, dedupe store, rate limits, command rules, command queue, and structured
-logging; localhost binding with local session token; graceful shutdown and
-configuration validation.
+**Phase 9 — Mock LIVE Adapter and Event Studio** (per the guide):
+Make the project fully testable without a live account. Implement MockLiveAdapter
+with scripted scenarios (normal traffic, gift streak, viral burst, malformed
+payloads, disconnect, reconnect, four-mode round), CLI and dashboard test buttons,
+recording and replaying normalized event sessions, and deterministic timestamps
+or a test clock.
 
 ## Phase 7 — completed work
 
@@ -522,5 +523,76 @@ Phase 7 known limitations:
 - **Combat/defense contribution recording** has no triggers in Phase 7. Only
   `engagement` is recorded (for every chat event). Combat and defense recording
   will be wired when the Godot sim bridge lands in Phase 8+.
+- **CRLF format drift is pre-existing.** Cosmetic only — lint, typecheck, and
+  tests are unaffected.
+
+## Phase 8 — completed work
+
+Node Gateway Core — local reliability layer:
+
+- [x] **Event Bus** (`gateway/src/pipeline/event_bus.ts`): typed pub/sub with bounded
+  queues per topic (`raw_event`, `normalized_event`, `command`, `error`). Overflow drops
+  oldest + warns. Async handlers with error isolation.
+- [x] **Normalization Boundary** (`gateway/src/pipeline/normalizer.ts`): pure function
+  `normalizeProviderEvent(raw)` validates against `NormalizedLiveEventSchema` (strict Zod).
+  Sanitizes displayName (control chars, 64-char cap) and comment (200-char cap).
+  Malformed events never reach the rules engine (acceptance gate).
+- [x] **Dedupe Store** (`gateway/src/pipeline/dedupe_store.ts`): sliding-window dedup
+  keyed on `(providerEventId, eventType)`. LRU eviction at configurable capacity (default
+  10,000).
+- [x] **Rate Limiter** (`gateway/src/pipeline/rate_limiter.ts`): per-viewerId token bucket
+  (configurable rate/burst) + global throughput limit.
+- [x] **Command Rules Engine** (`gateway/src/pipeline/command_rules.ts`): 5 built-in rules
+  (ModeVoteRule, JoinFactionRule, EndRoundRule, PauseRule, KickRule). Rule registration
+  API. Rules produce `GameCommand[] | null`.
+- [x] **Command Queue** (`gateway/src/pipeline/command_queue.ts`): bounded FIFO queue of
+  `GameCommand` (configurable capacity, default 500). Overflow rejects new commands.
+- [x] **Pipeline Orchestrator** (`gateway/src/pipeline/pipeline.ts`): wires all stages:
+  normalize → dedupe → rate limit → rules → enqueue. `process(rawEvent) → ProcessResult`.
+  `getStats()` for status endpoint. Runtime config updates via `applyRuntimeConfig()`.
+- [x] **Structured Logging** (`gateway/src/util/logger.ts`): pino-based with typed
+  component tagging. `sanitizeText` / `sanitizeAndCap` helpers in `util/sanitize.ts`.
+- [x] **Fastify Endpoints** (`gateway/src/routes/gateway_routes.ts`): 8 endpoints
+  (GET /health, GET /status, GET /config, POST /config, POST /control/shutdown,
+  POST /events, GET /events, GET /commands). Token auth on all non-health endpoints.
+  Config sanitization (token redacted). Batch event ingestion.
+- [x] **Configuration Validation** (`gateway/src/config.ts`): Zod-validated env vars
+  for all pipeline settings. Runtime config update with strict validation.
+  `sanitizeConfig()` for HTTP exposure.
+- [x] **Graceful Shutdown** (`gateway/src/server.ts`): SIGINT/SIGTERM handlers, drain
+  in-flight requests (configurable timeout), flush event bus + command queue.
+- [x] **127.0.0.1 Binding**: default host is `127.0.0.1` (configurable via HOST env).
+- [x] **Test Fixtures** (`gateway/test/fixtures/`): 10 valid events, 11 malformed events,
+  10 expected command mappings.
+- [x] 104 tests in `gateway/test/gateway_core.test.ts`: EventBus (6), Normalizer (9),
+  DedupeStore (6), RateLimiter (5), CommandRulesEngine (14), CommandQueue (6),
+  Pipeline (11), Endpoints (13), Logger (4), Config (5), Fixture acceptance (25).
+- [x] Docs: `docs/NODE_GATEWAY_CORE.md` (architecture, pipeline stages, endpoints,
+  configuration, shutdown behavior, acceptance gate).
+
+Commands run and results:
+
+- `npm run lint` — **PASS** (zero errors/warnings)
+- `npm run typecheck` — **PASS** (shared, gateway, dashboard, tools all clean)
+- `npm test` — **PASS** (294 tests in 9 files: gateway_core 104, viewer 74,
+  director 61, viewer_fixes 22, identity 15, packs 12, messages 3, schemas 2,
+  health 1)
+- `npm run validate:packs` — **PASS** (exit 0; 4 packs checked, 4 passed, 0 warnings,
+  0 failed)
+
+Phase 8 known limitations:
+
+- **Godot bridge integration deferred.** Commands are drained via `GET /commands`
+  only. Phase 10 will wire the WebSocket bridge to the Godot SimWorld.
+- **KICK_PLAYER not in GameCommand schema.** KickRule matches kick commands but
+  produces no GameCommand. The pipeline should call `director.hideViewer()`
+  directly when Phase 9 adapters wire the kick flow.
+- **Strategy commands have no game mechanics.** The CommandParser recognizes
+  focus/defend/push/retreat keywords but no gameplay effects are implemented.
+- **Cross-session persistence not implemented.** Pipeline state (dedupe store,
+  rate limit buckets, command queue) is session-scoped and lost on restart.
+- **Mode vote and faction join are handled by the director, not the rules engine.**
+  ModeVoteRule and KickRule return null (no GameCommand). The pipeline orchestrator
+  or Phase 9 adapter should call `director.handleChatEvent()` for chat events.
 - **CRLF format drift is pre-existing.** Cosmetic only — lint, typecheck, and
   tests are unaffected.
