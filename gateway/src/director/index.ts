@@ -8,13 +8,16 @@ import { MatchDirector, type MatchDirectorOptions, type Announcement } from './m
 import { registerCreatorRoutes } from './creator_commands.js';
 
 // Re-export everything for external consumers
-export { MatchDirector } from './match_director.js';
+export { MatchDirector, SYNTHETIC_FACTIONS } from './match_director.js';
 export type { MatchDirectorOptions, DirectorState, DirectorStateSnapshot, Announcement } from './match_director.js';
 export { MockSimulation } from './mock_simulation.js';
 export type { MockSnapshot, MockUnit, MockProjectile, BattleConfig, BattleStage } from './mock_simulation.js';
 export { loadStats, saveStats, recordRound, defaultStats, SessionStatsSchema } from './session_stats.js';
 export type { SessionStats } from './session_stats.js';
 export { registerCreatorRoutes } from './creator_commands.js';
+
+// Phase 7: Re-export viewer modules
+export * from '../viewer/index.js';
 
 // ---------------------------------------------------------------------------
 // createDirector factory

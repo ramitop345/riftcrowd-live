@@ -1,7 +1,7 @@
 # RiftCrowd LIVE — Project Status
 
 - **Working title:** RiftCrowd LIVE
-- **Current phase:** Phase 6 — Match Director and Round Lifecycle
+- **Current phase:** Phase 7 — Viewer Identity and Faction Participation
 - **Status:** COMPLETED
 - **Last updated:** 31 July 2026
 
@@ -15,7 +15,7 @@
 - Phase 4 — Content-Pack System and Four Launch Packs: **COMPLETED**
 - Phase 5 — Autonomous Arena Simulation: **COMPLETED**
 - Phase 6 — Match Director and Round Lifecycle: **COMPLETED**
-- Phase 7 — Viewer Identity and Faction Participation: not started
+- Phase 7 — Viewer Identity and Faction Participation: **COMPLETED**
 - Phase 8 — Node Gateway Core: not started
 - Phase 9 — Mock LIVE Adapter and Event Studio: not started
 - Phase 10 — Gateway-to-Godot WebSocket Integration: not started
@@ -448,6 +448,79 @@ Phase 6 known limitations:
 
 ## Next phase
 
-**Phase 7 — Viewer Identity and Faction Participation** (per the guide):
-session-scoped viewer profiles, faction join/strategy commands from normalized chat events,
-one faction per round enforcement, named champion spawning, and contribution tracking.
+**Phase 8 — Node Gateway Core** (per the guide):
+Fastify health, status, config, and control endpoints; event bus, normalization
+boundary, dedupe store, rate limits, command rules, command queue, and structured
+logging; localhost binding with local session token; graceful shutdown and
+configuration validation.
+
+## Phase 7 — completed work
+
+Viewer Identity and Faction Participation (Node.js gateway):
+
+- [x] `ViewerProfile` (`gateway/src/viewer/viewer_profile.ts`): Zod schema (strict,
+  schemaVersion 1) with viewerId, providerHandle, sanitized displayName, firstSeenAt,
+  lastSeenAt, optional factionId, switchCount, isHidden, contributionCategories
+  (combat/defense/engagement/gifts all 0 initially), roundsParticipated.
+- [x] `sanitizeDisplayName(raw, maxLength?)`: strips ASCII control chars (0x00–0x1F,
+  0x7F), strips zero-width Unicode chars (U+200B, U+200C, U+200D, U+FEFF), trims,
+  caps at maxLength (default 64). Never throws on any input (null/undefined/number/
+  object/Buffer all coerced to "").
+- [x] `ViewerRegistry` (`gateway/src/viewer/viewer_registry.ts`): session-scoped
+  Map<viewerId, ViewerProfile>. Methods: getOrCreate (dedup with object identity,
+  updates lastSeenAt, re-sanitizes displayName on change), get, hide, unhide,
+  resetSession, list.
+- [x] `CommandParser` (`gateway/src/viewer/command_parser.ts`): discriminated union
+  return type (ModeVoteCommand, JoinFactionCommand, StrategyCommand,
+  UnrecognizedCommand). Mode vote keywords (1/countries through 4/cities), faction
+  keywords via matchJoinKeyword against ContentPack or synthetic faction IDs,
+  strategy keywords (configurable: focus/defend/push/retreat). Case-insensitive,
+  first-token rule, 200-char cap.
+- [x] `ChampionSpawner` (`gateway/src/viewer/champion_spawner.ts`): emits
+  SPAWN_CHAMPION GameCommand once per viewer per round (keyed on viewerId, not
+  factionId). resetRound() clears spawned set.
+- [x] `ContributionTracker` (`gateway/src/viewer/contribution_tracker.ts`): per-viewer
+  integer counters for combat, defense, engagement, gifts. Cap at 1,000,000 per
+  category. getTopContributor, getViewerContributions. resetRound() zeroes counters.
+- [x] MatchDirector integration (`gateway/src/director/match_director.ts`): new
+  handleChatEvent method (parses via CommandParser, dispatches to handleModeVote/
+  handleFactionJoin, spawns champion, records engagement). hideViewer/unhideViewer
+  methods. Hidden viewers rejected from faction joins. RESULTS→MODE_VOTE transition
+  resets championSpawner and contributionTracker, increments roundsParticipated.
+  restart() also resets viewer round-scoped state.
+- [x] `gateway/config/viewer.json`: displayNameMaxLength 64, chatCommandMaxLength 200,
+  contributionCategoryCap 1000000, strategyKeywords [focus,defend,push,retreat].
+  Loaded in app.ts with Zod validation and fallback defaults.
+- [x] 74 tests in `gateway/test/viewer.test.ts`: ViewerProfile sanitization (13 tests),
+  schema validation (4 tests), ViewerRegistry deduplication (8 tests), CommandParser
+  (22 tests), ChampionSpawner (7 tests), ContributionTracker (8 tests), acceptance
+  gate (3 tests), MatchDirector integration (8 tests), viewer.json config (1 test).
+- [x] Docs: `docs/VIEWER_IDENTITY.md` (schema, sanitization rules, command parsing,
+  contribution categories, moderation, configuration).
+
+Commands run and results:
+
+- `npm run lint` — **PASS** (zero errors/warnings)
+- `npm run typecheck` — **PASS** (shared, gateway, dashboard, tools all clean)
+- `npm test` — **PASS** (168 tests in 7 files: viewer 74, director 61, identity 15,
+  packs 12, messages 3, schemas 2, health 1)
+- `npm run validate:packs` — **PASS** (exit 0; 4 packs checked, 4 passed, 0 warnings,
+  0 failed)
+
+Phase 7 known limitations:
+
+- **Strategy commands are parsed but have no game mechanics.** The CommandParser
+  recognizes focus/defend/push/retreat keywords and returns StrategyCommand, but
+  no gameplay effects are implemented until Phase 8+.
+- **Godot-side champion name display** is Phase 13 dashboard territory. The
+  SPAWN_CHAMPION GameCommand carries the sanitized displayName, but the Godot
+  client does not yet consume it.
+- **Gift contribution tracking** requires Phase 11 gift economy integration.
+  The `gifts` counter exists but is never incremented in Phase 7.
+- **Cross-session viewer persistence** is not implemented. Profiles are
+  session-scoped and cleared on process restart.
+- **Combat/defense contribution recording** has no triggers in Phase 7. Only
+  `engagement` is recorded (for every chat event). Combat and defense recording
+  will be wired when the Godot sim bridge lands in Phase 8+.
+- **CRLF format drift is pre-existing.** Cosmetic only — lint, typecheck, and
+  tests are unaffected.

@@ -15,11 +15,15 @@
  * first round with no history → alphabetical mode id.
  */
 
-import type { ContentPackMode } from '@riftcrowd/shared';
-import { CONTENT_PACK_MODES } from '@riftcrowd/shared';
+import type { ContentPackMode, NormalizedLiveEvent, ContentPack } from '@riftcrowd/shared';
+import { CONTENT_PACK_MODES, matchJoinKeyword } from '@riftcrowd/shared';
 import type { BattleConfig, MockSnapshot } from './mock_simulation.js';
 import { MockSimulation } from './mock_simulation.js';
 import { defaultStats, loadStats, recordRound, saveStats, type SessionStats } from './session_stats.js';
+import { ViewerRegistry } from '../viewer/viewer_registry.js';
+import { CommandParser, type CommandParserOptions, type ParsedCommand } from '../viewer/command_parser.js';
+import { ChampionSpawner } from '../viewer/champion_spawner.js';
+import { ContributionTracker } from '../viewer/contribution_tracker.js';
 
 // ---------------------------------------------------------------------------
 // Director state enum
@@ -115,6 +119,11 @@ export interface MatchDirectorOptions {
   battleConfig: BattleConfig;
   resultsDuration: number;
   onAnnouncement?: (announcement: Announcement) => void;
+  /** Optional viewer config for Phase 7 viewer identity features. */
+  viewerConfig?: CommandParserOptions & {
+    displayNameMaxLength: number;
+    contributionCategoryCap: number;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -144,7 +153,8 @@ interface FactionJoin {
 // Mock faction data for faction lobby (when no pack is loaded, use synthetic factions)
 // ---------------------------------------------------------------------------
 
-const SYNTHETIC_FACTIONS = ['faction_alpha', 'faction_beta'];
+/** Synthetic faction IDs used when no content pack is loaded. Exported for reuse in app.ts. */
+export const SYNTHETIC_FACTIONS = ['faction_alpha', 'faction_beta'] as const;
 
 // ---------------------------------------------------------------------------
 // MatchDirector class
@@ -162,17 +172,45 @@ export class MatchDirector {
   public stats: SessionStats;
   public lastAnnouncement: Announcement | null = null;
 
+  // Phase 7: Viewer identity and participation services
+  public viewerRegistry: ViewerRegistry;
+  public commandParser: CommandParser;
+  public championSpawner: ChampionSpawner;
+  public contributionTracker: ContributionTracker;
+
   private readonly opts: MatchDirectorOptions;
   private voteMap = new Map<string, ContentPackMode>();
   private factionJoins = new Map<string, FactionJoin>();
   private battleStageTicks = 0;
   private lastSnapshot: MockSnapshot | null = null;
   private restartCounter = 0;
+  /** The current content pack for faction keyword matching. Set via setCurrentPack(). */
+  private currentPack: ContentPack | null = null;
 
   constructor(opts: MatchDirectorOptions) {
     this.opts = opts;
     this.roundSeed = Date.now();
     this.stats = defaultStats();
+
+    // Initialize viewer services with defaults or provided config
+    const displayNameMax = opts.viewerConfig?.displayNameMaxLength ?? 64;
+    const chatMax = opts.viewerConfig?.chatCommandMaxLength ?? 200;
+    const contributionCap = opts.viewerConfig?.contributionCategoryCap ?? 1_000_000;
+    const strategyKw = opts.viewerConfig?.strategyKeywords ?? ['focus', 'defend', 'push', 'retreat'];
+
+    this.viewerRegistry = new ViewerRegistry(displayNameMax);
+    this.commandParser = new CommandParser({
+      chatCommandMaxLength: chatMax,
+      strategyKeywords: strategyKw,
+      syntheticFactionIds: SYNTHETIC_FACTIONS,
+    });
+    this.championSpawner = new ChampionSpawner();
+    this.contributionTracker = new ContributionTracker(contributionCap);
+  }
+
+  /** Sets the current content pack for faction keyword matching in handleChatEvent. */
+  setCurrentPack(pack: ContentPack | null): void {
+    this.currentPack = pack;
   }
 
   // -------------------------------------------------------------------------
@@ -256,14 +294,51 @@ export class MatchDirector {
   // -------------------------------------------------------------------------
 
   /**
-   * Records a viewer's faction join during FACTION_LOBBY.
+   * Records a viewer's faction join during FACTION_LOBBY using a pre-resolved factionId.
+   * Called from handleChatEvent where the CommandParser has already resolved the faction.
    * One switch allowed; subsequent joins after the switch are ignored.
-   * Uses matchJoinKeyword from shared schemas against synthetic factions.
+   */
+  private recordFactionJoin(viewerId: string, factionId: string): void {
+    if (this.state !== 'FACTION_LOBBY') return;
+
+    // Phase 7: reject hidden viewers
+    const profile = this.viewerRegistry.get(viewerId);
+    if (profile?.isHidden) return;
+
+    const existing = this.factionJoins.get(viewerId);
+    if (!existing) {
+      // First join
+      this.factionJoins.set(viewerId, { factionId, switched: false });
+      this.selectedFactions.set(viewerId, factionId);
+      if (profile) {
+        profile.factionId = factionId;
+      }
+    } else if (!existing.switched) {
+      // One switch allowed
+      existing.factionId = factionId;
+      existing.switched = true;
+      this.selectedFactions.set(viewerId, factionId);
+      if (profile) {
+        profile.factionId = factionId;
+        profile.switchCount++;
+      }
+    }
+    // else: subsequent joins ignored
+  }
+
+  /**
+   * Records a viewer's faction join during FACTION_LOBBY using raw comment text.
+   * Matches against SYNTHETIC_FACTIONS only (for backward-compat / direct API calls).
+   * When called from handleChatEvent, prefer recordFactionJoin with the resolved factionId.
    * @param rawComment — capped at 200 chars (matching shared lib's matchJoinKeyword cap).
    *   Excess characters are ignored, not truncated.
    */
   handleFactionJoin(viewerId: string, rawComment: string): void {
     if (this.state !== 'FACTION_LOBBY') return;
+
+    // Phase 7: reject hidden viewers
+    const profile = this.viewerRegistry.get(viewerId);
+    if (profile?.isHidden) return;
 
     // Extract first token (case-insensitive keyword match, same rule as matchJoinKeyword)
     const capped = rawComment.slice(0, 200);
@@ -274,20 +349,103 @@ export class MatchDirector {
     const matchedFaction = SYNTHETIC_FACTIONS.find(
       (f) => f.toLowerCase() === keyword.toLowerCase(),
     );
-    if (!matchedFaction) return;
 
-    const existing = this.factionJoins.get(viewerId);
-    if (!existing) {
-      // First join
-      this.factionJoins.set(viewerId, { factionId: matchedFaction, switched: false });
-      this.selectedFactions.set(viewerId, matchedFaction);
-    } else if (!existing.switched) {
-      // One switch allowed
-      existing.factionId = matchedFaction;
-      existing.switched = true;
-      this.selectedFactions.set(viewerId, matchedFaction);
+    // Also try to resolve via loaded content pack
+    let resolvedFaction: string | undefined = matchedFaction;
+    if (!resolvedFaction && this.currentPack) {
+      resolvedFaction = matchJoinKeyword(this.currentPack, rawComment) ?? undefined;
     }
-    // else: subsequent joins ignored
+    if (!resolvedFaction) return;
+
+    this.recordFactionJoin(viewerId, resolvedFaction);
+  }
+
+  // -------------------------------------------------------------------------
+  // Phase 7: Chat event handling
+  // -------------------------------------------------------------------------
+
+  /**
+   * Handles a normalized chat event from a viewer.
+   *
+   * 1. Gets or creates the viewer profile in the registry.
+   * 2. Parses the command (mode vote / faction join / strategy / unrecognized).
+   * 3. Dispatches to the appropriate handler.
+   * 4. Records engagement contribution for any chat event.
+   *
+   * @param event — a NormalizedLiveEvent of type 'chat'.
+   * @returns the parsed command (for testing/observability).
+   */
+  handleChatEvent(event: NormalizedLiveEvent): ParsedCommand {
+    // Get or create viewer profile (deduplication handled by registry)
+    const profile = this.viewerRegistry.getOrCreate(
+      event.user.id,
+      event.user.handle,
+      event.user.displayName,
+    );
+
+    // Parse the command
+    const cmd = this.commandParser.parse(event, this.currentPack);
+
+    // Dispatch based on command kind
+    switch (cmd.kind) {
+      case 'mode_vote':
+        this.handleModeVote(cmd.viewerId, event.comment ?? '');
+        break;
+
+      case 'join_faction': {
+        // Use the already-resolved cmd.factionId (works for both synthetic and pack factions)
+        this.recordFactionJoin(cmd.viewerId, cmd.factionId);
+
+        // Attempt champion spawn (once per viewer per round)
+        // Only spawn if the join was actually recorded (state == FACTION_LOBBY and not hidden)
+        if (!profile.isHidden && this.selectedFactions.has(cmd.viewerId)) {
+          const spawnCmd = this.championSpawner.spawnIfNew(
+            cmd.viewerId,
+            profile.displayName,
+            cmd.factionId,
+            cmd.eventId,
+          );
+          if (spawnCmd) {
+            // In Phase 8+, this would be enqueued to the Godot sim
+            // For now, we just track that it was spawned
+          }
+        }
+        break;
+      }
+
+      case 'strategy':
+        // Strategy commands are recorded but no-op until Phase 8+ mechanics
+        break;
+
+      case 'unrecognized':
+        // No-op for unrecognized commands
+        break;
+    }
+
+    // Record engagement contribution for any chat event
+    this.contributionTracker.recordEngagement(event.user.id, 1);
+
+    return cmd;
+  }
+
+  // -------------------------------------------------------------------------
+  // Phase 7: Moderation
+  // -------------------------------------------------------------------------
+
+  /**
+   * Hides a viewer (moderation). Hidden viewers cannot join factions.
+   * @param viewerId — the viewer to hide.
+   */
+  hideViewer(viewerId: string): void {
+    this.viewerRegistry.hide(viewerId);
+  }
+
+  /**
+   * Unhides a previously hidden viewer.
+   * @param viewerId — the viewer to unhide.
+   */
+  unhideViewer(viewerId: string): void {
+    this.viewerRegistry.unhide(viewerId);
   }
 
   // -------------------------------------------------------------------------
@@ -358,6 +516,9 @@ export class MatchDirector {
     this.lastSnapshot = null;
     this.battleStageTicks = 0;
     this.paused = false;
+    // Phase 7: reset per-round viewer state
+    this.championSpawner.resetRound();
+    this.contributionTracker.resetRound();
     this.transitionTo('MODE_VOTE');
   }
 
@@ -404,9 +565,11 @@ export class MatchDirector {
       case 'BATTLE_ENDED':
         this.transitionTo('RESULTS');
         break;
-      case 'RESULTS':
+      case 'RESULTS': {
         this.recordAndSaveRound();
         this.roundSeed = Date.now() + this.stats.roundsPlayed;
+        // FIX 2: Capture faction participants BEFORE clearing
+        const participants = [...this.factionJoins.keys()];
         this.voteMap.clear();
         this.factionJoins.clear();
         this.selectedFactions.clear();
@@ -414,8 +577,22 @@ export class MatchDirector {
         this.lastSnapshot = null;
         this.battleStageTicks = 0;
         this.paused = false;
+        // Phase 7: reset per-round viewer state (profiles persist across rounds)
+        this.championSpawner.resetRound();
+        this.contributionTracker.resetRound();
+        // FIX 2: Increment roundsParticipated for captured participants
+        for (const viewerId of participants) {
+          const p = this.viewerRegistry.get(viewerId);
+          if (p) p.roundsParticipated++;
+        }
+        // FIX 4: Reset per-round profile fields (factionId, switchCount)
+        for (const p of this.viewerRegistry.list()) {
+          p.factionId = undefined;
+          p.switchCount = 0;
+        }
         this.transitionTo('MODE_VOTE');
         break;
+      }
       default:
         break;
     }
