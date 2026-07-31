@@ -23,6 +23,13 @@ const EnvSchema = z.object({
   PIPELINE_RATE_LIMIT_GLOBAL: z.coerce.number().int().positive().default(1000),
   PIPELINE_COMMAND_QUEUE_CAPACITY: z.coerce.number().int().positive().default(500),
   PIPELINE_EVENT_BUS_CAPACITY: z.coerce.number().int().positive().default(1000),
+
+  // Phase 10: WebSocket configuration
+  WS_HEARTBEAT_INTERVAL_MS: z.coerce.number().int().positive().default(5000),
+  WS_HEARTBEAT_TIMEOUT_MS: z.coerce.number().int().positive().default(15000),
+  WS_RETRY_BUFFER_CAPACITY: z.coerce.number().int().positive().default(1000),
+  WS_MAX_RECONNECT_BACKOFF_MS: z.coerce.number().int().positive().default(30000),
+  WS_IDEMPOTENCY_WINDOW_SIZE: z.coerce.number().int().positive().default(500),
 });
 
 const env = EnvSchema.parse(process.env);
@@ -44,6 +51,13 @@ export const config = {
     commandQueueCapacity: env.PIPELINE_COMMAND_QUEUE_CAPACITY,
     eventBusCapacity: env.PIPELINE_EVENT_BUS_CAPACITY,
   },
+  ws: {
+    heartbeatIntervalMs: env.WS_HEARTBEAT_INTERVAL_MS,
+    heartbeatTimeoutMs: env.WS_HEARTBEAT_TIMEOUT_MS,
+    retryBufferCapacity: env.WS_RETRY_BUFFER_CAPACITY,
+    maxReconnectBackoffMs: env.WS_MAX_RECONNECT_BACKOFF_MS,
+    idempotencyWindowSize: env.WS_IDEMPOTENCY_WINDOW_SIZE,
+  },
 } as const;
 
 export type GatewayConfig = typeof config;
@@ -61,6 +75,7 @@ export function sanitizeConfig(cfg: GatewayConfig): Record<string, unknown> {
     logLevel: cfg.logLevel,
     shutdownTimeoutMs: cfg.shutdownTimeoutMs,
     pipeline: { ...cfg.pipeline },
+    ws: { ...cfg.ws },
     localSessionToken: '***REDACTED***',
   };
 }

@@ -11,7 +11,7 @@ import { Logger, createLogger } from './util/logger.js';
 const pino = createLogger(config.logLevel);
 const logger = new Logger(pino);
 
-const app = buildApp();
+const app = buildApp({ enableWs: true });
 
 let shuttingDown = false;
 

@@ -13,6 +13,7 @@
     "./identity": "./schemas/identity.ts",
     "./messages": "./schemas/messages.ts",
     "./packs": "./schemas/packs.ts",
+    "./ws_protocol": "./schemas/ws_protocol.ts",
     "./fixtures/valid-events.json": "./fixtures/valid-events.json",
     "./fixtures/invalid-events.json": "./fixtures/invalid-events.json",
     "./fixtures/valid-messages.json": "./fixtures/valid-messages.json",

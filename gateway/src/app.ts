@@ -14,6 +14,7 @@ import { ContributionTracker } from './viewer/contribution_tracker.js';
 import { Pipeline } from './pipeline/pipeline.js';
 import { registerGatewayRoutes } from './routes/gateway_routes.js';
 import { registerMockRoutes } from './routes/mock_routes.js';
+import { WsServer } from './ws/ws_server.js';
 
 export interface BuildAppOptions {
   /** Set to false in tests to silence request logging. Defaults to true. */
@@ -27,6 +28,8 @@ export interface BuildAppOptions {
   enablePipeline?: boolean;
   /** Enable Phase 9 mock adapter routes (/mock/*). Opt-in: defaults to false. */
   enableMockRoutes?: boolean;
+  /** Enable Phase 10 WebSocket server. Opt-in: defaults to false. */
+  enableWs?: boolean;
 }
 
 /**
@@ -188,6 +191,34 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
         director,
       });
     }
+
+    // Phase 10: WebSocket server (opt-in via enableWs: true)
+    if (options.enableWs === true) {
+      const wsServer = new WsServer({
+        heartbeatIntervalMs: config.ws.heartbeatIntervalMs,
+        heartbeatTimeoutMs: config.ws.heartbeatTimeoutMs,
+        retryBufferCapacity: config.ws.retryBufferCapacity,
+        maxReconnectBackoffMs: config.ws.maxReconnectBackoffMs,
+        idempotencyWindowSize: config.ws.idempotencyWindowSize,
+        sessionToken: config.localSessionToken,
+      });
+      app.decorate('wsServer', wsServer);
+
+      // Attach WS server once the Fastify HTTP server is ready
+      app.addHook('onReady', async () => {
+        const httpServer = app.server;
+        if (httpServer && pipeline) {
+          wsServer.attach(httpServer, pipeline.eventBus);
+          app.log.info('[WS] WebSocket server attached to /ws/game');
+        }
+      });
+
+      // Clean up on close
+      app.addHook('onClose', async () => {
+        await wsServer.close();
+        app.log.info('[WS] WebSocket server closed');
+      });
+    }
   } else if (!enablePipeline) {
     // Legacy /health endpoint for tests that disable the pipeline
     app.get('/health', () => ({
@@ -201,10 +232,11 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   return app;
 }
 
-// Augment FastifyInstance with optional director and pipeline
+// Augment FastifyInstance with optional director, pipeline, and wsServer
 declare module 'fastify' {
   interface FastifyInstance {
     director?: MatchDirector;
     pipeline?: Pipeline;
+    wsServer?: WsServer;
   }
 }

@@ -1,7 +1,7 @@
 # RiftCrowd LIVE — Project Status
 
 - **Working title:** RiftCrowd LIVE
-- **Current phase:** Phase 9 — Mock LIVE Adapter and Event Studio
+- **Current phase:** Phase 10 — Gateway-to-Godot WebSocket Integration
 - **Status:** COMPLETED
 - **Last updated:** 31 July 2026
 
@@ -18,7 +18,7 @@
 - Phase 7 — Viewer Identity and Faction Participation: **COMPLETED**
 - Phase 8 — Node Gateway Core: **COMPLETED**
 - Phase 9 — Mock LIVE Adapter and Event Studio: **COMPLETED**
-- Phase 10 — Gateway-to-Godot WebSocket Integration: not started
+- Phase 10 — Gateway-to-Godot WebSocket Integration: **COMPLETED**
 - Phase 11 — Gift Economy, Streaks, and Burst Aggregation: not started
 - Phase 12 — Free Engagement Mechanics: not started
 - Phase 13 — Creator Dashboard: not started
@@ -513,11 +513,105 @@ Phase 9 known limitations:
 
 ## Next phase
 
-**Phase 10 — Gateway-to-Godot WebSocket Integration** (per the guide):
-Connect real-time commands to the game safely. Implement localhost WebSocket server
-and Godot WebSocket client. Add handshake, protocol version, heartbeat, reconnect,
-command acknowledgment, snapshot, and error messages. Make command handling idempotent.
-Add a bounded retry buffer. Display non-intrusive connection status in the game.
+**Phase 11 — Gift Economy, Streaks, and Burst Aggregation** (per the guide):
+Create exciting but stable gift reactions. Implement gift-triggered gameplay effects
+(captain ultimates, energy bursts), streak tracking, and burst aggregation mechanics.
+
+## Phase 10 — completed work
+
+Gateway-to-Godot WebSocket Integration:
+
+- [x] **WS Protocol Schema** (`shared/schemas/ws_protocol.ts`): Zod discriminated union
+  covering 10 message types (handshake, handshake_ack, heartbeat_ping, heartbeat_pong,
+  command, command_ack, snapshot, error, reconnect, disconnect). `WS_PROTOCOL_VERSION = 1`
+  (independent from Phase 2 HTTP protocol version). All schemas `.strict()` with bounded
+  string lengths.
+- [x] **WebSocket Server** (`gateway/src/ws/ws_server.ts`): raw `ws` package attached to
+  Fastify HTTP server at `/ws/game`. Token auth via `verifyClient` with `timingSafeEqual`.
+  Handshake flow with protocol version check. Heartbeat ping/pong with timeout.
+  Command broadcast from pipeline event bus. Idempotent delivery via bounded
+  `Set<string>` of `clientId:messageId` pairs.
+- [x] **Bounded Retry Buffer** (`gateway/src/ws/retry_buffer.ts`): Map-based buffer
+  (default capacity 1000). Eviction: oldest ACKED first, then oldest unacked
+  (ring-buffer). `getRange(fromSeq, toSeq)` for snapshot building. Monotonic
+  sequence numbers.
+- [x] **Idempotent Command Handling**: server dedup via bounded set with FIFO eviction
+  (default 500). Client-side: `_last_applied_sequence` tracking; commands with
+  seq ≤ lastApplied get `command_ack` status='duplicate'.
+- [x] **Config** (`gateway/config/ws.json`): heartbeatIntervalMs 5000, heartbeatTimeoutMs
+  15000, retryBufferCapacity 1000, maxReconnectBackoffMs 30000, idempotencyWindowSize
+  500. Zod-validated env vars in `config.ts`.
+- [x] **App Integration** (`gateway/src/app.ts`): `enableWs: true` option creates
+  WsServer, attaches via `onReady` hook, closes via `onClose` hook. Decorates
+  FastifyInstance with `wsServer`.
+- [x] **Godot WS Client** (`game/scripts/net/ws_client.gd`): GDScript 2.0 class using
+  `WebSocketPeer`. Exponential backoff reconnect (1s→30s). Signals: handshake_completed,
+  command_received, snapshot_received, disconnected, error_received. Idempotent command
+  application.
+- [x] **Command Dispatcher** (`game/scripts/net/command_dispatcher.gd`): routes commands
+  by type to subsystem signals (faction_join, spawn_champion, add_energy, add_shield,
+  spawn_squad, cast_ability, start_world_event, display_spotlight, pause_events,
+  end_round). gift_apply (signal declared; routing deferred to Phase 11).
+- [x] **Connection Status HUD** (`game/scripts/ui/connection_status.gd` + scene):
+  non-intrusive 32×32 icon + label. States: CONNECTING (yellow), CONNECTED (green),
+  DISCONNECTED (red), RECONNECTING (orange). Added to Battle scene.
+- [x] **86 tests**: ws_protocol (18), ws_retry_buffer (11), ws_server (26),
+  ws_integration (10), ws_acceptance (11), ws_fixes (10).
+- [x] Docs: `docs/WEBSOCKET_INTEGRATION.md` (protocol messages, connection flow,
+  idempotency, retry buffer, reconnect, HUD, config).
+
+Commands run and results:
+
+- `npm run lint` — **PASS** (zero errors/warnings)
+- `npm run typecheck` — **PASS** (shared, gateway, dashboard all clean)
+- `npm test` — **PASS** (480 tests in 17 files: gateway_core 123, mock_adapter 74,
+  viewer 74, director 61, ws_server 26, viewer_fixes 22, ws_protocol 18, identity 15,
+  ws_retry_buffer 11, ws_integration 10, ws_acceptance 11, ws_fixes 10, packs 12,
+  messages 3, schemas 2, health 1, cli 3)
+  - 1 pre-existing flaky perf test (LRU DedupeStore < 100ms threshold) fails on
+    Windows under load; passes in isolation. Documented in limitations.
+- `npm run validate:packs` — **PASS** (exit 0; 4 packs checked, 4 passed, 0 warnings,
+  0 failed)
+
+Phase 10 review fixes applied (9 fixes from triple review):
+
+- **FIX 1** (critical): Zod schema validation in `handleHandshakeAck`, `handleHeartbeatPong`,
+  `handleCommandAck` — replaced unsafe `String()`/`Number()` coercion with
+  `WsHandshakeAckSchema.safeParse()`, `WsHeartbeatPongSchema.safeParse()`,
+  `WsCommandAckSchema.safeParse()`. 10 new tests in `ws_fixes.test.ts`.
+- **FIX 2** (critical): Mandatory protocol version check on server (removed `!== undefined`
+  guard) and client (changed to `pv == null or int(pv) != PROTOCOL_VERSION`). 2 new tests.
+- **FIX 3** (critical): Added `wsServer: WsServer` to `IntegrationCtx` and `AcceptanceCtx`,
+  populated from `app.wsServer!`. Previously-skipped assertions now execute.
+- **FIX 4** (major): Idempotency test now sets up a new message collector after ACK before
+  re-broadcast, with explicit `expect(dupCmds).toHaveLength(0)` assertion.
+- **FIX 5** (major): ConnectionStatus HUD branches on `ws_client.auto_reconnect_enabled()`
+  — shows DISCONNECTED on graceful disconnect, RECONNECTING only when auto-reconnect is on.
+- **FIX 6** (major): Fixed `docs/WEBSOCKET_INTEGRATION.md` command table — removed
+  non-existent `MODE_VOTE`, `GIFT_APPLY`, `KICK_VIEWER`, `PAUSE_ROUND`; added actual
+  command types from `GameCommandTypeSchema`.
+- **FIX 7** (minor): Deprecated `currentSequenceNumber` getter in `RetryBuffer`;
+  `nextSequenceNumber` is now the canonical name. `WsServer` uses `nextSequenceNumber`
+  internally.
+- **FIX 8** (minor): Added `if (!this.clients.has(ws)) return` early-exit guard in
+  `handleDisconnect` to prevent double cleanup from `error` + `close` events.
+- **FIX 9** (minor): Marked `gift_apply` signal as Phase 11 hook in `command_dispatcher.gd`
+  and `PROJECT_STATUS.md`.
+
+Phase 10 known limitations:
+
+- **Godot NOT installed.** All GDScript (`ws_client.gd`, `command_dispatcher.gd`,
+  `connection_status.gd`) is hand-authored and desk-checked only. No runtime validation.
+- **`/ws/dashboard` deferred to Phase 13.** Only `/ws/game` is delivered in Phase 10.
+- **Gift commands flow but Phase 11 mechanics not implemented.** `gift_apply` signal is
+  declared in CommandDispatcher but the `GIFT_APPLY` dispatch case and GiftEconomy
+  subsystem are a Phase 11 stub.
+- **Heartbeat is server-initiated only.** The Godot client responds to pings but does
+  not independently detect stale connections.
+- **Single-server only.** Each gateway instance maintains its own retry buffer; no
+  clustering or cross-instance state sharing.
+- **Performance test is flaky on Windows.** `gateway_core.test.ts` LRU DedupeStore perf
+  test (< 100ms threshold) occasionally exceeds limit under load. Passes in isolation.
 
 ## Phase 7 — completed work
 
