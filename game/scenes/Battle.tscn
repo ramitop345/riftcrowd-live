@@ -1,0 +1,126 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/screens/battle.gd" id="1_battle"]
+[ext_resource type="Theme" path="res://themes/default_theme.tres" id="2_theme"]
+
+[node name="Battle" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("2_theme")
+script = ExtResource("1_battle")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.1, 0.06, 0.08, 1)
+
+[node name="SafeArea" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Layout" type="VBoxContainer" parent="SafeArea"]
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="HeadingLabel" type="Label" parent="SafeArea/Layout"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 56
+text = "Battle"
+horizontal_alignment = 1
+
+[node name="StatusRegion" type="ColorRect" parent="SafeArea/Layout"]
+custom_minimum_size = Vector2(0, 220)
+layout_mode = 2
+color = Color(0.16, 0.1, 0.14, 1)
+
+[node name="StatusLabel" type="Label" parent="SafeArea/Layout/StatusRegion"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "Top status — faction scores (Phase 6)"
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 3
+
+[node name="BattlefieldRegion" type="ColorRect" parent="SafeArea/Layout"]
+layout_mode = 2
+size_flags_vertical = 3
+color = Color(0.13, 0.08, 0.11, 1)
+
+[node name="BattlefieldLabel" type="Label" parent="SafeArea/Layout/BattlefieldRegion"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "Battlefield — autonomous arena (Phase 5)"
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 3
+
+[node name="SpotlightRegion" type="ColorRect" parent="SafeArea/Layout"]
+custom_minimum_size = Vector2(0, 220)
+layout_mode = 2
+color = Color(0.18, 0.12, 0.1, 1)
+
+[node name="SpotlightLabel" type="Label" parent="SafeArea/Layout/SpotlightRegion"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "Event spotlight — gifts and streaks (Phase 11)"
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 3
+
+[node name="InstructionRegion" type="ColorRect" parent="SafeArea/Layout"]
+custom_minimum_size = Vector2(0, 300)
+layout_mode = 2
+color = Color(0.14, 0.09, 0.16, 1)
+
+[node name="InstructionContent" type="MarginContainer" parent="SafeArea/Layout/InstructionRegion"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
+
+[node name="InstructionLayout" type="VBoxContainer" parent="SafeArea/Layout/InstructionRegion/InstructionContent"]
+layout_mode = 2
+theme_override_constants/separation = 16
+alignment = 1
+
+[node name="InstructionLabel" type="Label" parent="SafeArea/Layout/InstructionRegion/InstructionContent/InstructionLayout"]
+layout_mode = 2
+text = "Instruction bar — how to play (Phase 12)"
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="EndBattleButton" type="Button" parent="SafeArea/Layout/InstructionRegion/InstructionContent/InstructionLayout"]
+custom_minimum_size = Vector2(420, 64)
+layout_mode = 2
+size_flags_horizontal = 4
+text = "End battle"

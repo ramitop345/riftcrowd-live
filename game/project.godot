@@ -11,8 +11,17 @@ run/main_scene="res://scenes/Boot.tscn"
 config/features=PackedStringArray("4.3")
 config/icon="res://icon.svg"
 
+[autoload]
+
+AppState="*res://autoload/app_state.gd"
+ErrorOverlay="*res://autoload/error_overlay.gd"
+DebugPanel="*res://autoload/debug_panel.gd"
+
 [display]
 
+; Design resolution is 1080x1920 portrait. No window size overrides on purpose:
+; they would also shrink exported/streaming builds. For dev runs resize the
+; window freely — the canvas_items stretch mode handles scaling.
 window/size/viewport_width=1080
 window/size/viewport_height=1920
 window/size/mode=0

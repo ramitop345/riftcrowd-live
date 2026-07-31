@@ -1,9 +1,9 @@
 [gd_scene load_steps=3 format=3]
 
-[ext_resource type="Script" path="res://scripts/boot.gd" id="1_boot"]
+[ext_resource type="Script" path="res://scripts/screens/main_menu.gd" id="1_menu"]
 [ext_resource type="Theme" path="res://themes/default_theme.tres" id="2_theme"]
 
-[node name="Boot" type="Control"]
+[node name="MainMenu" type="Control"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -11,7 +11,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 theme = ExtResource("2_theme")
-script = ExtResource("1_boot")
+script = ExtResource("1_menu")
 
 [node name="Background" type="ColorRect" parent="."]
 layout_mode = 1
@@ -20,7 +20,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.06, 0.07, 0.13, 1)
+color = Color(0.08, 0.06, 0.15, 1)
 
 [node name="SafeArea" type="MarginContainer" parent="."]
 layout_mode = 1
@@ -32,7 +32,7 @@ grow_vertical = 2
 
 [node name="Layout" type="VBoxContainer" parent="SafeArea"]
 layout_mode = 2
-theme_override_constants/separation = 24
+theme_override_constants/separation = 32
 alignment = 1
 
 [node name="HeadingLabel" type="Label" parent="SafeArea/Layout"]
@@ -41,7 +41,20 @@ theme_override_font_sizes/font_size = 56
 text = "RiftCrowd LIVE"
 horizontal_alignment = 1
 
-[node name="BodyLabel" type="Label" parent="SafeArea/Layout"]
+[node name="TaglineLabel" type="Label" parent="SafeArea/Layout"]
 layout_mode = 2
-text = "Loading…"
+text = "Crowd-driven faction battles for TikTok LIVE"
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="StartButton" type="Button" parent="SafeArea/Layout"]
+custom_minimum_size = Vector2(420, 64)
+layout_mode = 2
+size_flags_horizontal = 4
+text = "Start session"
+
+[node name="VersionLabel" type="Label" parent="SafeArea/Layout"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Phase 3 shell — mock mode, no live connection"
 horizontal_alignment = 1
