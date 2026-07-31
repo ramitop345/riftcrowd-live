@@ -4,14 +4,17 @@
 # that the AppState transition table matches the Phase 3 design plus the Phase 4
 # pack-preview side trip (allowed and forbidden pairs), that every screen
 # registered in SCENE_PATHS points at an existing scene file, that the UiConfig
-# safe-zone margins and typography sizes are sane, and that ErrorOverlay message
-# sanitization strips control characters and enforces the length cap.
+# safe-zone margins and typography sizes are sane, that ErrorOverlay message
+# sanitization strips control characters and enforces the length cap,
+# that the Arena and all unit scenes load, that all 16 captain faction scenes
+# load with Node2D roots, and that the SimulationSandbox speed values match.
 # Exit code 0 on success, 1 on any failure.
 extends SceneTree
 
 const AppStateScript := preload("res://autoload/app_state.gd")
 const UiConfigScript := preload("res://scripts/ui/ui_config.gd")
 const ErrorOverlayScript := preload("res://autoload/error_overlay.gd")
+const SandboxScript := preload("res://scripts/simulation/simulation_sandbox.gd")
 
 ## Readability floor for any font size shipped in the portrait shell.
 const MIN_READABLE_FONT_SIZE: int = 20
@@ -26,6 +29,37 @@ const SCENE_FILES: PackedStringArray = [
 	"res://scenes/ErrorOverlay.tscn",
 ]
 
+const UNIT_SCENE_FILES: PackedStringArray = [
+	"res://scenes/units/Fortress.tscn",
+	"res://scenes/units/Crown.tscn",
+	"res://scenes/units/CaptureZone.tscn",
+	"res://scenes/units/Champion.tscn",
+	"res://scenes/units/Guardian.tscn",
+	"res://scenes/units/Striker.tscn",
+	"res://scenes/units/Captain.tscn",
+	"res://scenes/units/Projectile.tscn",
+	"res://scenes/units/Boss.tscn",
+]
+
+const CAPTAIN_SCENE_FILES: PackedStringArray = [
+	"res://scenes/units/captain_lions.tscn",
+	"res://scenes/units/captain_wolves.tscn",
+	"res://scenes/units/captain_eagles.tscn",
+	"res://scenes/units/captain_dragons.tscn",
+	"res://scenes/units/captain_germany.tscn",
+	"res://scenes/units/captain_france.tscn",
+	"res://scenes/units/captain_brazil.tscn",
+	"res://scenes/units/captain_nigeria.tscn",
+	"res://scenes/units/captain_solaris_bay.tscn",
+	"res://scenes/units/captain_ironspire.tscn",
+	"res://scenes/units/captain_verdant_heights.tscn",
+	"res://scenes/units/captain_mistral_harbor.tscn",
+	"res://scenes/units/captain_crimson_forge.tscn",
+	"res://scenes/units/captain_royal_comets.tscn",
+	"res://scenes/units/captain_harbor_kings.tscn",
+	"res://scenes/units/captain_northern_ravens.tscn",
+]
+
 var _passed: int = 0
 var _failed: int = 0
 
@@ -37,6 +71,12 @@ func _initialize() -> void:
 	_check_ui_config()
 	_check_typography()
 	_check_sanitize()
+	_check_arena_scene()
+	_check_unit_scenes()
+	_check_captain_scenes()
+	_check_sandbox_speeds()
+	if _passed < 74:
+		_fail_case("expected >= 74 assertions, got %d" % _passed)
 	print("SHELL TESTS: %d passed, %d failed" % [_passed, _failed])
 	quit(0 if _failed == 0 else 1)
 
@@ -159,6 +199,64 @@ func _check_sanitize() -> void:
 		_passed += 1
 	else:
 		_fail_case("_sanitize: plain message was altered")
+
+
+## Arena scene loads and has a Node2D root.
+func _check_arena_scene() -> void:
+	var packed: Resource = ResourceLoader.load("res://scenes/Arena.tscn")
+	if packed != null and (packed is PackedScene):
+		_passed += 1
+		var instance: Node = (packed as PackedScene).instantiate()
+		if instance is Node2D:
+			_passed += 1
+		else:
+			_fail_case("Arena.tscn: root is %s, expected Node2D" % instance.get_class())
+		instance.free()
+	else:
+		_fail_case("Arena.tscn: failed to load as PackedScene")
+
+
+## All 9 unit scenes load successfully.
+func _check_unit_scenes() -> void:
+	for path: String in UNIT_SCENE_FILES:
+		var packed: Resource = ResourceLoader.load(path)
+		if packed != null and (packed is PackedScene):
+			_passed += 1
+			var instance: Node = (packed as PackedScene).instantiate()
+			instance.free()
+		else:
+			_fail_case("%s: failed to load" % path)
+
+
+## All 16 captain faction scenes load and have Node2D roots.
+func _check_captain_scenes() -> void:
+	for path: String in CAPTAIN_SCENE_FILES:
+		var packed: Resource = ResourceLoader.load(path)
+		if packed == null or not (packed is PackedScene):
+			_fail_case("%s: failed to load" % path)
+			continue
+		_passed += 1
+		var instance: Node = (packed as PackedScene).instantiate()
+		if instance is Node2D:
+			_passed += 1
+		else:
+			_fail_case("%s: root is %s, expected Node2D" % [path, instance.get_class()])
+		instance.free()
+
+
+## SimulationSandbox SPEED_VALUES must be exactly [0.0, 0.5, 1.0, 2.0, 4.0].
+func _check_sandbox_speeds() -> void:
+	var speeds: Array = SandboxScript.SPEED_VALUES
+	if speeds.size() == 5:
+		_passed += 1
+	else:
+		_fail_case("SPEED_VALUES: expected 5 entries, got %d" % speeds.size())
+	var expected: Array = [0.0, 0.5, 1.0, 2.0, 4.0]
+	for i in expected.size():
+		if i < speeds.size() and float(speeds[i]) == float(expected[i]):
+			_passed += 1
+		else:
+			_fail_case("SPEED_VALUES[%d]: expected %.1f" % [i, float(expected[i])])
 
 
 func _fail_case(message: String) -> void:

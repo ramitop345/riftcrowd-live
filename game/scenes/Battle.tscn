@@ -32,95 +32,189 @@ grow_vertical = 2
 
 [node name="Layout" type="VBoxContainer" parent="SafeArea"]
 layout_mode = 2
-theme_override_constants/separation = 20
+theme_override_constants/separation = 8
 
-[node name="HeadingLabel" type="Label" parent="SafeArea/Layout"]
+[node name="HUDRegion" type="ColorRect" parent="SafeArea/Layout"]
+custom_minimum_size = Vector2(0, 200)
 layout_mode = 2
-theme_override_font_sizes/font_size = 56
-text = "Battle"
-horizontal_alignment = 1
+color = Color(0.14, 0.09, 0.12, 1)
 
-[node name="StatusRegion" type="ColorRect" parent="SafeArea/Layout"]
-custom_minimum_size = Vector2(0, 220)
-layout_mode = 2
-color = Color(0.16, 0.1, 0.14, 1)
-
-[node name="StatusLabel" type="Label" parent="SafeArea/Layout/StatusRegion"]
+[node name="HUDLayout" type="VBoxContainer" parent="SafeArea/Layout/HUDRegion"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-text = "Top status — faction scores (Phase 6)"
-horizontal_alignment = 1
-vertical_alignment = 1
-autowrap_mode = 3
+theme_override_constants/separation = 4
 
-[node name="BattlefieldRegion" type="ColorRect" parent="SafeArea/Layout"]
+[node name="ModeLabel" type="Label" parent="SafeArea/Layout/HUDRegion/HUDLayout"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "Autonomous Arena"
+horizontal_alignment = 1
+
+[node name="TimerLabel" type="Label" parent="SafeArea/Layout/HUDRegion/HUDLayout"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+text = "Round: opening  0:00"
+horizontal_alignment = 1
+
+[node name="DominionRow" type="HBoxContainer" parent="SafeArea/Layout/HUDRegion/HUDLayout"]
+layout_mode = 2
+
+[node name="DominionLabel" type="Label" parent="SafeArea/Layout/HUDRegion/HUDLayout/DominionRow"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Dominion"
+
+[node name="DominionBarBg" type="ColorRect" parent="SafeArea/Layout/HUDRegion/HUDLayout/DominionRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 16)
+color = Color(0.2, 0.2, 0.2, 0.8)
+
+[node name="DominionBarA" type="ColorRect" parent="SafeArea/Layout/HUDRegion/HUDLayout/DominionRow/DominionBarBg"]
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 0.0
+offset_bottom = 16.0
+color = Color(0.2, 0.5, 0.9, 0.9)
+
+[node name="DominionBarB" type="ColorRect" parent="SafeArea/Layout/HUDRegion/HUDLayout/DominionRow/DominionBarBg"]
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 0.0
+offset_bottom = 16.0
+color = Color(0.9, 0.2, 0.2, 0.9)
+
+[node name="HealthRowA" type="HBoxContainer" parent="SafeArea/Layout/HUDRegion/HUDLayout"]
+layout_mode = 2
+
+[node name="LabelA" type="Label" parent="SafeArea/Layout/HUDRegion/HUDLayout/HealthRowA"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Faction A"
+
+[node name="BarBgA" type="ColorRect" parent="SafeArea/Layout/HUDRegion/HUDLayout/HealthRowA"]
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 12)
+color = Color(0.2, 0.2, 0.2, 0.8)
+
+[node name="BarFillA" type="ColorRect" parent="SafeArea/Layout/HUDRegion/HUDLayout/HealthRowA/BarBgA"]
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 100.0
+offset_bottom = 12.0
+color = Color(0.2, 0.5, 0.9, 1)
+
+[node name="PressureLabelA" type="Label" parent="SafeArea/Layout/HUDRegion/HUDLayout/HealthRowA"]
+custom_minimum_size = Vector2(50, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "0.0"
+horizontal_alignment = 2
+
+[node name="HealthRowB" type="HBoxContainer" parent="SafeArea/Layout/HUDRegion/HUDLayout"]
+layout_mode = 2
+
+[node name="LabelB" type="Label" parent="SafeArea/Layout/HUDRegion/HUDLayout/HealthRowB"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Faction B"
+
+[node name="BarBgB" type="ColorRect" parent="SafeArea/Layout/HUDRegion/HUDLayout/HealthRowB"]
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 12)
+color = Color(0.2, 0.2, 0.2, 0.8)
+
+[node name="BarFillB" type="ColorRect" parent="SafeArea/Layout/HUDRegion/HUDLayout/HealthRowB/BarBgB"]
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 100.0
+offset_bottom = 12.0
+color = Color(0.9, 0.2, 0.2, 1)
+
+[node name="PressureLabelB" type="Label" parent="SafeArea/Layout/HUDRegion/HUDLayout/HealthRowB"]
+custom_minimum_size = Vector2(50, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "0.0"
+horizontal_alignment = 2
+
+[node name="ArenaPanel" type="Panel" parent="SafeArea/Layout"]
 layout_mode = 2
 size_flags_vertical = 3
-color = Color(0.13, 0.08, 0.11, 1)
 
-[node name="BattlefieldLabel" type="Label" parent="SafeArea/Layout/BattlefieldRegion"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-text = "Battlefield — autonomous arena (Phase 5)"
-horizontal_alignment = 1
-vertical_alignment = 1
-autowrap_mode = 3
-
-[node name="SpotlightRegion" type="ColorRect" parent="SafeArea/Layout"]
-custom_minimum_size = Vector2(0, 220)
-layout_mode = 2
-color = Color(0.18, 0.12, 0.1, 1)
-
-[node name="SpotlightLabel" type="Label" parent="SafeArea/Layout/SpotlightRegion"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-text = "Event spotlight — gifts and streaks (Phase 11)"
-horizontal_alignment = 1
-vertical_alignment = 1
-autowrap_mode = 3
-
-[node name="InstructionRegion" type="ColorRect" parent="SafeArea/Layout"]
-custom_minimum_size = Vector2(0, 300)
+[node name="BottomRegion" type="ColorRect" parent="SafeArea/Layout"]
+custom_minimum_size = Vector2(0, 240)
 layout_mode = 2
 color = Color(0.14, 0.09, 0.16, 1)
 
-[node name="InstructionContent" type="MarginContainer" parent="SafeArea/Layout/InstructionRegion"]
+[node name="BottomLayout" type="VBoxContainer" parent="SafeArea/Layout/BottomRegion"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/margin_left = 20
-theme_override_constants/margin_top = 20
-theme_override_constants/margin_right = 20
-theme_override_constants/margin_bottom = 20
+theme_override_constants/separation = 8
 
-[node name="InstructionLayout" type="VBoxContainer" parent="SafeArea/Layout/InstructionRegion/InstructionContent"]
+[node name="SpeedRow" type="HBoxContainer" parent="SafeArea/Layout/BottomRegion/BottomLayout"]
 layout_mode = 2
-theme_override_constants/separation = 16
 alignment = 1
 
-[node name="InstructionLabel" type="Label" parent="SafeArea/Layout/InstructionRegion/InstructionContent/InstructionLayout"]
+[node name="PauseButton" type="Button" parent="SafeArea/Layout/BottomRegion/BottomLayout/SpeedRow"]
+custom_minimum_size = Vector2(100, 48)
 layout_mode = 2
-text = "Instruction bar — how to play (Phase 12)"
+text = "Pause"
+
+[node name="Speed1Button" type="Button" parent="SafeArea/Layout/BottomRegion/BottomLayout/SpeedRow"]
+custom_minimum_size = Vector2(80, 48)
+layout_mode = 2
+text = "1x"
+
+[node name="Speed2Button" type="Button" parent="SafeArea/Layout/BottomRegion/BottomLayout/SpeedRow"]
+custom_minimum_size = Vector2(80, 48)
+layout_mode = 2
+text = "2x"
+
+[node name="Speed4Button" type="Button" parent="SafeArea/Layout/BottomRegion/BottomLayout/SpeedRow"]
+custom_minimum_size = Vector2(80, 48)
+layout_mode = 2
+text = "4x"
+
+[node name="ActionRow" type="HBoxContainer" parent="SafeArea/Layout/BottomRegion/BottomLayout"]
+layout_mode = 2
+alignment = 1
+
+[node name="RestartButton" type="Button" parent="SafeArea/Layout/BottomRegion/BottomLayout/ActionRow"]
+custom_minimum_size = Vector2(200, 48)
+layout_mode = 2
+text = "Restart Round"
+
+[node name="EndBattleButton" type="Button" parent="SafeArea/Layout/BottomRegion/BottomLayout/ActionRow"]
+custom_minimum_size = Vector2(200, 48)
+layout_mode = 2
+text = "End Battle"
+
+[node name="SpotlightLabel" type="Label" parent="SafeArea/Layout/BottomRegion/BottomLayout"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Battle in progress..."
 horizontal_alignment = 1
 autowrap_mode = 3
 
-[node name="EndBattleButton" type="Button" parent="SafeArea/Layout/InstructionRegion/InstructionContent/InstructionLayout"]
-custom_minimum_size = Vector2(420, 64)
+[node name="InstructionLabel" type="Label" parent="SafeArea/Layout/BottomRegion/BottomLayout"]
 layout_mode = 2
-size_flags_horizontal = 4
-text = "End battle"
+theme_override_font_sizes/font_size = 20
+text = "Watch the autonomous arena simulation. Use speed controls to adjust pace."
+horizontal_alignment = 1
+autowrap_mode = 3

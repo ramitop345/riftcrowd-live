@@ -1,7 +1,7 @@
 # RiftCrowd LIVE — Project Status
 
 - **Working title:** RiftCrowd LIVE
-- **Current phase:** Phase 4 — Content-Pack System and Four Launch Packs
+- **Current phase:** Phase 5 — Autonomous Arena Simulation
 - **Status:** COMPLETED
 - **Last updated:** 31 July 2026
 
@@ -13,7 +13,7 @@
 - Phase 2 — Shared Protocol and Schema Validation: **COMPLETED**
 - Phase 3 — Godot Portrait Foundation: **COMPLETED**
 - Phase 4 — Content-Pack System and Four Launch Packs: **COMPLETED**
-- Phase 5 — Autonomous Arena Simulation: **not started** (next)
+- Phase 5 — Autonomous Arena Simulation: **COMPLETED**
 - Phase 6 — Match Director and Round Lifecycle: not started
 - Phase 7 — Viewer Identity and Faction Participation: not started
 - Phase 8 — Node Gateway Core: not started
@@ -274,6 +274,96 @@ Phase 4 known limitations:
   only; `load_svg_texture` needs the SVG module, so rasterization is verified in the interactive
   PackPreview run.
 
+## Phase 5 — completed work
+
+Autonomous arena simulation core, scenes, sandbox, and tests:
+
+- [x] Headless simulation core (`game/scripts/simulation/`): `SimWorld`, `SimUnit`, `SimRng`,
+  `SimProjectile`, `UnitPool`, `ProjectilePool`, `GameplayConfig` — deterministic seeded RNG,
+  typed state machines (SPAWNING → ADVANCE → ATTACK ↔ RETREAT → DEFEND → DEAD), combat (melee
+  and projectile), death events, pool acquire/release/reuse, capture pressure, Dominion accrual
+  with framerate-independent exponential smoothing, fortress health, stage progression (opening →
+  crisis → final_surge → sudden_death → ended), victory rules (dominion 100, fortress destruction,
+  sudden-death tiebreaker), boss spawn in crisis with capture-bonus reward.
+- [x] Two-pass projectile resolution: accumulates all projectile damage before killing units,
+  preventing lost hits when multiple projectiles strike the same target in one tick. Kill
+  attribution uses `last_hit_faction` on the target (latest projectile to hit wins).
+- [x] Deterministic tie-breaker in `_find_nearest_enemy`: equidistant enemies resolved by
+  lowest unit id, removing hidden positional bias from pool iteration order.
+- [x] Boss pool routing: `_get_pool("boss")` returns the champion pool (singletons reuse the
+  large pool), eliminating the dead-code branch in `_resolve_cleanup`.
+- [x] `GameplayConfig` validator (`gameplay_config.gd`): loads and validates `game/config/gameplay.json`
+  with type, range, and required-key checks; rejects malformed configs with descriptive errors.
+- [x] Arena scene (`game/scenes/Arena.tscn` + `scripts/arena/arena.gd`): fortress, crown,
+  capture-zone, unit and projectile visual nodes with pooled reuse; `apply_snapshot()` syncs
+  every visual from the sim snapshot each frame; `restart()` public method encapsulates
+  clear + setup.
+- [x] 9 unit scenes: Fortress, Crown, CaptureZone, Champion, Guardian, Striker, Captain,
+  Projectile, Boss.
+- [x] 16 captain faction scenes (`captain_lions.tscn` through `captain_northern_ravens.tscn`)
+  satisfying all pack `captainScene` references — `validate:packs` now reports 0 warnings.
+- [x] `SimulationSandbox` (`simulation_sandbox.gd`): wraps `SimWorld` with time-based
+  advancement and playback speeds [0.0, 0.5, 1.0, 2.0, 4.0]; tick_budget default 500 covers
+  60 fps × 4× × 20 Hz = 4800 ticks/s worst case.
+- [x] `BattlePresenter` (`battle_presenter.gd`): bridges sandbox → arena; `setup`, `present`,
+  `set_speed`, `toggle_pause`, `restart` (uses `arena.restart()`).
+- [x] Updated Battle screen (`scenes/Battle.tscn` + `scripts/screens/battle.gd`): HUD with
+  dominion bars, fortress health, stage label, speed/pause controls; pack selection from
+  `PackRegistry`.
+- [x] Design seam comments in `sim_world.gd`: Phase 6 `enqueue_stage_override` /
+  `stage_changed` signal; Phase 8 `enqueue_command` for `GameCommand` injection.
+- [x] Headless simulation test `game/tests/test_simulation.gd` (137 assertions): config
+  load + parse rejection, determinism, state machine transitions, combat, pooling,
+  capture/dominion, fortress victory, sudden death, 5-round full-round acceptance, snapshot
+  shape, crisis-stage boss spawn, and ProjectilePool exhaustion.
+- [x] Headless sandbox test `game/tests/test_sandbox.gd` (39 assertions): creation, speed
+  values, tick counts at 1×/2×/4×, pause, toggle, reset cleanliness, multiple resets,
+  speed changes.
+- [x] Headless shell test `game/tests/test_shell.gd` (92 assertions): all shell scenes,
+  transitions, SCENE_PATHS, UI config, typography, sanitize, arena scene, 9 unit scenes,
+  16 captain scenes, sandbox speeds.
+
+Commands run and results:
+
+- `npm run lint` — **PASS** (zero errors/warnings)
+- `npm run typecheck` — **PASS** (shared, gateway, dashboard, tools all clean)
+- `npm test` — **PASS** (33 tests in 5 files: identity 15, packs 12, messages 3, schemas 2,
+  health 1)
+- `npm run validate:packs` — **PASS** (exit 0; `4 pack(s) checked — 4 passed, 0 with warnings,
+  0 failed`; 0 warnings — captain scenes now exist)
+- Static desk-check of all `.gd` / `.tscn` files — **PASS**
+- Godot headless tests — **MANUAL STEP REQUIRED** (Godot not installed; see below)
+
+Phase 5 known limitations:
+
+- **Godot execution is MANUAL-PENDING.** Godot is not installed on this machine, so the five
+  headless suites are desk-checked only. Run manually:
+
+  ```powershell
+  cd "c:\Program Files\Developper\riftcrowd-live\game"
+  & "C:\path\to\Godot_v4.3-stable_win64.exe" --headless --script res://tests/test_shell.gd
+  & "C:\path\to\Godot_v4.3-stable_win64.exe" --headless --script res://tests/test_protocol.gd
+  & "C:\path\to\Godot_v4.3-stable_win64.exe" --headless --script res://tests/test_packs.gd
+  & "C:\path\to\Godot_v4.3-stable_win64.exe" --headless --script res://tests/test_simulation.gd
+  & "C:\path\to\Godot_v4.3-stable_win64.exe" --headless --script res://tests/test_sandbox.gd
+  ```
+
+  Expected: `SHELL TESTS: 92 passed, 0 failed`, `PROTOCOL TESTS: 30 passed, 0 failed`,
+  `PACK TESTS: 61 passed, 0 failed`, `SIMULATION TESTS: 137 passed, 0 failed`, and
+  `SANDBOX TESTS: 39 passed, 0 failed` (each exit 0).
+- **Captains' ultimates/abilities are NOT implemented** until Phase 11 (gift economy).
+  Captain units exist as plain combatants only.
+- **No command-input hook in SimWorld** until Phase 8. The `enqueue_command(cmd)` seam is
+  documented in the file header but not yet wired.
+- **No stage-override seam** until Phase 6. Stage progression is driven internally by
+  `_advance_stage()`; the `enqueue_stage_override(stage)` / `stage_changed` signal is
+  documented but not implemented.
+- **No healing** — the `healingAllowed: false` config flag is carried but no healing logic
+  exists; reserved for future phases.
+- **CRLF format drift is pre-existing.** Files on this Windows checkout carry CRLF endings;
+  Prettier's check reports the drift repo-wide. Cosmetic only — lint, typecheck, and tests
+  are unaffected.
+
 ## Phase 1 — quality gate results
 
 - `npm install` — **PASS** (322 packages, 6 audit advisories — upstream deps, non-blocking)
@@ -297,10 +387,9 @@ Phase 4 known limitations:
 
 ## Next phase
 
-**Phase 5 — Autonomous Arena Simulation** (per the phase list in
-`docs/RiftCrowd_LIVE_Complete_Qoder_Implementation_Guide.md`): implement the core game without
-any LIVE events — fortress, Rift Crown, capture zones, champions, guardians, strikers, captains,
-projectiles, and boss scenes; typed unit state machines; targeting, damage, death, pooling,
-capture pressure, Dominion, fortress health, and victory rules; deterministic seeded randomness;
-and a simulation sandbox with speed controls. Deliverable: a complete automatic battle using
-local bots.
+**Phase 6 — Match Director and Round Lifecycle** (per the phase list in
+`docs/RiftCrowd_LIVE_Complete_Qoder_Implementation_Guide.md`): turn the simulation into a
+repeatable TikTok show — implement mode vote, faction lobby, battle, crisis, final surge,
+sudden death, and results; add timers, announcements, transitions, and fallback behavior;
+implement tie breaking and least-recently-played mode selection; persist session statistics
+locally; add creator-controlled skip, pause, end, and restart commands.

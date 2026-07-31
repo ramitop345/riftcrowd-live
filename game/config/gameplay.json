@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "tickRate": 20,
+  "stages": {
+    "opening": 120,
+    "crisis": 60,
+    "finalSurge": 60,
+    "suddenDeath": 45
+  },
+  "arena": {
+    "width": 1080,
+    "height": 1180,
+    "captureZoneRadius": 170
+  },
+  "fortressHealth": 500,
+  "capturePressureWeights": {
+    "champion": 1.0,
+    "guardian": 0.6,
+    "striker": 0.8,
+    "captain": 1.5
+  },
+  "dominion": {
+    "ratePerSecondAtFullAdvantage": 4.0,
+    "smoothing": 0.15
+  },
+  "unitStats": {
+    "champion": {
+      "maxHealth": 100,
+      "attackDamage": 12,
+      "attackIntervalSeconds": 1.0,
+      "moveSpeed": 140,
+      "attackRange": 60,
+      "retreatHealthFraction": 0.25
+    },
+    "guardian": {
+      "maxHealth": 160,
+      "attackDamage": 8,
+      "attackIntervalSeconds": 1.2,
+      "moveSpeed": 100,
+      "attackRange": 50,
+      "retreatHealthFraction": 0.25
+    },
+    "striker": {
+      "maxHealth": 70,
+      "attackDamage": 16,
+      "attackIntervalSeconds": 0.8,
+      "moveSpeed": 190,
+      "attackRange": 55,
+      "retreatHealthFraction": 0.25
+    },
+    "captain": {
+      "maxHealth": 400,
+      "attackDamage": 25,
+      "attackIntervalSeconds": 1.4,
+      "moveSpeed": 110,
+      "attackRange": 80,
+      "retreatHealthFraction": 0
+    },
+    "boss": {
+      "maxHealth": 1200,
+      "attackDamage": 30,
+      "attackIntervalSeconds": 1.6,
+      "moveSpeed": 80,
+      "attackRange": 90,
+      "retreatHealthFraction": 0
+    }
+  },
+  "pools": {
+    "champion": 60,
+    "guardian": 60,
+    "striker": 60,
+    "projectile": 120
+  },
+  "bots": {
+    "spawnIntervalSeconds": 4.0,
+    "unitCycle": ["champion", "guardian", "striker"]
+  },
+  "finalSurge": {
+    "spawnIntervalMultiplier": 0.5
+  },
+  "suddenDeath": {
+    "dominionRateMultiplier": 2.0,
+    "healingAllowed": false
+  },
+  "crisis": {
+    "bossEnabled": true,
+    "bossCaptureBonus": 0.5,
+    "bossCaptureBonusSeconds": 10
+  },
+  "projectile": {
+    "speed": 420
+  }
+}

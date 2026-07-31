@@ -1,0 +1,13 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/units/capture_zone.gd" id="1_script"]
+
+[node name="CaptureZone" type="Node2D"]
+script = ExtResource("1_script")
+
+[node name="Ring" type="ColorRect" parent="."]
+offset_left = -170.0
+offset_top = -170.0
+offset_right = 170.0
+offset_bottom = 170.0
+color = Color(1, 1, 1, 0.1)

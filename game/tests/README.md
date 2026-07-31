@@ -52,16 +52,61 @@ ErrorOverlay) asserting a Control root for each, checks the `AppState` transitio
 and forbidden pairs, including the Phase 4 menu <-> pack-preview side trip),
 confirms every `SCENE_PATHS` entry points at an existing scene file, asserts the `UiConfig`
 safe-zone margins are positive and the typography constants stay at or above the 20 px readability
-floor, and exercises the static `ErrorOverlay._sanitize` (control characters stripped, 400-char
-input truncated to `MAX_MESSAGE_LENGTH`, plain text untouched). Exit code 0 on success, 1 on any
-failure.
+floor, exercises the static `ErrorOverlay._sanitize` (control characters stripped, 400-char
+input truncated to `MAX_MESSAGE_LENGTH`, plain text untouched), loads the Arena scene (Node2D
+root), loads all 9 unit scenes (Fortress, Crown, CaptureZone, Champion, Guardian, Striker,
+Captain, Projectile, Boss), loads all 16 captain faction scenes with Node2D roots, and verifies
+the `SimulationSandbox.SPEED_VALUES` constant is exactly `[0.0, 0.5, 1.0, 2.0, 4.0]`.
+Exit code 0 on success, 1 on any failure.
 
 ```powershell
 cd "c:\Program Files\Developper\riftcrowd-live\game"
 & "C:\path\to\Godot_v4.3-stable_win64.exe" --headless --script res://tests/test_shell.gd
 ```
 
-Expected output: `SHELL TESTS: 43 passed, 0 failed`.
+Expected output: `SHELL TESTS: 92 passed, 0 failed`.
+
+## Simulation test
+
+Headless test for the autonomous arena simulation core (`scripts/simulation/*.gd`). Exercises
+GameplayConfig (load + parse, ≥4 invalid-config rejections), determinism (same seed → identical
+snapshots, different seeds → diverge), state machine transitions (SPAWNING→ADVANCE→ATTACK, RETREAT
+below threshold, captain never retreats), combat (damage, death events, pool release), pool
+management (exhaustion returns null, reuse identity), capture/dominion accrual (pressure weights,
+non-decreasing dominion, dominion win at 100), fortress destruction, sudden death resolution
+(higher dominion wins, forced tie → draw), full-round acceptance (5 consecutive rounds with
+reset, pool active counts == 0 after reset), and snapshot shape (all required keys present,
+events drained on second call). Uses a SHORT test config override for fast rounds.
+Exit code 0 on success, 1 on any failure.
+
+```powershell
+cd "c:\Program Files\Developper\riftcrowd-live\game"
+& "C:\path\to\Godot_v4.3-stable_win64.exe" --headless --script res://tests/test_simulation.gd
+```
+
+Or from the repository root:
+
+```powershell
+& "C:\path\to\Godot_v4.3-stable_win64.exe" --headless --path game --script tests/test_simulation.gd
+```
+
+Expected output: `SIMULATION TESTS: 137 passed, 0 failed`.
+
+## Sandbox test
+
+Headless test for the `SimulationSandbox` wrapper around `SimWorld`
+(`scripts/simulation/simulation_sandbox.gd`). Exercises sandbox creation, `SPEED_VALUES` constant
+verification, tick counts at 1x/2x/4x playback speeds over 60 simulated seconds, pause behaviour
+(0 ticks while paused), toggle pause, reset cleanliness (tick=0, elapsed=0, all pool active
+counts=0, 2 captains), multiple consecutive resets (no state leakage), and mid-run speed changes.
+Uses the same SHORT config override as test_simulation. Exit code 0 on success, 1 on any failure.
+
+```powershell
+cd "c:\Program Files\Developper\riftcrowd-live\game"
+& "C:\path\to\Godot_v4.3-stable_win64.exe" --headless --script res://tests/test_sandbox.gd
+```
+
+Expected output: `SANDBOX TESTS: 39 passed, 0 failed`.
 
 ## Interactive dev run
 
