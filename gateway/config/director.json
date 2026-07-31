@@ -1,0 +1,12 @@
+{
+  "modeVoteDuration": 20,
+  "factionLobbyDuration": 35,
+  "battleConfig": {
+    "opening": 120,
+    "crisis": 60,
+    "finalSurge": 60,
+    "suddenDeath": 45
+  },
+  "resultsDuration": 20,
+  "sessionStatsPath": "gateway/data/session-stats.json"
+}

@@ -1,7 +1,7 @@
 # RiftCrowd LIVE — Project Status
 
 - **Working title:** RiftCrowd LIVE
-- **Current phase:** Phase 5 — Autonomous Arena Simulation
+- **Current phase:** Phase 6 — Match Director and Round Lifecycle
 - **Status:** COMPLETED
 - **Last updated:** 31 July 2026
 
@@ -14,7 +14,7 @@
 - Phase 3 — Godot Portrait Foundation: **COMPLETED**
 - Phase 4 — Content-Pack System and Four Launch Packs: **COMPLETED**
 - Phase 5 — Autonomous Arena Simulation: **COMPLETED**
-- Phase 6 — Match Director and Round Lifecycle: not started
+- Phase 6 — Match Director and Round Lifecycle: **COMPLETED**
 - Phase 7 — Viewer Identity and Faction Participation: not started
 - Phase 8 — Node Gateway Core: not started
 - Phase 9 — Mock LIVE Adapter and Event Studio: not started
@@ -364,6 +364,67 @@ Phase 5 known limitations:
   Prettier's check reports the drift repo-wide. Cosmetic only — lint, typecheck, and tests
   are unaffected.
 
+## Phase 6 — completed work
+
+Match Director and Round Lifecycle (Node.js gateway):
+
+- [x] `MockSimulation` (`gateway/src/director/mock_simulation.ts`): deterministic mulberry32 PRNG,
+  20Hz tick rate, stage progression (opening → crisis → final_surge → sudden_death → ended),
+  snapshots matching Phase 5 SimWorld shape, `boss_spawned` event at crisis start,
+  `victory:<winner>:<victory_type>` event at ended, safety cap (100k ticks).
+- [x] `SessionStats` (`gateway/src/director/session_stats.ts`): Zod schema (versioned,
+  schemaVersion 1), atomic write (.tmp → rename), load with ENOENT/parse/schema-failure recovery,
+  pure `recordRound` function (roundsPlayed++, modeCounts, factionWinCounts, recentModes capped
+  at 10 newest-first).
+- [x] `MatchDirector` (`gateway/src/director/match_director.ts`): 9-state machine (IDLE →
+  MODE_VOTE → FACTION_LOBBY → BATTLE_OPENING → BATTLE_CRISIS → BATTLE_FINAL_SURGE →
+  BATTLE_SUDDEN_DEATH → BATTLE_ENDED → RESULTS → MODE_VOTE), mode vote keywords
+  (1/countries, 2/animals, 3/clubs→fan_crews_original, 4/cities), first-vote-wins,
+  tie-breaking (highest votes → LRU → alphabetical), faction lobby (one switch allowed,
+  mock players on empty), creator commands (skip/pause/resume/end/restart).
+- [x] Creator commands HTTP API (`gateway/src/director/creator_commands.ts` + routes):
+  POST `/director/{skip,pause,resume,end,restart}`, GET `/director/state`, all requiring
+  `Authorization: Bearer <LOCAL_SESSION_TOKEN>` (503 if unset, 401 on invalid token, 409 on
+  invalid state).
+- [x] Director orchestration factory (`gateway/src/director/index.ts`): `createDirector(opts)`
+  and `createAndRegisterDirector(app, opts)` wiring MatchDirector + creator routes + stats
+  auto-save on RESULTS transition.
+- [x] `gateway/config/director.json`: default stage durations matching guide (modeVote 20s,
+  factionLobby 35s, opening 120s, crisis 60s, finalSurge 60s, suddenDeath 45s, results 20s).
+- [x] `buildApp` wired with `enableDirector` option (opt-in, non-breaking for existing code).
+- [x] `gateway/data/` added to `.gitignore` (runtime state).
+- [x] 48 tests in `gateway/test/director.test.ts`: MockSimulation determinism (400 ticks),
+  stage progression, event emission, snapshot shape; SessionStats load/save/corrupt/schema/atomic
+  write/recordRound; MatchDirector state transitions, announcements, mode vote rules, tie-breaking,
+  faction join rules; creator commands (skip/pause/resume/end/restart); HTTP endpoint auth (503/401/200);
+  10-round acceptance test (stats, recentModes cap, heap growth <2x, clean round-over).
+- [x] Docs: `docs/SESSION_STATS_FORMAT.md` (schema, atomic write, corruption recovery),
+  `docs/MATCH_DIRECTOR.md` (state diagram, timings, API, limitations).
+
+Commands run and results:
+
+- `npm run lint` — **PASS** (zero errors/warnings)
+- `npm run typecheck` — **PASS** (shared, gateway, dashboard, tools all clean)
+- `npm test` — **PASS** (81 tests in 6 files: identity 15, packs 12, director 48, messages 3,
+  schemas 2, health 1)
+- `npm run validate:packs` — **PASS** (exit 0; 4 packs checked, 4 passed, 0 warnings, 0 failed)
+
+Phase 6 known limitations:
+
+- **Godot-side Match Director integration** is Phase 13 dashboard territory. The Node.js
+  director is gateway-only; the Godot client does not yet consume director state.
+- **Creator commands are Node-only** (HTTP REST). Not exposed to the Godot client until
+  Phase 10 (Gateway-to-Godot WebSocket).
+- **Faction matching uses synthetic factions** (`faction_alpha`, `faction_beta`). Real
+  pack-based faction resolution requires Phase 7+ platform adapter integration.
+- **No real viewer engagement data** (gifts, top contributors, free-engagement tracking) —
+  results screen data carries placeholder empty arrays. Gift economy is Phase 11.
+- **No stage-override seam wired** from the Node director into the Godot SimWorld. Stage
+  progression is driven by the MockSimulation in Phase 6; Phase 8 will bridge real sim
+  snapshots from the Godot sandbox.
+- **CRLF format drift is pre-existing.** Cosmetic only — lint, typecheck, and tests are
+  unaffected.
+
 ## Phase 1 — quality gate results
 
 - `npm install` — **PASS** (322 packages, 6 audit advisories — upstream deps, non-blocking)
@@ -387,9 +448,6 @@ Phase 5 known limitations:
 
 ## Next phase
 
-**Phase 6 — Match Director and Round Lifecycle** (per the phase list in
-`docs/RiftCrowd_LIVE_Complete_Qoder_Implementation_Guide.md`): turn the simulation into a
-repeatable TikTok show — implement mode vote, faction lobby, battle, crisis, final surge,
-sudden death, and results; add timers, announcements, transitions, and fallback behavior;
-implement tie breaking and least-recently-played mode selection; persist session statistics
-locally; add creator-controlled skip, pause, end, and restart commands.
+**Phase 7 — Viewer Identity and Faction Participation** (per the guide):
+session-scoped viewer profiles, faction join/strategy commands from normalized chat events,
+one faction per round enforcement, named champion spawning, and contribution tracking.
