@@ -8,6 +8,7 @@
 
 import { createHash } from 'node:crypto';
 import type { GameCommand } from '@riftcrowd/shared';
+import { COMMAND_SCHEMA_VERSION } from '@riftcrowd/shared';
 
 // ---------------------------------------------------------------------------
 // ChampionSpawner class
@@ -45,7 +46,7 @@ export class ChampionSpawner {
     const hashInput = `${viewerId}:${this.spawnCounter}`;
     const shortHash = createHash('sha1').update(hashInput).digest('hex');
     const cmd: GameCommand = {
-      schemaVersion: 1,
+      schemaVersion: COMMAND_SCHEMA_VERSION,
       id: `champ_${shortHash}`,
       type: 'SPAWN_CHAMPION',
       createdAt: new Date().toISOString(),

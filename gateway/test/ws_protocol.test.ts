@@ -19,13 +19,14 @@ import {
   WsReconnectSchema,
   WsDisconnectSchema,
   WsMessageSchema,
+  COMMAND_SCHEMA_VERSION,
 } from '@riftcrowd/shared';
 
 const PV = WS_PROTOCOL_VERSION;
 
 function makeCommand() {
   return {
-    schemaVersion: 1 as const,
+    schemaVersion: COMMAND_SCHEMA_VERSION as const,
     id: 'cmd_test_001',
     type: 'SPAWN_CHAMPION' as const,
     createdAt: new Date().toISOString(),

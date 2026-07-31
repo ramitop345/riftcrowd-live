@@ -1,0 +1,81 @@
+{
+  "tiers": [
+    {
+      "id": "tier_spark",
+      "name": "Spark",
+      "minValue": 1,
+      "maxValue": 9,
+      "impact": {
+        "type": "add_energy",
+        "magnitude": 10
+      }
+    },
+    {
+      "id": "tier_flare",
+      "name": "Flare",
+      "minValue": 10,
+      "maxValue": 99,
+      "impact": {
+        "type": "spawn_champion",
+        "magnitude": 1,
+        "cinematic": false
+      }
+    },
+    {
+      "id": "tier_nova",
+      "name": "Nova",
+      "minValue": 100,
+      "maxValue": 100000,
+      "impact": {
+        "type": "start_world_event",
+        "magnitude": 1,
+        "duration": 30000,
+        "cinematic": true
+      }
+    }
+  ],
+  "mappings": [
+    { "giftId": "gift_001", "tierId": "tier_spark", "displayName": "Rose" },
+    { "giftId": "gift_002", "tierId": "tier_spark", "displayName": "Heart" },
+    { "giftId": "gift_003", "tierId": "tier_spark", "displayName": "Star" },
+    { "giftId": "gift_004", "tierId": "tier_spark", "displayName": "Sparkle" },
+    { "giftId": "gift_005", "tierId": "tier_spark", "displayName": "Gem" },
+    { "giftId": "gift_006", "tierId": "tier_spark", "displayName": "Flame" },
+    { "giftId": "gift_007", "tierId": "tier_spark", "displayName": "Bolt" },
+    { "giftId": "gift_008", "tierId": "tier_flare", "displayName": "Blaze" },
+    { "giftId": "gift_009", "tierId": "tier_flare", "displayName": "Crown" },
+    { "giftId": "gift_010", "tierId": "tier_flare", "displayName": "Shield" },
+    { "giftId": "gift_011", "tierId": "tier_flare", "displayName": "Sword" },
+    { "giftId": "gift_012", "tierId": "tier_flare", "displayName": "Scroll" },
+    { "giftId": "gift_013", "tierId": "tier_flare", "displayName": "Potion" },
+    { "giftId": "gift_014", "tierId": "tier_flare", "displayName": "Rune" },
+    { "giftId": "gift_015", "tierId": "tier_nova", "displayName": "Phoenix" },
+    { "giftId": "gift_016", "tierId": "tier_nova", "displayName": "Dragon" },
+    { "giftId": "gift_017", "tierId": "tier_nova", "displayName": "Titan" },
+    { "giftId": "gift_018", "tierId": "tier_nova", "displayName": "Aurora" },
+    { "giftId": "gift_019", "tierId": "tier_nova", "displayName": "Eclipse" },
+    { "giftId": "gift_020", "tierId": "tier_nova", "displayName": "Supernova" }
+  ],
+  "cooldowns": {
+    "perUserMs": 3000,
+    "perFactionMs": 2000,
+    "abilityMs": 10000,
+    "cinematicMs": 30000,
+    "globalMs": 1000
+  },
+  "overflow": {
+    "type": "reserve_energy",
+    "conversionRate": 5
+  },
+  "streaks": {
+    "windowMs": 5000,
+    "minCount": 3,
+    "multiplier": 1.5
+  },
+  "bounds": {
+    "maxActiveChampionsPerFaction": 5,
+    "maxActiveSquadsPerFaction": 3,
+    "maxActiveWorldEvents": 2,
+    "maxQueueSize": 500
+  }
+}

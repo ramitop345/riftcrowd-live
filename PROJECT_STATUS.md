@@ -1,7 +1,7 @@
 # RiftCrowd LIVE — Project Status
 
 - **Working title:** RiftCrowd LIVE
-- **Current phase:** Phase 10 — Gateway-to-Godot WebSocket Integration
+- **Current phase:** Phase 11 — Gift Economy, Streaks, and Burst Aggregation
 - **Status:** COMPLETED
 - **Last updated:** 31 July 2026
 
@@ -19,7 +19,7 @@
 - Phase 8 — Node Gateway Core: **COMPLETED**
 - Phase 9 — Mock LIVE Adapter and Event Studio: **COMPLETED**
 - Phase 10 — Gateway-to-Godot WebSocket Integration: **COMPLETED**
-- Phase 11 — Gift Economy, Streaks, and Burst Aggregation: not started
+- Phase 11 — Gift Economy, Streaks, and Burst Aggregation: **COMPLETED**
 - Phase 12 — Free Engagement Mechanics: not started
 - Phase 13 — Creator Dashboard: not started
 - Phase 14 — TikFinity Adapter: not started
@@ -513,9 +513,99 @@ Phase 9 known limitations:
 
 ## Next phase
 
-**Phase 11 — Gift Economy, Streaks, and Burst Aggregation** (per the guide):
-Create exciting but stable gift reactions. Implement gift-triggered gameplay effects
-(captain ultimates, energy bursts), streak tracking, and burst aggregation mechanics.
+**Phase 12 — Free Engagement Mechanics** (per the guide):
+Implement free engagement actions (likes, shares, follows) as lightweight gameplay
+effects that complement the gift economy without requiring monetary transactions.
+
+## Phase 11 — completed work
+
+Gift Economy, Streaks, and Burst Aggregation:
+
+- [x] **Gift Config Schema** (`gateway/src/gifts/gift_config.ts`): Zod-validated config
+  with 3 tiers (Spark/Flare/Nova), 20 gift mappings, 5 cooldown timers, overflow rules,
+  streak mechanics, and unit bounds. `superRefine` cross-validates that mapping tierId
+  values reference existing tiers.
+- [x] **GiftMapper** (`gateway/src/gifts/gift_mapper.ts`): resolves gift ID + repeat count
+  to tier impact (type, magnitude, cinematic, duration). Preview table for dashboard.
+  Unknown gift IDs logged as warnings and return null.
+- [x] **StreakAggregator** (`gateway/src/gifts/streak_aggregator.ts`): per-viewer, per-tier
+  streak detection within a sliding window. Configurable minCount and multiplier.
+  No double counting — once a streak fires, no new streak until window elapses.
+- [x] **CooldownManager** (`gateway/src/gifts/cooldown_manager.ts`): 5 independent timers
+  (perUser, perFaction, ability, cinematic, global). Cinematic cooldown keyed on
+  tierId for `start_world_event` and `display_spotlight` impacts.
+- [x] **OverflowConverter** (`gateway/src/gifts/overflow_converter.ts`): unit-bound
+  enforcement with reserve energy/score conversion. Reserve capped at 1,000,000.
+  `reserveAdded` reports net (clamped) amount, not gross.
+- [x] **GiftRule** (`gateway/src/gifts/gift_rule.ts`): pipeline rule implementing the
+  full mapper → cooldown → overflow → streak → command pipeline. Faction resolved via
+  ViewerRegistry lookup (Phase 7 contract) with hash fallback. Streaks recorded only
+  on happy path (after cooldown and overflow checks).
+- [x] **GiftEconomy** (`gateway/src/gifts/gift_economy.ts`): orchestrator wiring all
+  components. `processGiftEvent()` returns decisions. `reloadConfig()` hot-reloads
+  all internals (resets in-flight state). `getStats()` and `previewMappings()` for
+  dashboard.
+- [x] **HTTP Routes** (`gateway/src/routes/gift_routes.ts`): 4 token-protected endpoints —
+  GET /gifts/config, POST /gifts/config (hot-reload), GET /gifts/preview, GET /gifts/stats.
+- [x] **App Integration** (`gateway/src/app.ts`): proxy rule registration ensures
+  hot-reload doesn't leave pipeline with stale GiftRule reference. ViewerRegistry
+  faction lookup injected into GiftEconomy constructor.
+- [x] **GDScript Bridge** (`game/scripts/net/command_dispatcher.gd`): `gift_apply` signal
+  declared; routing arm for GIFT_APPLY command type.
+- [x] **COMMAND_SCHEMA_VERSION bumped to 2** (`shared/schemas/commands.ts`): signals
+  expanded command vocabulary with GIFT_APPLY.
+- [x] **Config** (`gateway/config/gifts.json`): 3 tiers, 20 mappings, sensible defaults
+  for cooldowns, overflow, streaks, bounds.
+- [x] **Tests** (`gateway/test/gift_economy.test.ts`, `gift_fixture.test.ts`,
+  `gift_routes.test.ts`): 84+ tests covering schema validation, mapper, streak,
+  cooldown, overflow, rule pipeline, orchestrator, HTTP endpoints, 1,000-event
+  acceptance fixture.
+- [x] **Docs** (`docs/GIFT_ECONOMY.md`): architecture, tiers, mappings, streaks,
+  cooldowns, overflow, endpoints, fixture methodology, known limitations.
+
+Commands run and results:
+
+- `npm run lint` — **PASS** (zero errors/warnings)
+- `npm run typecheck` — **PASS** (shared, gateway, dashboard all clean)
+- `npm test` — **PASS** (564+ tests across all files)
+- `npm run validate:packs` — **PASS** (exit 0; 4 packs checked, 4 passed, 0 warnings,
+  0 failed)
+
+Phase 11 review fixes applied (12 fixes from triple review):
+
+- **FIX 1** (lint): Added `argsIgnorePattern: '^_'`, `varsIgnorePattern: '^_'` to
+  ESLint config for `_`-prefixed unused vars. Removed unused `factions` var and
+  `config` param from fixture test.
+- **FIX 2** (critical): Proxy rule registration in app.ts ensures hot-reload
+  delegates to current `giftEconomy.getRule()`, not stale reference.
+- **FIX 3** (critical): `impactId` now passed to `canFire()` and `markFired()` for
+  cinematic impacts — cinematic cooldown (30s) is actually enforced.
+- **FIX 4** (major): Faction resolved via ViewerRegistry lookup (`getFaction`
+  callback injected into GiftRule). Hash fallback only when no registered faction.
+- **FIX 5** (major): Streak recording moved AFTER cooldown and overflow checks.
+  Cooldown-blocked gifts no longer waste streaks.
+- **FIX 6** (major): Fixture test split into economy-only and pipeline-only passes
+  to avoid double-processing shared streak/cooldown state.
+- **FIX 7** (major): `reserveAdded` now reports net (clamped) amount when reserve
+  is near MAX_RESERVE, not gross calculated amount.
+- **FIX 8** (minor): Public `getMultiplier()` getter on StreakAggregator replaces
+  bracket-notation private access.
+- **FIX 9** (minor): `superRefine` on GiftEconomyConfigSchema cross-validates
+  mapping tierId values against tiers array.
+- **FIX 10** (docs): Created `docs/GIFT_ECONOMY.md`.
+- **FIX 11** (status): Updated `PROJECT_STATUS.md` with Phase 11 section.
+- **FIX 12** (version): Bumped `COMMAND_SCHEMA_VERSION` from 1 to 2.
+
+Phase 11 known limitations:
+
+- **Hot-reload resets all in-flight state.** `reloadConfig()` replaces all internal
+  components — streaks, cooldowns, and reserve are reset to initial state.
+- **Godot-side gift effects are deferred.** `GIFT_APPLY` command type and GDScript
+  signal exist, but actual gameplay effects are not yet wired.
+- **Single-server only.** Each gateway instance maintains its own gift economy state.
+- **Godot NOT installed.** All GDScript is hand-authored and desk-checked only.
+- **CRLF format drift is pre-existing.** Cosmetic only — lint, typecheck, and tests
+  are unaffected.
 
 ## Phase 10 — completed work
 

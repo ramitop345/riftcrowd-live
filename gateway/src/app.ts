@@ -14,7 +14,9 @@ import { ContributionTracker } from './viewer/contribution_tracker.js';
 import { Pipeline } from './pipeline/pipeline.js';
 import { registerGatewayRoutes } from './routes/gateway_routes.js';
 import { registerMockRoutes } from './routes/mock_routes.js';
+import { registerGiftRoutes } from './routes/gift_routes.js';
 import { WsServer } from './ws/ws_server.js';
+import { GiftEconomy } from './gifts/gift_economy.js';
 
 export interface BuildAppOptions {
   /** Set to false in tests to silence request logging. Defaults to true. */
@@ -30,6 +32,8 @@ export interface BuildAppOptions {
   enableMockRoutes?: boolean;
   /** Enable Phase 10 WebSocket server. Opt-in: defaults to false. */
   enableWs?: boolean;
+  /** Enable Phase 11 gift economy routes. Opt-in: defaults to false. */
+  enableGiftEconomy?: boolean;
 }
 
 /**
@@ -192,6 +196,39 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       });
     }
 
+    // Phase 11: Gift economy (opt-in via enableGiftEconomy: true)
+    if (options.enableGiftEconomy === true) {
+      try {
+        const giftConfig = GiftEconomy.loadDefaultConfig();
+        // Inject ViewerRegistry faction lookup (FIX 4)
+        const getFaction = (viewerId: string): string | null => {
+          const profile = director?.viewerRegistry?.get(viewerId);
+          return profile?.factionId ?? null;
+        };
+        const giftEconomy = new GiftEconomy(
+          giftConfig,
+          undefined,
+          (msg) => app.log.info(msg),
+          getFaction,
+        );
+        app.decorate('giftEconomy', giftEconomy);
+
+        // Register a proxy rule that always delegates to the current giftEconomy.getRule().
+        // This ensures hot-reload (POST /gifts/config) doesn't leave the pipeline with a
+        // stale GiftRule reference.
+        pipeline.rulesEngine.registerRule({
+          name: 'GiftRule',
+          applies: (e) => giftEconomy.getRule().applies(e),
+          execute: (e, ctx) => giftEconomy.getRule().execute(e, ctx),
+        });
+
+        registerGiftRoutes(app, { giftEconomy });
+        app.log.info('[GiftEconomy] Registered with pipeline and HTTP routes');
+      } catch (err: unknown) {
+        app.log.warn(`[GiftEconomy] Failed to initialize: ${String(err)}`);
+      }
+    }
+
     // Phase 10: WebSocket server (opt-in via enableWs: true)
     if (options.enableWs === true) {
       const wsServer = new WsServer({
@@ -232,11 +269,12 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   return app;
 }
 
-// Augment FastifyInstance with optional director, pipeline, and wsServer
+// Augment FastifyInstance with optional director, pipeline, wsServer, and giftEconomy
 declare module 'fastify' {
   interface FastifyInstance {
     director?: MatchDirector;
     pipeline?: Pipeline;
     wsServer?: WsServer;
+    giftEconomy?: GiftEconomy;
   }
 }

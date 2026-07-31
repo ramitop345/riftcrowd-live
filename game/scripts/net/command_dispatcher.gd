@@ -60,5 +60,7 @@ func dispatch(command: Dictionary) -> void:
 			pause_events.emit(command)
 		"END_ROUND":
 			end_round.emit(command)
+		"GIFT_APPLY":
+			gift_apply.emit(command)
 		_:
 			push_warning("CommandDispatcher: unknown command type '%s'" % cmd_type)
