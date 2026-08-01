@@ -33,22 +33,6 @@ function mockFetchOk(body: unknown): void {
   globalThis.fetch = mockFetchFactory(() => ({ status: 200, body }));
 }
 
-function captureCalls(): { fetch: typeof fetch; calls: FetchCall[] } {
-  const calls: FetchCall[] = [];
-  const fn = vi.fn().mockImplementation((url: string | URL | Request, _init?: RequestInit) => {
-    const u = typeof url === 'string' ? url : url instanceof URL ? url.toString() : url.url;
-    calls.push({ url: u, init: _init ?? { method: 'GET' } });
-    return Promise.resolve({
-      ok: true,
-      status: 200,
-      json: async () => ({}),
-      text: async () => '{}',
-    });
-  });
-  globalThis.fetch = fn as unknown as typeof fetch;
-  return { fetch: fn as unknown as typeof fetch, calls };
-}
-
 describe('EmergencyActions', () => {
   beforeEach(() => {
     cleanup();
@@ -134,8 +118,9 @@ describe('EmergencyActions', () => {
 
   // FIX 12: disable gifts verifies POST body contains enabled: false
   it('disable gifts loads config and patches enabled=false', async () => {
-    const { calls } = captureCalls();
-    globalThis.fetch = vi.fn().mockImplementation((url: string, _init?: RequestInit) => {
+    const calls: FetchCall[] = [];
+    globalThis.fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      calls.push({ url, init: init ?? { method: 'GET' } });
       // First call: GET /gifts/config
       if (url === '/gifts/config') {
         return Promise.resolve({

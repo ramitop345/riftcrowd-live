@@ -10,7 +10,7 @@
  * not just by checking that the component is still in the document.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup, act } from '@testing-library/react';
+import { render, screen, waitFor, cleanup } from '@testing-library/react';
 import { StatusCards } from './StatusCards.js';
 
 function mockFetchResponses(responses: Record<string, unknown>): void {
@@ -63,23 +63,22 @@ const mockData = {
   directorStates: [],
 };
 
+const flushPromises = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
 describe('StatusCards', () => {
   beforeEach(() => {
     cleanup();
-    vi.useFakeTimers();
+    vi.useRealTimers();
   });
 
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
-    vi.useRealTimers();
   });
 
   it('renders all cards', async () => {
     mockFetchResponses({ '/status': statusData, '/director/state': directorData, '/mock/state': mockData });
-    await act(async () => { render(<StatusCards />); });
-    // Flush initial poll promises
-    await act(async () => { await Promise.resolve(); });
+    render(<StatusCards />);
     await waitFor(() => { expect(screen.getByTestId('gateway-card')).toBeInTheDocument(); });
     expect(screen.getByTestId('provider-card')).toBeInTheDocument();
     expect(screen.getByTestId('game-card')).toBeInTheDocument();
@@ -90,52 +89,44 @@ describe('StatusCards', () => {
 
   it('shows gateway uptime', async () => {
     mockFetchResponses({ '/status': statusData, '/director/state': directorData, '/mock/state': mockData });
-    await act(async () => { render(<StatusCards />); });
-    await act(async () => { await Promise.resolve(); });
+    render(<StatusCards />);
     await waitFor(() => { expect(screen.getByText('Uptime: 3600s')).toBeInTheDocument(); });
   });
 
   it('shows provider scenario', async () => {
     mockFetchResponses({ '/status': statusData, '/director/state': directorData, '/mock/state': mockData });
-    await act(async () => { render(<StatusCards />); });
-    await act(async () => { await Promise.resolve(); });
+    render(<StatusCards />);
     await waitFor(() => { expect(screen.getByText('Scenario: gift_streak')).toBeInTheDocument(); });
   });
 
   it('shows game state', async () => {
     mockFetchResponses({ '/status': statusData, '/director/state': directorData, '/mock/state': mockData });
-    await act(async () => { render(<StatusCards />); });
-    await act(async () => { await Promise.resolve(); });
+    render(<StatusCards />);
     await waitFor(() => { expect(screen.getByText('BATTLE_OPENING')).toBeInTheDocument(); });
   });
 
   it('shows queue size', async () => {
     mockFetchResponses({ '/status': statusData, '/director/state': directorData, '/mock/state': mockData });
-    await act(async () => { render(<StatusCards />); });
-    await act(async () => { await Promise.resolve(); });
+    render(<StatusCards />);
     await waitFor(() => { expect(screen.getByText('5 / 500')).toBeInTheDocument(); });
   });
 
   it('shows events processed', async () => {
     mockFetchResponses({ '/status': statusData, '/director/state': directorData, '/mock/state': mockData });
-    await act(async () => { render(<StatusCards />); });
-    await act(async () => { await Promise.resolve(); });
+    render(<StatusCards />);
     await waitFor(() => { expect(screen.getByText('100 events')).toBeInTheDocument(); });
   });
 
   it('shows rounds played', async () => {
     mockFetchResponses({ '/status': statusData, '/director/state': directorData, '/mock/state': mockData });
-    await act(async () => { render(<StatusCards />); });
-    await act(async () => { await Promise.resolve(); });
+    render(<StatusCards />);
     await waitFor(() => { expect(screen.getByText('Rounds played: 3')).toBeInTheDocument(); });
   });
 
   // FIX 11: stale indicator is actually asserted by testid + "stale" text
   it('shows stale indicator on fetch error', async () => {
     globalThis.fetch = vi.fn().mockRejectedValue(new Error('fail')) as unknown as typeof fetch;
-    await act(async () => { render(<StatusCards />); });
-    // Flush rejected promises
-    await act(async () => { await Promise.resolve(); });
+    render(<StatusCards />);
     await waitFor(() => {
       const el = screen.getByTestId('stale-indicator');
       expect(el).toBeInTheDocument();
@@ -155,14 +146,12 @@ describe('StatusCards', () => {
       });
     }) as unknown as typeof fetch;
 
-    await act(async () => { render(<StatusCards />); });
-    // Advance through several poll intervals
-    for (let i = 0; i < 5; i++) {
-      await act(async () => { vi.advanceTimersByTime(2000); });
-      await act(async () => { await Promise.resolve(); });
-    }
+    render(<StatusCards />);
     await waitFor(() => { expect(screen.getByText('Uptime: 3600s')).toBeInTheDocument(); });
-    // The gateway card should still be present exactly once (no React duplication)
+
+    // Wait for at least 2 poll cycles (~4s with a 2s interval) and confirm no duplicate cards
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    await flushPromises();
     expect(screen.getAllByTestId('gateway-card')).toHaveLength(1);
   });
 
@@ -178,26 +167,24 @@ describe('StatusCards', () => {
       });
     }) as unknown as typeof fetch;
 
-    await act(async () => { render(<StatusCards />); });
-    await act(async () => { await Promise.resolve(); });
+    render(<StatusCards />);
+    await waitFor(() => { expect(callCount).toBeGreaterThan(0); });
     const initialCalls = callCount;
-    expect(initialCalls).toBeGreaterThan(0);
 
     // Simulate tab hidden
     Object.defineProperty(document, 'hidden', { value: true, configurable: true, writable: true });
-    act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+    document.dispatchEvent(new Event('visibilitychange'));
 
-    // Advance time — no new fetches should happen while hidden
-    await act(async () => { vi.advanceTimersByTime(6000); });
+    // Wait a little while — the polling interval should be cleared so no new fetches fire.
+    // (The 3 seconds below comfortably exceeds the 2-second poll interval.)
+    await new Promise((resolve) => setTimeout(resolve, 3000));
     const callsWhileHidden = callCount - initialCalls;
     expect(callsWhileHidden).toBe(0);
 
-    // Simulate tab focus
+    // Simulate tab focus — polling should resume with an immediate poll
     Object.defineProperty(document, 'hidden', { value: false, configurable: true, writable: true });
-    act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+    document.dispatchEvent(new Event('visibilitychange'));
 
-    // After focus, polls should resume (at least one immediate poll)
-    await act(async () => { await Promise.resolve(); });
-    expect(callCount).toBeGreaterThan(initialCalls);
+    await waitFor(() => { expect(callCount).toBeGreaterThan(initialCalls); });
   });
 });

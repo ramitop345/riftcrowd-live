@@ -1,8 +1,8 @@
 # RiftCrowd LIVE — Project Status
 
 - **Working title:** RiftCrowd LIVE
-- **Current phase:** Phase 13 — Creator Dashboard
-- **Status:** COMPLETED
+- **Current phase:** Phase 14 — TikFinity Adapter (next)
+- **Status:** Phase 13 COMPLETED (with review fixes applied)
 - **Last updated:** 1 August 2026
 
 ## Phase tracker
@@ -873,8 +873,10 @@ Creator Dashboard — local React control panel for the streamer:
 - [x] **Provider Settings** (`dashboard/src/components/ProviderSettings.tsx`): pipeline
   config form (rate limits, dedupe, queue capacity, log level). Zod-validated, submits
   POST /config.
-- [x] **Mode Selection** (`dashboard/src/components/ModeSelection.tsx`): 4-mode radio
-  (countries/animals/clubs/cities), skip and restart actions. Submits POST /director/skip.
+- [x] **Mode Selection** (`dashboard/src/components/ModeSelection.tsx`): skip and restart
+  actions. Submits POST /director/skip. (Decorative mode-picker radios were removed in
+  review because the gateway does not support setting mode; the UI now honestly labels
+  the buttons.)
 - [x] **Gift Mapping** (`dashboard/src/components/GiftMapping.tsx`): table of giftId → tier
   → impact loaded from GET /gifts/preview. Save sends POST /gifts/config.
 - [x] **Cooldowns** (`dashboard/src/components/Cooldown.tsx`): 5 cooldown timers
@@ -893,14 +895,20 @@ Creator Dashboard — local React control panel for the streamer:
   items, header with connection status dot + director state + mode. State-based routing
   (no react-router). Responsive dark theme (`styles.ts`).
 - [x] **Gateway Integration** (`gateway/src/routes/viewer_routes.ts`): new POST /viewer/hide
-  and POST /viewer/unhide endpoints with token auth. `server.ts` enables all feature flags
-  (director, mock routes, gift economy, free engagement, viewer routes).
+  and POST /viewer/unhide endpoints with token auth. New POST /control/drain endpoint
+  that actually removes queued commands (returns `{ ok, drained }`). `server.ts` enables
+  feature flags (director, gift economy, free engagement, viewer routes) with
+  `enableMockRoutes` guarded by `LIVE_PROVIDER === 'mock' || !LIVE_PROVIDER` so production
+  builds do not expose `/mock/*` attack surface.
   7 gateway tests covering auth, validation, success paths.
 - [x] **Vite Dev Proxy** (`dashboard/vite.config.ts`): 11 API path prefixes proxied to
   `127.0.0.1:8787`. Vitest configured (jsdom, setup file, src + test includes).
-- [x] **Tests**: 80 tests across 8 files — API client (26), StatusCards (8), Config
-  screens (12), TestEvents (9), EmergencyActions (10), AuthSettings (7), App/Layout (7),
-  E2E (1 test with 24 assertions covering complete mock stream workflow).
+- [x] **Tests**: 85 tests across 8 files — API client (27, incl. drainQueue), StatusCards
+  (10, incl. stale indicator + rapid-poll convergence + visibilitychange pause), Config
+  screens (13, incl. skip/restart buttons and advance-ms=0 rejection), TestEvents (10),
+  EmergencyActions (12, incl. drainQueue + disable-gifts POST body assertion), AuthSettings
+  (8, incl. empty-token rejection), App/Layout (8, incl. responsive sidebar CSS injection),
+  E2E (1 test with 24+ assertions covering complete mock stream workflow incl. drainQueue).
 - [x] **Docs** (`docs/CREATOR_DASHBOARD.md`): quick start, auth, all 9 screens, API client
   table, architecture, testing, known limitations.
 
@@ -908,21 +916,52 @@ Commands run and results:
 
 - `npm run lint` — **PASS** (zero errors/warnings)
 - `npm run typecheck` — **PASS** (shared, gateway, dashboard all clean)
-- `npm test` — **PASS** (733 tests: 653 gateway + 80 dashboard, all passing)
+- `npm test` — **PASS** (738 tests: 653 gateway + 85 dashboard, all passing)
 - `npm run validate:packs` — **PASS** (exit 0; 4 packs checked, 4 passed, 0 warnings)
-- `npm run build` (dashboard) — **PASS** (dist/ with index.html + 276 KB JS, ~80 KB gzipped)
+- `npm run build` (dashboard) — **PASS** (dist/ with index.html + 278 KB JS, ~80 KB gzipped)
+
+Phase 13 review fixes applied (12 total, from Grace/Noah/Oscar triple review):
+
+**Critical:**
+1. `server.ts` — `enableMockRoutes` now guarded by `LIVE_PROVIDER === 'mock'` (production
+   no longer exposes `/mock/*` attack surface).
+2. `EmergencyActions.tsx` + `gateway_routes.ts` + `client.ts` — new POST /control/drain
+   endpoint actually drains the queue; Clear Queue button now functional.
+3. `StatusCards.tsx` — `AbortController` + refs + batched `setData`; stale-response guard
+   discards out-of-order polls; `lastUpdated` stale indicator.
+4. `AuthSettings.tsx` — empty-token save rejected with inline error.
+5. `ModeSelection.tsx` — decorative mode-picker radios removed; UI now honest.
+
+**Warnings:**
+6. `EmergencyActions.tsx` — `showMsg` timeout cleaned up on unmount.
+7. `TestEvents.tsx` — advance ms ≤ 0 rejected with "Advance time must be > 0" error.
+8. `StatusCards.tsx` + `Layout.tsx` — `document.visibilitychange` listener pauses polling
+   when tab is backgrounded (reduces gateway load for Phase 14+).
+9. `Layout.tsx` — responsive `<style>` block collapses sidebar to 56px icon rail on
+   viewports ≤ 768px.
+
+**Minor:**
+10. `package.json` — unused `react-router-dom` dependency removed (~50 KB trimmed).
+11. `StatusCards.test.tsx` — stale-indicator test now asserts by testid + text regex.
+12. `EmergencyActions.test.tsx` — disable-gifts test now asserts POST body `{ enabled: false }`.
 
 Phase 13 known limitations:
 
-- **No WebSocket push.** Status cards use HTTP polling (2 s interval). Real-time push
-  from gateway is deferred.
+- **No WebSocket push.** Status cards use HTTP polling (2 s interval, paused when tab is
+  hidden). Real-time push from gateway is deferred.
 - **Gift mapping UI is basic.** Inline per-mapping editing is not implemented; the full
   config must be saved via POST /gifts/config.
 - **Content pack preview** depends on Phase 4 asset-validation tooling; only metadata
   is shown.
-- **No mobile app.** The dashboard is responsive web only.
+- **No mobile app.** The dashboard is responsive web only (sidebar collapses to icon rail
+  at ≤ 768px).
 - **Cooldown config** requires a full GiftEconomyConfig payload for hot-reload; partial
   patches return 400.
+- **Mode picker removed.** Gateway `POST /director/skip` does not accept a mode body; UI
+  shows Skip/Restart buttons only. Full mode-selection UI deferred until gateway supports
+  mode setting.
+- **Provider status is mock-only.** ProviderCard reads exclusively from `GET /mock/state`;
+  Phase 14 will add a real-provider discriminator (`source: 'mock' | 'real'`).
 - **Godot not installed.** All gateway-side GDScript is hand-authored and desk-checked.
 - **E2E uses mocked fetch.** Playwright browser E2E deferred; the current E2E test
   simulates gateway responses in jsdom.
