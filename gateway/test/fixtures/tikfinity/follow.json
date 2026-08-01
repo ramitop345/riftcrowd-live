@@ -1,0 +1,9 @@
+{
+  "type": "follow",
+  "user": {
+    "id": "user_003",
+    "nickname": "viewer_gamma",
+    "profilePictureUrl": "https://example.com/avatar/user_003.jpg"
+  },
+  "timestamp": 1722500002000
+}

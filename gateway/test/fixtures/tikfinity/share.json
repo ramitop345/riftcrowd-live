@@ -1,0 +1,10 @@
+{
+  "type": "share",
+  "user": {
+    "id": "user_004",
+    "nickname": "viewer_delta",
+    "profilePictureUrl": "https://example.com/avatar/user_004.jpg"
+  },
+  "shareType": "tiktok",
+  "timestamp": 1722500003000
+}

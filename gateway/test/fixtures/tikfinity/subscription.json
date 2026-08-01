@@ -1,0 +1,10 @@
+{
+  "type": "subscription",
+  "user": {
+    "id": "user_005",
+    "nickname": "viewer_epsilon",
+    "profilePictureUrl": "https://example.com/avatar/user_005.jpg"
+  },
+  "months": 3,
+  "timestamp": 1722500004000
+}

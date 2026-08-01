@@ -20,6 +20,7 @@ import { registerViewerRoutes } from './routes/viewer_routes.js';
 import { WsServer } from './ws/ws_server.js';
 import { GiftEconomy } from './gifts/gift_economy.js';
 import { FreeEngagement } from './engagement/free_engagement.js';
+import { TikFinityAdapter } from './adapters/tikfinity_adapter.js';
 
 export interface BuildAppOptions {
   /** Set to false in tests to silence request logging. Defaults to true. */
@@ -41,6 +42,8 @@ export interface BuildAppOptions {
   enableFreeEngagement?: boolean;
   /** Enable Phase 13 viewer moderation routes. Opt-in: defaults to false. */
   enableViewerRoutes?: boolean;
+  /** Enable Phase 14 TikFinity adapter. Opt-in: defaults to false. */
+  enableTikfinity?: boolean;
 }
 
 /**
@@ -270,6 +273,33 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       registerViewerRoutes(app, { director });
     }
 
+    // Phase 14: TikFinity adapter (opt-in via enableTikfinity: true)
+    if (options.enableTikfinity === true && pipeline) {
+      const tikfinityAdapter = new TikFinityAdapter({
+        config: config.tikfinity,
+        onWarn: (msg, fields) => app.log.warn({ ...fields }, msg),
+        onInfo: (msg, fields) => app.log.info({ ...fields }, msg),
+      });
+
+      // Wire events from adapter into the pipeline
+      tikfinityAdapter.onEvent((event) => {
+        pipeline.process(event);
+      });
+
+      app.decorate('tikfinityAdapter', tikfinityAdapter);
+
+      // Start adapter when server is ready, stop on close
+      app.addHook('onReady', async () => {
+        await tikfinityAdapter.start();
+        app.log.info('[TikFinity] Adapter started');
+      });
+
+      app.addHook('onClose', async () => {
+        await tikfinityAdapter.stop();
+        app.log.info('[TikFinity] Adapter stopped');
+      });
+    }
+
     // Phase 10: WebSocket server (opt-in via enableWs: true)
     if (options.enableWs === true) {
       const wsServer = new WsServer({
@@ -310,7 +340,8 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   return app;
 }
 
-// Augment FastifyInstance with optional director, pipeline, wsServer, giftEconomy, and freeEngagement
+// Augment FastifyInstance with optional director, pipeline, wsServer, giftEconomy,
+// freeEngagement, and tikfinityAdapter
 declare module 'fastify' {
   interface FastifyInstance {
     director?: MatchDirector;
@@ -318,5 +349,6 @@ declare module 'fastify' {
     wsServer?: WsServer;
     giftEconomy?: GiftEconomy;
     freeEngagement?: FreeEngagement;
+    tikfinityAdapter?: TikFinityAdapter;
   }
 }

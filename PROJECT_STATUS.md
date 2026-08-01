@@ -1,8 +1,8 @@
 # RiftCrowd LIVE — Project Status
 
 - **Working title:** RiftCrowd LIVE
-- **Current phase:** Phase 14 — TikFinity Adapter (next)
-- **Status:** Phase 13 COMPLETED (with review fixes applied)
+- **Current phase:** Phase 15 — Visual Effects, Audio, and TikTok Readability (next)
+- **Status:** Phase 14 COMPLETED (TikFinity Adapter)
 - **Last updated:** 1 August 2026
 
 ## Phase tracker
@@ -22,7 +22,7 @@
 - Phase 11 — Gift Economy, Streaks, and Burst Aggregation: **COMPLETED**
 - Phase 12 — Free Engagement Mechanics: **COMPLETED**
 - Phase 13 — Creator Dashboard: **COMPLETED**
-- Phase 14 — TikFinity Adapter: not started
+- Phase 14 — TikFinity Adapter: **COMPLETED**
 - Phase 15 — Visual Effects, Audio, and TikTok Readability: not started
 - Phase 16 — OBS and TikTok LIVE Studio Runbook: not started
 - Phase 17 — Testing, Performance, and Failure Recovery: not started
@@ -513,8 +513,118 @@ Phase 9 known limitations:
 
 ## Next phase
 
-**Phase 13 — Creator Dashboard** (per the guide):
-Build the creator-facing dashboard for real-time monitoring, configuration, and control.
+**Phase 15 — Visual Effects, Audio, and TikTok Readability** (per the guide):
+Transform the functional game into an attention-grabbing show.
+
+## Phase 14 — completed work
+
+TikFinity Adapter — real provider integration isolated behind the LiveAdapter interface:
+
+- [x] **TikFinityAdapter** (`gateway/src/adapters/tikfinity_adapter.ts`): implements `LiveAdapter`
+  interface (start/stop/onEvent/isConnected). Configurable WebSocket URL (no hardcoded unstable
+  URLs); URL validated to start with `ws://` or `wss://`. Connects to TikFinity local LIVE
+  WebSocket. Subscribes to all supported event types (chat, like, follow, share, subscription,
+  gift). Parses incoming JSON payloads with Zod validation per event type. Maps each TikFinity
+  event into `NormalizedLiveEvent`. Exponential backoff reconnect (configurable base, 30s cap,
+  max 10 retries). Heartbeat ping/pong (configurable interval, 5s pong timeout); `sendPing`
+  clears existing `pongTimer` before creating a new one. `handleClose(code, reason)` captures
+  and logs close code + reason. Malformed payloads and unknown event types dropped with warning
+  (never crash). Unknown fields stripped by Zod for forward compatibility. Event counter is an
+  instance field (FIX 1) + per-instance `instanceSalt` for cross-instance uniqueness; `rawHash`
+  computes real SHA-256 of raw JSON payload (FIX 11). Optional `onFatal` callback fires when
+  max reconnect attempts are reached (FIX 8).
+- [x] **Config Schema** (`gateway/src/config.ts`): `tikfinity` config block with `url`, `token`,
+  `reconnectMs`, `heartbeatMs`, `enabled`. Reads from `TIKFINITY_URL`, `TIKFINITY_TOKEN`,
+  `TIKFINITY_RECONNECT_MS`, `TIKFINITY_HEARTBEAT_MS` env vars. Defaults: `enabled: false`,
+  `url: 'ws://127.0.0.1:23184/ws'`, `reconnectMs: 5000`, `heartbeatMs: 30000`. Zod-validated.
+- [x] **Provider Selection** (`gateway/src/app.ts` + `gateway/src/server.ts`): `LIVE_PROVIDER`
+  env supports `'mock'` (default) or `'tikfinity'`. MockLiveAdapter remains default (no internet
+  required). TikFinity adapter wired when `LIVE_PROVIDER=tikfinity`. Unknown values rejected
+  (exit 1). Mock routes only exposed in mock provider mode. `server.ts` derives
+  `isMockProvider` / `isTikfinity` from Zod-validated `config.liveProvider` (FIX 6 — dead-code
+  belt-and-suspenders guard removed).
+- [x] **Redacted Raw Fixtures** (`gateway/test/fixtures/tikfinity/`): 6 representative fixtures
+  (chat, like, follow, share, subscription, gift). All secrets and personal data redacted with
+  synthetic placeholders (user_001, viewer_alpha, example.com URLs).
+- [x] **Fixture Replay Tests** (`gateway/test/tikfinity_replay.test.ts`): 12 tests loading each
+  fixture, feeding through parser, asserting NormalizedLiveEvent shape, pipeline integration,
+  dedup, malformed drop.
+- [x] **Adapter Tests** (`gateway/test/tikfinity_adapter.test.ts`): 40 tests covering config
+  schema (5), Zod parsing (14), event mapping (9), connection lifecycle (7), fault tolerance (5).
+- [x] **Acceptance Test** (`gateway/test/tikfinity_acceptance.test.ts`): 1 test with 34+
+  assertions — 52 events (8-10 per type + unknown-drop probe), all flow through adapter →
+  pipeline → event bus. Command emission verified (`JOIN_FACTION` from faction_alpha chat,
+  `PAUSE_EVENTS` from `!pause` chat) (FIX 2). Disconnect tolerance, malformed drop, and
+  unknown event type drop (FIX 3) all asserted.
+- [x] **Config Tests** (`gateway/test/config_tikfinity.test.ts`): 7 tests for config validation,
+  defaults, and overrides.
+- [x] **Docs** (`docs/PROVIDER_TIKFINITY.md`): overview, configuration, event mapping table,
+  fault handling, redacted fixtures, known limitations.
+- [x] **LiveAdapter stub preserved**: `TikTokLiveAdapter` in `live_adapter.ts` remains as
+  backward-compatible stub (Phase 9 tests unaffected).
+
+Commands run and results:
+
+- `npm run lint` — **PASS** (zero errors/warnings)
+- `npm run typecheck` — **PASS** (shared, gateway, dashboard, tools all clean)
+- `npm test` — **PASS** (804 tests: 719 gateway + 85 dashboard, all passing)
+  - New: 66 tests (config 9, adapter 42, replay 13, acceptance 1/34+ assertions)
+  - Previous: 738 tests from Phases 1-13
+- `npm run validate:packs` — **PASS** (exit 0; 4 packs checked, 4 passed, 0 warnings, 0 failed)
+- `npm run build` (dashboard) — **PASS** (dist/ with index.html + 278 KB JS, ~81 KB gzipped)
+
+Phase 14 review fixes applied (9 total, from Tina/Jack/Sam triple review):
+
+**Critical:**
+1. `tikfinity_adapter.ts` — module-level `eventCounter` moved to instance field; per-instance
+   `instanceSalt` added via `randomUUID().slice(0,8)` for cross-instance uniqueness.
+2. `tikfinity_acceptance.test.ts` — command emission now asserted (`JOIN_FACTION`, `PAUSE_EVENTS`).
+3. `tikfinity_acceptance.test.ts` — unknown event type drop scenario added (3-part fault coverage).
+
+**Warnings:**
+4. `tikfinity_adapter.ts` — `handleClose(code, reason)` now captures and logs WebSocket close
+   code + reason (was blind to normal vs abnormal shutdown).
+5. `tikfinity_adapter.ts` — `sendPing()` clears existing `pongTimer` before creating new one
+   (prevents orphaned timers).
+6. `server.ts` — dead-code belt-and-suspenders provider guard removed; now derives
+   `isMockProvider` / `isTikfinity` from Zod-validated `config.liveProvider`.
+7. `config.ts` + `tikfinity_adapter.ts` — `TIKFINITY_URL` validated to start with `ws://` or
+   `wss://` (both env schema and `TikFinityConfigSchema.url`).
+8. `tikfinity_adapter.ts` — `onFatal` callback added to `TikFinityAdapterOptions`; fires when
+   max reconnect attempts are reached (observable signal for Phase 18 monitoring).
+
+**Suggestions:**
+11. `tikfinity_adapter.ts` — `rawHash` now computes real SHA-256 of raw JSON payload (was
+    misleading `sha256:tikfinity_{counter}` placeholder; now 64-hex-char actual hash).
+
+Deferred (tracked in limitations):
+- FIX 9: `/health` or `/status` endpoint does not yet expose `providerConnected: boolean`
+  (Phase 18 observability scope).
+- FIX 10: `PROVIDER_TIKFINITY.md` does not yet include production deployment guidance
+  (firewall rules, token rotation, systemd service, log aggregation — Phase 18 scope).
+
+Phase 14 known limitations:
+
+- **Subscription mapping.** `subscription` events map to `subscribe` type. The `months` field
+  is not carried because the shared schema lacks it. Schema extension needed if gameplay uses
+  subscription duration.
+- **Heartbeat assumption.** Uses standard WebSocket ping/pong frames. TikFinity may use
+  application-level heartbeats — verify against actual TikFinity instance.
+- **URL stability.** Default `ws://127.0.0.1:23184/ws` may change across TikFinity versions.
+  Always configure via `TIKFINITY_URL` env var.
+- **Raw payload shape assumed.** Without authoritative TikFinity API docs, Zod schemas are
+  based on common patterns. `.strip()` ensures forward compatibility but field names may
+  need adjustment.
+- **No authentication flow.** Optional token query param only; no OAuth or handshake.
+- **Godot not installed.** All gateway-side code tested via Vitest. Godot client integration
+  not exercised.
+- **Provider connection not observable from `/health`.** `providerConnected: boolean` is not
+  yet exposed on the health endpoint; Phase 18 will need this for production monitoring when
+  the adapter permanently disconnects after max retries (FIX 9 deferred).
+- **Production deployment guidance missing.** `PROVIDER_TIKFINITY.md` covers local dev but
+  omits firewall rules, token rotation, systemd/Windows service setup, and log aggregation
+  (FIX 10 deferred to Phase 18).
+- **CRLF format drift is pre-existing.** Cosmetic only — lint, typecheck, and tests unaffected.
 
 ## Phase 12 — completed work
 

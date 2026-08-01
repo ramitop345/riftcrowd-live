@@ -1,0 +1,10 @@
+{
+  "type": "like",
+  "user": {
+    "id": "user_002",
+    "nickname": "viewer_beta",
+    "profilePictureUrl": "https://example.com/avatar/user_002.jpg"
+  },
+  "likeCount": 5,
+  "timestamp": 1722500001000
+}

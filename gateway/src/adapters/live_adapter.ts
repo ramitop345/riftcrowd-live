@@ -1,8 +1,8 @@
 /**
  * LiveAdapter — abstract interface for live event producers.
  *
- * Phase 9 defines this contract so MockLiveAdapter, ReplayAdapter, and future
- * TikTokLiveAdapter (Phase 14) all plug into the pipeline the same way.
+ * Phase 9 defines this contract so MockLiveAdapter, ReplayAdapter, and
+ * TikFinityAdapter (Phase 14) all plug into the pipeline the same way.
  *
  * The existing LiveProviderAdapter (Phase 1) remains for backward compatibility
  * and is used by the gateway's adapter slot. LiveAdapter is a higher-level
@@ -33,11 +33,9 @@ export interface LiveAdapter {
 }
 
 /**
- * TikTokLiveAdapter — placeholder for Phase 14 (TikFinity integration).
- *
- * Every method throws NotImplementedError so any accidental use during Phase 9
- * is immediately obvious. This class exists to satisfy the deliverable: a named
- * class in the adapter module that documents the Phase 14 territory.
+ * TikTokLiveAdapter — legacy Phase 9 stub kept for backward compatibility.
+ * Every method throws NotImplementedError. The real Phase 14 implementation
+ * is `TikFinityAdapter` in `tikfinity_adapter.ts`.
  */
 export class TikTokLiveAdapter implements LiveAdapter {
   async start(): Promise<void> {

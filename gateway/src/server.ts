@@ -12,10 +12,10 @@ const pino = createLogger(config.logLevel);
 const logger = new Logger(pino);
 
 // FIX 1 (Phase 13): Only expose /mock/* routes when the gateway is running in
-// mock provider mode (LIVE_PROVIDER === 'mock' or unset). In production with
-// a real provider, /mock/start|stop|advance|record|replay must not be reachable.
-const isMockProvider =
-  process.env['LIVE_PROVIDER'] === 'mock' || !process.env['LIVE_PROVIDER'];
+// mock provider mode. FIX 6 (Phase 14 review): derive from Zod-validated config
+// instead of reading process.env directly.
+const isMockProvider = config.liveProvider === 'mock';
+const isTikfinity = config.liveProvider === 'tikfinity';
 
 const app = buildApp({
   enableWs: true,
@@ -24,6 +24,7 @@ const app = buildApp({
   enableGiftEconomy: true,
   enableFreeEngagement: true,
   enableViewerRoutes: true,
+  enableTikfinity: isTikfinity,
 });
 
 let shuttingDown = false;

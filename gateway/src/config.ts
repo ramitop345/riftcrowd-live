@@ -6,13 +6,14 @@ import { z } from 'zod';
  * gateway boots in mock mode with no .env file present.
  *
  * Phase 8 adds pipeline configuration (dedupe, rate limits, queue sizes, event bus).
+ * Phase 14 adds TikFinity provider configuration.
  */
 const EnvSchema = z.object({
   HOST: z.string().min(1).default('127.0.0.1'),
   GATEWAY_PORT: z.coerce.number().int().positive().default(8787),
   GAME_WS_PORT: z.coerce.number().int().positive().default(8788),
   LOCAL_SESSION_TOKEN: z.string().min(1).default('change-me'),
-  LIVE_PROVIDER: z.enum(['mock']).default('mock'),
+  LIVE_PROVIDER: z.enum(['mock', 'tikfinity']).default('mock'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60_000).default(10_000),
 
@@ -30,6 +31,13 @@ const EnvSchema = z.object({
   WS_RETRY_BUFFER_CAPACITY: z.coerce.number().int().positive().default(1000),
   WS_MAX_RECONNECT_BACKOFF_MS: z.coerce.number().int().positive().default(30000),
   WS_IDEMPOTENCY_WINDOW_SIZE: z.coerce.number().int().positive().default(500),
+
+  // Phase 14: TikFinity provider configuration
+  // FIX 7: validate WebSocket protocol scheme
+  TIKFINITY_URL: z.string().min(1).regex(/^wss?:\/\//, 'Must start with ws:// or wss://').default('ws://127.0.0.1:23184/ws'),
+  TIKFINITY_TOKEN: z.string().optional(),
+  TIKFINITY_RECONNECT_MS: z.coerce.number().int().positive().default(5000),
+  TIKFINITY_HEARTBEAT_MS: z.coerce.number().int().positive().default(30000),
 });
 
 const env = EnvSchema.parse(process.env);
@@ -58,6 +66,13 @@ export const config = {
     maxReconnectBackoffMs: env.WS_MAX_RECONNECT_BACKOFF_MS,
     idempotencyWindowSize: env.WS_IDEMPOTENCY_WINDOW_SIZE,
   },
+  tikfinity: {
+    url: env.TIKFINITY_URL,
+    token: env.TIKFINITY_TOKEN,
+    reconnectMs: env.TIKFINITY_RECONNECT_MS,
+    heartbeatMs: env.TIKFINITY_HEARTBEAT_MS,
+    enabled: env.LIVE_PROVIDER === 'tikfinity',
+  },
 } as const;
 
 export type GatewayConfig = typeof config;
@@ -76,6 +91,15 @@ export function sanitizeConfig(cfg: GatewayConfig): Record<string, unknown> {
     shutdownTimeoutMs: cfg.shutdownTimeoutMs,
     pipeline: { ...cfg.pipeline },
     ws: { ...cfg.ws },
+    tikfinity: cfg.tikfinity
+      ? {
+          url: cfg.tikfinity.url,
+          reconnectMs: cfg.tikfinity.reconnectMs,
+          heartbeatMs: cfg.tikfinity.heartbeatMs,
+          enabled: cfg.tikfinity.enabled,
+          token: cfg.tikfinity.token ? '***REDACTED***' : undefined,
+        }
+      : undefined,
     localSessionToken: '***REDACTED***',
   };
 }
