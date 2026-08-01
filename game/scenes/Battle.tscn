@@ -1,8 +1,9 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/screens/battle.gd" id="1_battle"]
 [ext_resource type="Theme" path="res://themes/default_theme.tres" id="2_theme"]
 [ext_resource type="Script" path="res://scripts/ui/connection_status.gd" id="3_connstatus"]
+[ext_resource type="PackedScene" path="res://scenes/ui/FreeEngagementInstructions.tscn" id="4_engagement"]
 
 [node name="Battle" type="Control"]
 layout_mode = 3
@@ -229,3 +230,18 @@ offset_bottom = 40.0
 grow_horizontal = 0
 mouse_filter = 2
 script = ExtResource("3_connstatus")
+
+[node name="FreeEngagementHUD" type="MarginContainer" parent="."]
+anchors_preset = 3
+anchor_left = 0.0
+anchor_top = 1.0
+anchor_right = 0.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = -160.0
+offset_right = 350.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+
+[node name="FreeEngagementInstructions" parent="FreeEngagementHUD" instance=ExtResource("4_engagement")]

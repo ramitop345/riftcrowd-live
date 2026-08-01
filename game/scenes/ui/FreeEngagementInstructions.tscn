@@ -1,0 +1,44 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/free_engagement_instructions.gd" id="1_script"]
+
+[node name="FreeEngagementInstructions" type="VBoxContainer"]
+theme_override_constants/separation = 2
+script = ExtResource("1_script")
+
+[node name="TitleLabel" type="Label" parent="."]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(1, 0.85, 0.2, 1)
+text = "FREE ENGAGEMENT"
+horizontal_alignment = 1
+
+[node name="FollowLabel" type="Label" parent="."]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Follow for Guardian (60s cooldown)"
+horizontal_alignment = 1
+
+[node name="ShareLabel" type="Label" parent="."]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Share for Shield (30s cooldown)"
+horizontal_alignment = 1
+
+[node name="StrategyLabel" type="Label" parent="."]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "!strategy <option> to vote"
+horizontal_alignment = 1
+
+[node name="AbilityLabel" type="Label" parent="."]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "!ability for free energy"
+horizontal_alignment = 1
+
+[node name="MilestonesLabel" type="Label" parent="."]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Like milestones: 10/50/100/500"
+horizontal_alignment = 1

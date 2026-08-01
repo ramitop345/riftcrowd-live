@@ -1,7 +1,7 @@
 # RiftCrowd LIVE — Project Status
 
 - **Working title:** RiftCrowd LIVE
-- **Current phase:** Phase 11 — Gift Economy, Streaks, and Burst Aggregation
+- **Current phase:** Phase 12 — Free Engagement Mechanics
 - **Status:** COMPLETED
 - **Last updated:** 31 July 2026
 
@@ -20,7 +20,7 @@
 - Phase 9 — Mock LIVE Adapter and Event Studio: **COMPLETED**
 - Phase 10 — Gateway-to-Godot WebSocket Integration: **COMPLETED**
 - Phase 11 — Gift Economy, Streaks, and Burst Aggregation: **COMPLETED**
-- Phase 12 — Free Engagement Mechanics: not started
+- Phase 12 — Free Engagement Mechanics: **COMPLETED**
 - Phase 13 — Creator Dashboard: not started
 - Phase 14 — TikFinity Adapter: not started
 - Phase 15 — Visual Effects, Audio, and TikTok Readability: not started
@@ -513,9 +513,90 @@ Phase 9 known limitations:
 
 ## Next phase
 
-**Phase 12 — Free Engagement Mechanics** (per the guide):
-Implement free engagement actions (likes, shares, follows) as lightweight gameplay
-effects that complement the gift economy without requiring monetary transactions.
+**Phase 13 — Creator Dashboard** (per the guide):
+Build the creator-facing dashboard for real-time monitoring, configuration, and control.
+
+## Phase 12 — completed work
+
+Free Engagement Mechanics:
+
+- [x] **Free Engagement Config** (`gateway/src/engagement/free_engagement_config.ts`): Zod-validated
+  config with like milestones (4 monotonic thresholds enforced via `superRefine`), follow guardian,
+  share shield, strategy vote, free energy ability, spam filter, top contributor, and per-faction bounds.
+- [x] **Spam Filter** (`gateway/src/engagement/spam_filter.ts`): per-viewer sliding-window rate
+  limiter for chat events. Configurable maxCommentsPerWindowMs and windowMs. Chat-only (FIX 9).
+- [x] **Like Milestone Aggregator** (`gateway/src/engagement/like_milestone_aggregator.ts`):
+  cumulative per-faction like counts. Fires ADD_ENERGY/ADD_SCORE commands at configurable thresholds.
+- [x] **Follow Guardian** (`gateway/src/engagement/follow_guardian.ts`): follow events spawn
+  temporary Guardian champions. Per-viewer cooldown + per-faction bound enforcement.
+- [x] **Share Shield** (`gateway/src/engagement/share_shield.ts`): share events apply temporary
+  shield buffs. Per-viewer cooldown + per-faction bound.
+- [x] **Strategy Vote** (`gateway/src/engagement/strategy_vote.ts`): `!strategy <option>` chat
+  votes aggregated per-faction within a time window. Fires `STRATEGY_VOTE` command (FIX 2) when
+  minVotes reached. Duplicate vote prevention within configurable window.
+- [x] **Free Energy Ability** (`gateway/src/engagement/free_energy_ability.ts`): `!ability` chat
+  command adds energy. Per-viewer cooldown + max per round.
+- [x] **Top Contributor** (`gateway/src/engagement/top_contributor.ts`): weighted contribution
+  tracking (like=1, follow=5, share=5, vote=1, ability=1 — FIX 6). DISPLAY_SPOTLIGHT at round end.
+- [x] **Free Engagement Rule** (`gateway/src/engagement/free_engagement_rule.ts`): CommandRule
+  implementation. `applies()` narrowed to engagement events only (FIX 7): like, follow, share,
+  `!strategy`, `!ability`. Regular chat filtered out.
+- [x] **Free Engagement Orchestrator** (`gateway/src/engagement/free_engagement.ts`): facade
+  wiring all subsystems. `processEvent()`, `getStats()`, `getTopContributors()`, `reloadConfig()`.
+- [x] **HTTP Routes** (`gateway/src/routes/engagement_routes.ts`): 4 token-protected endpoints —
+  GET/POST /engagement/config, GET /engagement/stats, GET /engagement/top.
+- [x] **GDScript Bridge** (`game/scripts/engagement/free_engagement.gd`): subscribes to
+  CommandDispatcher signals (follow_guardian, share_shield, strategy_vote, free_energy_ability,
+  add_score). Tracks active guardians/shields per faction with expiry cleanup.
+- [x] **HUD** (`game/scenes/ui/FreeEngagementInstructions.tscn`): non-intrusive instructions
+  displayed in Battle scene.
+- [x] **COMMAND_SCHEMA_VERSION bumped to 3** (`shared/schemas/commands.ts`): added
+  FOLLOW_GUARDIAN, SHARE_SHIELD, STRATEGY_VOTE, FREE_ENERGY_ABILITY, ADD_SCORE.
+- [x] **Config** (`gateway/config/free_engagement.json`): sensible defaults for all subsystems.
+- [x] **Tests** (`gateway/test/free_engagement_fixture.test.ts`): 75 tests covering config
+  schema (3), spam filter (6), like milestones (8), follow guardian (6), share shield (6),
+  strategy vote (10), free energy ability (6), top contributor (9+weight ratio), free engagement
+  rule (10), orchestrator (5), HTTP endpoints (5), acceptance fixture (14 assertions, 994 events).
+- [x] **Docs** (`docs/FREE_ENGAGEMENT.md`): architecture, config table, command schema,
+  top contributor weights, spam filter, Godot integration, known limitations.
+
+Commands run and results:
+
+- `npm run lint` — **PASS** (zero errors/warnings)
+- `npm run typecheck` — **PASS** (shared, gateway, dashboard all clean)
+- `npm test` — **PASS** (645+ tests across all files; 1 pre-existing flaky LRU perf test)
+- `npm run validate:packs` — **PASS** (exit 0; 4 packs checked, 4 passed, 0 warnings, 0 failed)
+
+Phase 12 review fixes applied (9 fixes):
+
+- **FIX 1** (critical): Acceptance fixture rewritten with 994 events across 50+ viewers.
+  alpha_power achieves 11 points (follow + share + ability). `alphaTop >= 10` passes.
+- **FIX 2** (critical): `strategy_vote.ts` emits `STRATEGY_VOTE` instead of `CAST_ABILITY`.
+  Orchestrator stats tracking updated. All tests updated.
+- **FIX 3** (major): `PROJECT_STATUS.md` updated — Phase 12 marked COMPLETED, next phase
+  is Phase 13, Phase 12 completed-work section added.
+- **FIX 4** (major): Acceptance fixture expanded to 994 events across ~50 viewers and both
+  factions. Includes milestone 3+4, spam saturation, follow/shield bounds, strategy vote
+  volume, top contributor ranking.
+- **FIX 5** (major): `STRATEGY_VOTE` command type now emitted by strategy_vote.ts (was
+  declared but unused). `FREE_ENGAGEMENT.md` updated to reflect actual command vocabulary.
+- **FIX 6** (major): Top contributor weights corrected — share 3→5, vote 2→1, ability 2→1.
+  Follow=share=5 (high-impact), like=vote=ability=1 (low-impact). Weight ratio test added.
+- **FIX 7** (major): `FreeEngagementRule.applies()` narrowed to engagement chat only
+  (`!strategy` / `!ability`). Regular chat returns false. Spam filter test updated.
+- **FIX 8** (minor): `FreeEngagementConfigSchema.superRefine()` enforces monotonic
+  milestone thresholds. Non-monotonic config rejected. Test added.
+- **FIX 9** (minor): `FREE_ENGAGEMENT.md` documents that spam filter is chat-only.
+  Like/follow/share floods handled by pipeline rate limiter and cooldowns instead.
+
+Phase 12 known limitations:
+
+- **Godot NOT installed.** All GDScript is hand-authored and desk-checked only.
+- **Hot-reload resets all in-flight state.** `reloadConfig()` replaces all internal components.
+- **Single-server only.** Each gateway instance maintains its own engagement state.
+- **Dashboard UI not wired.** Creator Dashboard (Phase 13) will add UI controls.
+- **Spam filter is chat-only.** Like/follow/share floods handled by cooldowns, not spam filter.
+- **CRLF format drift is pre-existing.** Cosmetic only.
 
 ## Phase 11 — completed work
 

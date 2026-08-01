@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Version of the game-command contract. Bump this whenever a field is renamed, retyped, or removed,
  * or when an enum member changes. Additive optional fields do not require a bump.
  */
-export const COMMAND_SCHEMA_VERSION = 2;
+export const COMMAND_SCHEMA_VERSION = 3;
 
 /** The complete command vocabulary the Godot client understands. */
 export const GameCommandTypeSchema = z.enum([
@@ -19,6 +19,11 @@ export const GameCommandTypeSchema = z.enum([
   'PAUSE_EVENTS',
   'END_ROUND',
   'GIFT_APPLY',
+  'FOLLOW_GUARDIAN',
+  'SHARE_SHIELD',
+  'STRATEGY_VOTE',
+  'FREE_ENERGY_ABILITY',
+  'ADD_SCORE',
 ]);
 
 /** Flat primitives only: no nested objects, no arrays, no functions. Keys and strings are bounded. */

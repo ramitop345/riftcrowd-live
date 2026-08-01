@@ -15,8 +15,10 @@ import { Pipeline } from './pipeline/pipeline.js';
 import { registerGatewayRoutes } from './routes/gateway_routes.js';
 import { registerMockRoutes } from './routes/mock_routes.js';
 import { registerGiftRoutes } from './routes/gift_routes.js';
+import { registerEngagementRoutes } from './routes/engagement_routes.js';
 import { WsServer } from './ws/ws_server.js';
 import { GiftEconomy } from './gifts/gift_economy.js';
+import { FreeEngagement } from './engagement/free_engagement.js';
 
 export interface BuildAppOptions {
   /** Set to false in tests to silence request logging. Defaults to true. */
@@ -34,6 +36,8 @@ export interface BuildAppOptions {
   enableWs?: boolean;
   /** Enable Phase 11 gift economy routes. Opt-in: defaults to false. */
   enableGiftEconomy?: boolean;
+  /** Enable Phase 12 free engagement routes. Opt-in: defaults to false. */
+  enableFreeEngagement?: boolean;
 }
 
 /**
@@ -229,6 +233,35 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       }
     }
 
+    // Phase 12: Free Engagement (opt-in via enableFreeEngagement: true)
+    if (options.enableFreeEngagement === true) {
+      try {
+        const freeEngagementConfig = FreeEngagement.loadDefaultConfig();
+        const getFaction = (viewerId: string): string | null => {
+          const profile = director?.viewerRegistry?.get(viewerId);
+          return profile?.factionId ?? null;
+        };
+        const freeEngagement = new FreeEngagement(
+          freeEngagementConfig,
+          (msg) => app.log.info(msg),
+          getFaction,
+        );
+        app.decorate('freeEngagement', freeEngagement);
+
+        // Register a proxy rule that always delegates to the current freeEngagement.getRule().
+        pipeline.rulesEngine.registerRule({
+          name: 'FreeEngagementRule',
+          applies: (e) => freeEngagement.getRule().applies(e),
+          execute: (e, ctx) => freeEngagement.getRule().execute(e, ctx),
+        });
+
+        registerEngagementRoutes(app, { freeEngagement });
+        app.log.info('[FreeEngagement] Registered with pipeline and HTTP routes');
+      } catch (err: unknown) {
+        app.log.warn(`[FreeEngagement] Failed to initialize: ${String(err)}`);
+      }
+    }
+
     // Phase 10: WebSocket server (opt-in via enableWs: true)
     if (options.enableWs === true) {
       const wsServer = new WsServer({
@@ -269,12 +302,13 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   return app;
 }
 
-// Augment FastifyInstance with optional director, pipeline, wsServer, and giftEconomy
+// Augment FastifyInstance with optional director, pipeline, wsServer, giftEconomy, and freeEngagement
 declare module 'fastify' {
   interface FastifyInstance {
     director?: MatchDirector;
     pipeline?: Pipeline;
     wsServer?: WsServer;
     giftEconomy?: GiftEconomy;
+    freeEngagement?: FreeEngagement;
   }
 }

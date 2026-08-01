@@ -181,7 +181,7 @@ describe('Normalizer', () => {
   });
 
   it('invalid schemaVersion is rejected', () => {
-    const raw = makeRawEvent({ schemaVersion: 2 });
+    const raw = makeRawEvent({ schemaVersion: 3 });
     const result = normalizeProviderEvent(raw);
     expect(result.ok).toBe(false);
   });
@@ -373,7 +373,7 @@ describe('CommandRulesEngine', () => {
   it('produced commands have correct schemaVersion and sourceEventIds', () => {
     const event = makeEvent({ comment: '!end_round' });
     const cmds = engine.evaluate(event);
-    expect(cmds[0]!.schemaVersion).toBe(2);
+    expect(cmds[0]!.schemaVersion).toBe(3);
     expect(cmds[0]!.sourceEventIds).toEqual([event.id]);
   });
 

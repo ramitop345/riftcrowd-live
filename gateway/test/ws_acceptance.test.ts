@@ -161,7 +161,7 @@ describe('Acceptance — normal_traffic (comments + faction joins)', () => {
     expect(commands.length).toBeGreaterThan(0);
 
     for (const cmd of commands) {
-      expect(cmd).toHaveProperty('schemaVersion', 2);
+      expect(cmd).toHaveProperty('schemaVersion', 3);
       expect(cmd).toHaveProperty('id');
       expect(cmd).toHaveProperty('type');
       expect(cmd).toHaveProperty('sourceEventIds');
@@ -260,7 +260,7 @@ describe('Acceptance — normal_traffic (comments + faction joins)', () => {
       expect(typeof cmd.id).toBe('string');
       expect(cmd.id.length).toBeGreaterThan(0);
       expect(typeof cmd.type).toBe('string');
-      expect(cmd.schemaVersion).toBe(2);
+      expect(cmd.schemaVersion).toBe(3);
       expect(Array.isArray(cmd.sourceEventIds)).toBe(true);
     }
 
@@ -377,7 +377,7 @@ describe('Acceptance — gift_streak (gifts as commands)', () => {
     const commands = extractCommands(msgs);
 
     for (const cmd of commands) {
-      expect(cmd).toHaveProperty('schemaVersion', 2);
+      expect(cmd).toHaveProperty('schemaVersion', 3);
       expect(cmd).toHaveProperty('id');
       expect(cmd).toHaveProperty('type');
       expect(cmd).toHaveProperty('createdAt');

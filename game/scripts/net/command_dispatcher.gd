@@ -1,4 +1,4 @@
-## CommandDispatcher (Phase 10) — routes incoming GameCommands from WSClient
+## CommandDispatcher (Phase 10 + Phase 11 + Phase 12) — routes incoming GameCommands from WSClient
 ## to the appropriate subsystem via typed signals.
 ##
 ## Connect this node to WSClient.command_received signal. Each command type
@@ -18,13 +18,18 @@
 ##   display_spotlight(payload: Dictionary)
 ##   pause_events(payload: Dictionary)
 ##   end_round(payload: Dictionary)
+##   follow_guardian(payload: Dictionary)   ## Phase 12
+##   share_shield(payload: Dictionary)     ## Phase 12
+##   strategy_vote(payload: Dictionary)    ## Phase 12
+##   free_energy_ability(payload: Dictionary) ## Phase 12
+##   add_score(payload: Dictionary)        ## Phase 12
 class_name CommandDispatcher
 extends Node
 
 signal mode_vote(payload: Dictionary)
 signal faction_join(payload: Dictionary)
 signal spawn_champion(payload: Dictionary)
-signal gift_apply(payload: Dictionary)  ## Phase 11: add "GIFT_APPLY" case in dispatch() + GameCommandTypeSchema
+signal gift_apply(payload: Dictionary)  ## Phase 11
 signal add_energy(payload: Dictionary)
 signal add_shield(payload: Dictionary)
 signal spawn_squad(payload: Dictionary)
@@ -33,6 +38,11 @@ signal start_world_event(payload: Dictionary)
 signal display_spotlight(payload: Dictionary)
 signal pause_events(payload: Dictionary)
 signal end_round(payload: Dictionary)
+signal follow_guardian(payload: Dictionary)     ## Phase 12: follow → guardian spawn
+signal share_shield(payload: Dictionary)         ## Phase 12: share → shield apply
+signal strategy_vote(payload: Dictionary)        ## Phase 12: strategy vote → cast ability
+signal free_energy_ability(payload: Dictionary)  ## Phase 12: !ability → free energy
+signal add_score(payload: Dictionary)            ## Phase 12: like milestone → add score
 
 ## Routes a command dictionary to the appropriate signal based on command type.
 ## Expected shape: { "type": "JOIN_FACTION" | "SPAWN_CHAMPION" | ..., ... }
@@ -62,5 +72,15 @@ func dispatch(command: Dictionary) -> void:
 			end_round.emit(command)
 		"GIFT_APPLY":
 			gift_apply.emit(command)
+		"FOLLOW_GUARDIAN":
+			follow_guardian.emit(command)
+		"SHARE_SHIELD":
+			share_shield.emit(command)
+		"STRATEGY_VOTE":
+			strategy_vote.emit(command)
+		"FREE_ENERGY_ABILITY":
+			free_energy_ability.emit(command)
+		"ADD_SCORE":
+			add_score.emit(command)
 		_:
 			push_warning("CommandDispatcher: unknown command type '%s'" % cmd_type)
