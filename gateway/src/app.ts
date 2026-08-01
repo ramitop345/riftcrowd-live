@@ -17,10 +17,19 @@ import { registerMockRoutes } from './routes/mock_routes.js';
 import { registerGiftRoutes } from './routes/gift_routes.js';
 import { registerEngagementRoutes } from './routes/engagement_routes.js';
 import { registerViewerRoutes } from './routes/viewer_routes.js';
+import { registerVFXRoutes } from './routes/vfx_routes.js';
+import { registerAudioRoutes } from './routes/audio_routes.js';
+import { registerReadabilityRoutes } from './routes/readability_routes.js';
 import { WsServer } from './ws/ws_server.js';
 import { GiftEconomy } from './gifts/gift_economy.js';
 import { FreeEngagement } from './engagement/free_engagement.js';
 import { TikFinityAdapter } from './adapters/tikfinity_adapter.js';
+import { VFXOrchestrator } from './vfx/vfx_orchestrator.js';
+import { loadVFXConfig } from './vfx/vfx_config.js';
+import { AudioOrchestrator } from './audio/audio_orchestrator.js';
+import { loadAudioConfig } from './audio/audio_config.js';
+import { ReadabilityOrchestrator } from './readability/readability_orchestrator.js';
+import { loadReadabilityConfig } from './readability/readability_config.js';
 
 export interface BuildAppOptions {
   /** Set to false in tests to silence request logging. Defaults to true. */
@@ -44,6 +53,8 @@ export interface BuildAppOptions {
   enableViewerRoutes?: boolean;
   /** Enable Phase 14 TikFinity adapter. Opt-in: defaults to false. */
   enableTikfinity?: boolean;
+  /** Enable Phase 15 VFX/Audio/Readability routes. Opt-in: defaults to false. */
+  enableVFX?: boolean;
 }
 
 /**
@@ -300,6 +311,43 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       });
     }
 
+    // Phase 15: VFX, Audio, Readability (opt-in via enableVFX: true)
+    if (options.enableVFX === true) {
+      try {
+        const vfxConfig = loadVFXConfig();
+        const vfxOrchestrator = new VFXOrchestrator(vfxConfig);
+        app.decorate('vfxOrchestrator', vfxOrchestrator);
+        registerVFXRoutes(app, { orchestrator: vfxOrchestrator });
+
+        const audioConfig = loadAudioConfig();
+        const audioOrchestrator = new AudioOrchestrator(audioConfig);
+        app.decorate('audioOrchestrator', audioOrchestrator);
+        registerAudioRoutes(app, { orchestrator: audioOrchestrator });
+
+        const readabilityConfig = loadReadabilityConfig();
+        const readabilityOrchestrator = new ReadabilityOrchestrator(readabilityConfig);
+        app.decorate('readabilityOrchestrator', readabilityOrchestrator);
+        registerReadabilityRoutes(app, { orchestrator: readabilityOrchestrator });
+
+        app.log.info('[Phase15] VFX, Audio, Readability orchestrators registered');
+
+        // Phase 16 (OBS Runbook) can integrate VFX/audio orchestrators here by
+        // registering pipeline rules:
+        // pipeline.rulesEngine.registerRule({
+        //   name: 'VFXRule',
+        //   applies: (e) => true,
+        //   execute: (e, ctx) => vfxOrchestrator.triggerVFX(e),
+        // });
+        // pipeline.rulesEngine.registerRule({
+        //   name: 'AudioRule',
+        //   applies: (e) => true,
+        //   execute: (e, ctx) => audioOrchestrator.triggerAudio(e),
+        // });
+      } catch (err: unknown) {
+        app.log.warn(`[Phase15] Failed to initialize: ${String(err)}`);
+      }
+    }
+
     // Phase 10: WebSocket server (opt-in via enableWs: true)
     if (options.enableWs === true) {
       const wsServer = new WsServer({
@@ -350,5 +398,8 @@ declare module 'fastify' {
     giftEconomy?: GiftEconomy;
     freeEngagement?: FreeEngagement;
     tikfinityAdapter?: TikFinityAdapter;
+    vfxOrchestrator?: VFXOrchestrator;
+    audioOrchestrator?: AudioOrchestrator;
+    readabilityOrchestrator?: ReadabilityOrchestrator;
   }
 }

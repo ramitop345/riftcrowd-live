@@ -3,8 +3,11 @@ import { z } from 'zod';
 /**
  * Version of the game-command contract. Bump this whenever a field is renamed, retyped, or removed,
  * or when an enum member changes. Additive optional fields do not require a bump.
+ *
+ * Phase 15: bumped to 4 — added SPAWN_VFX, SPOTLIGHT_CARD, SUPPORTER_CALLOUT,
+ * CAMERA_IMPULSE, PLAY_AUDIO command types.
  */
-export const COMMAND_SCHEMA_VERSION = 3;
+export const COMMAND_SCHEMA_VERSION = 4;
 
 /** The complete command vocabulary the Godot client understands. */
 export const GameCommandTypeSchema = z.enum([
@@ -24,6 +27,12 @@ export const GameCommandTypeSchema = z.enum([
   'STRATEGY_VOTE',
   'FREE_ENERGY_ABILITY',
   'ADD_SCORE',
+  // Phase 15 — VFX, audio, readability
+  'SPAWN_VFX',
+  'SPOTLIGHT_CARD',
+  'SUPPORTER_CALLOUT',
+  'CAMERA_IMPULSE',
+  'PLAY_AUDIO',
 ]);
 
 /** Flat primitives only: no nested objects, no arrays, no functions. Keys and strings are bounded. */

@@ -1,0 +1,7 @@
+[gd_scene format=3 uid="uid://camera_impulse"]
+
+[node name="CameraImpulse" type="Camera2D"]
+position_smoothing_enabled = true
+position_smoothing_speed = 8.0
+
+[node name="Tween" type="Tween" parent="."]

@@ -1,8 +1,8 @@
 # RiftCrowd LIVE — Project Status
 
 - **Working title:** RiftCrowd LIVE
-- **Current phase:** Phase 15 — Visual Effects, Audio, and TikTok Readability (next)
-- **Status:** Phase 14 COMPLETED (TikFinity Adapter)
+- **Current phase:** Phase 16 — OBS and TikTok LIVE Studio Runbook (next)
+- **Status:** Phase 15 COMPLETED (with review fixes applied)
 - **Last updated:** 1 August 2026
 
 ## Phase tracker
@@ -23,7 +23,7 @@
 - Phase 12 — Free Engagement Mechanics: **COMPLETED**
 - Phase 13 — Creator Dashboard: **COMPLETED**
 - Phase 14 — TikFinity Adapter: **COMPLETED**
-- Phase 15 — Visual Effects, Audio, and TikTok Readability: not started
+- Phase 15 — Visual Effects, Audio, and TikTok Readability: **COMPLETED**
 - Phase 16 — OBS and TikTok LIVE Studio Runbook: not started
 - Phase 17 — Testing, Performance, and Failure Recovery: not started
 - Phase 18 — Packaging, Release, and Operations: not started
@@ -1150,3 +1150,116 @@ Phase 8 known limitations:
   or Phase 9 adapter should call `director.handleChatEvent()` for chat events.
 - **CRLF format drift is pre-existing.** Cosmetic only — lint, typecheck, and
   tests are unaffected.
+
+## Phase 15 — completed work
+
+Visual Effects, Audio, and TikTok Readability — polished launch visual language:
+
+- [x] **VFX Config** (`gateway/src/vfx/vfx_config.ts`): Zod-validated config with pool
+  limits, quality levels (low/medium/high/ultra), frame-rate budget, motion reduction,
+  color-blind mode, safe-zone bounds. Hot-reload via `reloadConfig()`.
+- [x] **VFX Pool** (`gateway/src/vfx/vfx_pool.ts`): Bounded object pool for VFX instances
+  (particles, flashes, trails, overlays). Per-type limits from config. LRU eviction when
+  pool full (FIX 3 + FIX 4 — `evictLRU` now actually removes from pool + wired into
+  `acquire()` as fallback). `getStats()` for observability. Graceful degradation (returns
+  null on exhaustion). Graceful hot-reload (FIX 8 — active instances preserved when
+  limits unchanged).
+- [x] **VFX Orchestrator** (`gateway/src/vfx/vfx_orchestrator.ts`): Facade wiring pool +
+  config + command emission. Event-type mapping: like→particle, follow→overlay+spotlight,
+  share→trail+callout, gift→flash+camera+ability, subscribe→overlay+spotlight+trail.
+  Respects quality level, motion reduction (FIX 2 — camera impulse fully disabled, not
+  just reduced), color-blind mode. Text sanitization with Unicode bidi override stripping
+  (FIX 5 — `\u200B-\u200F`, `\u202A-\u202E`, `\uFEFF` removed). Rolling-average
+  frame-rate budget enforcement (FIX 7 — downgrades quality when `rollingAvg > 1000/budget`).
+  `drainCommands()` returns all emitted commands (FIX 1 — buffer now populated).
+- [x] **Audio Config** (`gateway/src/audio/audio_config.ts`): Zod-validated config with
+  volume groups (master/music/sfx/ui, 0-100), track paths, SFX paths. Hot-reload.
+- [x] **Audio Orchestrator** (`gateway/src/audio/audio_orchestrator.ts`): Facade wiring
+  config + command emission. Event-type mapping: like→hit(+spotlight milestone),
+  follow→follow, share→share, gift→gift(+ability cinematic), subscribe→follow+spotlight.
+  Volume computation: master × group / 10000.
+- [x] **Readability Config** (`gateway/src/readability/readability_config.ts`): Zod-validated
+  config with color-blind mode, motion reduction, safe zone, font size, contrast boost.
+- [x] **Readability Orchestrator** (`gateway/src/readability/readability_orchestrator.ts`):
+  Modifies commands before emission. Color-blind→patterns, motion reduction→-50% intensity/duration,
+  safe zone→bounds on spotlight/callout, font size→hint, contrast boost→flag.
+- [x] **HTTP Routes** (`gateway/src/routes/vfx_routes.ts`, `audio_routes.ts`,
+  `readability_routes.ts`): Token-protected endpoints for config, stats, and test triggers.
+- [x] **COMMAND_SCHEMA_VERSION bumped to 4** (`shared/schemas/commands.ts`): New command
+  types: `SPAWN_VFX`, `SPOTLIGHT_CARD`, `SUPPORTER_CALLOUT`, `CAMERA_IMPULSE`, `PLAY_AUDIO`.
+- [x] **GDScript VFXPool** (`game/scripts/vfx/VFXPool.gd`): Godot-side object pool for
+  GPUParticles2D instances. Per-type limits, LRU eviction, HTTP config loading.
+- [x] **GDScript AudioManager** (`game/scripts/audio/AudioManager.gd`): Audio playback
+  with volume groups, track caching, HTTP config loading.
+- [x] **GDScript ReadabilityOverlay** (`game/scripts/ui/ReadabilityOverlay.gd`): Safe-zone
+  overlay with F9 debug toggle, HTTP config loading.
+- [x] **Godot Scenes**: ParticleBurst, HitFlash, Trail, FactionOverlay, SpotlightCard,
+  SupporterCallout, CameraImpulse.
+- [x] **CommandDispatcher** updated with 5 new signals (spawn_vfx, spotlight_card,
+  supporter_callout, camera_impulse, play_audio).
+- [x] Docs: `docs/VFX_AUDIO_READABILITY.md` (architecture, config, VFX types, audio tracks,
+  readability options, Godot integration, known limitations).
+
+Commands run and results:
+
+- `npm run lint` — **PASS** (zero errors/warnings)
+- `npm run typecheck` — **PASS** (shared, gateway, dashboard, tools all clean)
+- `npm test` — **PASS** (955 tests: 870 gateway + 85 dashboard, all passing)
+  - New: 151 tests (VFX 68, audio 24, readability 20, routes 24, acceptance 15/55+ assertions)
+  - Previous: 804 tests from Phases 1-14
+- `npm run validate:packs` — **PASS** (exit 0; 4 packs checked, 4 passed, 0 warnings, 0 failed)
+- `npm run build` (dashboard) — **PASS** (exit 0; dist/ exists, 278 KB JS, ~81 KB gzipped)
+
+Phase 15 review fixes applied (10 total, from Jason/Robin/Jay triple review):
+
+**Critical:**
+1. `vfx_orchestrator.ts` — `drainCommands()` now returns real data (buffer populated in
+   `triggerVFX()` before handler dispatch).
+2. `vfx_orchestrator.ts` — `handleGift` no longer emits `CAMERA_IMPULSE` when
+   `motionReduction` is active (was contradicting doc comment).
+3. `vfx_pool.ts` — `evictLRU()` now actually removes the evicted instance from the pool
+   via `splice()` (was just touching `lastUsed`).
+4. `vfx_pool.ts` — `acquire()` now calls `evictLRU()` as a fallback when no idle candidate
+   exists, reusing the evicted instance before giving up (LRU eviction now reachable).
+5. `vfx_orchestrator.ts` — `sanitizeText()` now strips Unicode bidirectional / format
+   control characters (`\u200B-\u200F`, `\u202A-\u202E`, `\uFEFF`) to prevent text-spoofing
+   attacks.
+
+**Warnings:**
+6. `vfx_acceptance.test.ts` — stress-test frame-rate budget tightened from 16670ms → 2000ms
+   (was 1000× too generous); added pool accounting invariants.
+7. `vfx_orchestrator.ts` — rolling-average frame-rate budget enforcement added; tracks
+   exponential moving average of per-event processing time; downgrades quality or drops
+   low-priority events when `rollingAvg > 1000/frameRateBudget`.
+8. `vfx_pool.ts` — `updateConfig()` now compares old vs. new pool limits before tearing
+   down; active instances preserved when limits unchanged (graceful hot-reload).
+
+**Suggestions:**
+9. `vfx_pool.ts` — merged two identical `dropped++/return null` branches in `acquire()`;
+   clarified `VFXPoolStats.dropped` JSDoc.
+10. `app.ts` — added commented integration scaffold showing how Phase 16 can register
+    `VFXRule` / `AudioRule` via `pipeline.rulesEngine.registerRule()`.
+
+Phase 15 known limitations:
+
+- **Godot not installed.** GDScript and scene files are hand-authored, desk-check only.
+  No runtime verification possible.
+- **Placeholder audio files.** `audio/sfx/*.ogg` and `audio/music/*.ogg` paths are
+  configured in `gateway/config/audio.json` but actual audio files do not exist yet.
+  Phase 18 (Packaging, Release, Operations) will package real assets.
+- **Motion reduction partial.** Only camera impulse intensity and trail duration are
+  reduced; particles, flashes, and overlays retain full motion. A future polish pass may
+  extend motion reduction to all 5 animation categories.
+- **No Godot-side testing.** VFXPool, AudioManager, and ReadabilityOverlay GDScript have
+  not been executed in the Godot runtime.
+- **VFX/audio orchestrators not auto-integrated.** Phase 15 orchestrators are only
+  accessible through manual HTTP trigger endpoints (`/vfx/trigger`, `/audio/trigger`).
+  Phase 16 (OBS Runbook) can wire pipeline rules via the commented scaffold in `app.ts`
+  (FIX 10).
+- **Production deployment guidance missing.** `VFX_AUDIO_READABILITY.md` omits audio
+  asset packaging (file format, codec, max file sizes), quality defaults per hardware
+  tier, and audio file bundling for release — Phase 18 scope.
+- **CRLF format drift is pre-existing.** Cosmetic only — lint, typecheck, and tests
+  unaffected.
+
+Next phase: **Phase 16 — OBS and TikTok LIVE Studio Runbook**.

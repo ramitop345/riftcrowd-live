@@ -1,0 +1,22 @@
+[gd_scene format=3 uid="uid://trail_vfx"]
+
+[node name="Trail" type="Line2D"]
+width = 4.0
+default_color = Color(0.267, 1, 0.533, 1)
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+autoplay = "trail_draw"
+
+[sub_resource type="Animation" id="Animation_trail_draw"]
+resource_name = "trail_draw"
+length = 2.0
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/path = NodePath(":width")
+tracks/0/interp = 1
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 1.0, 2.0),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [0.0, 4.0, 0.0]
+}

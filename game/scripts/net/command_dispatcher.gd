@@ -23,6 +23,11 @@
 ##   strategy_vote(payload: Dictionary)    ## Phase 12
 ##   free_energy_ability(payload: Dictionary) ## Phase 12
 ##   add_score(payload: Dictionary)        ## Phase 12
+##   spawn_vfx(payload: Dictionary)         ## Phase 15
+##   spotlight_card(payload: Dictionary)    ## Phase 15
+##   supporter_callout(payload: Dictionary) ## Phase 15
+##   camera_impulse(payload: Dictionary)    ## Phase 15
+##   play_audio(payload: Dictionary)        ## Phase 15
 class_name CommandDispatcher
 extends Node
 
@@ -43,6 +48,11 @@ signal share_shield(payload: Dictionary)         ## Phase 12: share → shield a
 signal strategy_vote(payload: Dictionary)        ## Phase 12: strategy vote → cast ability
 signal free_energy_ability(payload: Dictionary)  ## Phase 12: !ability → free energy
 signal add_score(payload: Dictionary)            ## Phase 12: like milestone → add score
+signal spawn_vfx(payload: Dictionary)            ## Phase 15: VFX spawn
+signal spotlight_card(payload: Dictionary)       ## Phase 15: spotlight card
+signal supporter_callout(payload: Dictionary)    ## Phase 15: supporter callout
+signal camera_impulse(payload: Dictionary)       ## Phase 15: camera impulse
+signal play_audio(payload: Dictionary)           ## Phase 15: audio playback
 
 ## Routes a command dictionary to the appropriate signal based on command type.
 ## Expected shape: { "type": "JOIN_FACTION" | "SPAWN_CHAMPION" | ..., ... }
@@ -82,5 +92,15 @@ func dispatch(command: Dictionary) -> void:
 			free_energy_ability.emit(command)
 		"ADD_SCORE":
 			add_score.emit(command)
+		"SPAWN_VFX":
+			spawn_vfx.emit(command)
+		"SPOTLIGHT_CARD":
+			spotlight_card.emit(command)
+		"SUPPORTER_CALLOUT":
+			supporter_callout.emit(command)
+		"CAMERA_IMPULSE":
+			camera_impulse.emit(command)
+		"PLAY_AUDIO":
+			play_audio.emit(command)
 		_:
 			push_warning("CommandDispatcher: unknown command type '%s'" % cmd_type)
