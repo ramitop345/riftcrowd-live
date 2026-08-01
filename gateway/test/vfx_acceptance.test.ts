@@ -109,7 +109,7 @@ describe('Acceptance: VFX stress test (1000 requests)', () => {
     // (sample check on last event)
     const lastResult = orchestrator.triggerVFX(makeEvent('like', 9999));
     if (lastResult.commands.length > 0) {
-      expect(lastResult.commands[0]!.schemaVersion).toBe(5);
+      expect(lastResult.commands[0]!.schemaVersion).toBe(6);
     }
   });
 });
@@ -309,7 +309,7 @@ describe('Acceptance: readability orchestrator integration', () => {
 
     // SPAWN_VFX with color-blind + motion reduction
     const vfxCmd = {
-      schemaVersion: 5 as const,
+      schemaVersion: 6 as const,
       id: 'cmd-1',
       type: 'SPAWN_VFX' as const,
       createdAt: new Date().toISOString(),
@@ -326,7 +326,7 @@ describe('Acceptance: readability orchestrator integration', () => {
 
     // CAMERA_IMPULSE with motion reduction
     const cameraCmd = {
-      schemaVersion: 5 as const,
+      schemaVersion: 6 as const,
       id: 'cmd-2',
       type: 'CAMERA_IMPULSE' as const,
       createdAt: new Date().toISOString(),
@@ -340,7 +340,7 @@ describe('Acceptance: readability orchestrator integration', () => {
 
     // SPOTLIGHT_CARD gets safe zone + font + contrast
     const spotlightCmd = {
-      schemaVersion: 5 as const,
+      schemaVersion: 6 as const,
       id: 'cmd-3',
       type: 'SPOTLIGHT_CARD' as const,
       createdAt: new Date().toISOString(),

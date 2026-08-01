@@ -1470,3 +1470,43 @@ Next phase: **Phase 17 — Testing, Performance, and Failure Recovery**.
 ### Next phase
 
 **Phase 18 — Packaging, Release, and Operations.**
+
+---
+
+## Godot 4.7.1 Retrofit — COMPLETED
+
+**Status:** All 6 tiers delivered. Godot 4.7.1 validates all scenes + scripts. Orchestrators wired. Quality ladder active. End-to-end validation passed.
+
+### Work completed
+
+| Tier | Scope | Key Deliverables |
+|---|---|---|
+| 1 | Runtime Verification | 44 scenes loaded, 64 scripts compiled, 23 fixes applied (16 UTF-8 BOM removals, 5 animation sub-resource orderings, 2 `is_connected` → `is_ws_connected` API renames) |
+| 2 | Gateway Orchestrator Activation | VFX, Audio, Readability, Window, Preflight, Fallback orchestrators enabled in production pipeline; VFXPool LRU eviction wired; 35 new TS tests (1214 total) |
+| 3 | Battle Scene Wiring | 8 orchestrator nodes in Battle scene, 12 signal mappings, `battle.gd` 207 → 396 lines, WSClient connects to `ws://127.0.0.1:8788/ws/game` |
+| 4 | 4-Tier VFX Quality Ladder | `COMMAND_SCHEMA_VERSION=6`, `SET_QUALITY_TIER` + `FRAME_REPORT` command types, gateway auto-stepping with 60-report rolling window, 30 new TS tests (1243 total) |
+| 5 | End-to-End Validation | Real Godot 4.7.1 headless boots, WS connects, VFX pool bounded, quality ladder traversal (high→medium→low→medium→high→ultra) validated, 65 new TS tests (1308 total) |
+| 6 | Documentation | `STREAMING_WORKFLOW.md` updated, `PROJECT_STATUS.md` updated, `GODOT_RETROFIT_REPORT.md` created |
+
+### Commands run and results
+
+- `godot --headless --path game --check` — **0 parse errors**
+- `godot --headless --path game --script res://tests/test_shell.gd` — **92/92 pass**
+- `npm test` — **1308 total** (1223 gateway + 85 dashboard)
+- `npm run lint` — **0 errors**
+- `npm run typecheck` — **clean**
+- `npm run validate:packs` — **4/4 passed, 0 warnings**
+- `cd dashboard; npm run build` — **exit 0**
+
+### Known limitations
+
+- Godot headless does not stay in Battle scene (transitions to MainMenu) — end-to-end FRAME_REPORT flow not validated in headless mode.
+- No real TikFinity testing (adapter tested via MockLiveAdapter fixtures).
+- No real OBS or TikTok LIVE Studio testing.
+- No GdUnit4 Godot-side test harness (gateway-side TS integration tests only).
+- 1 pre-existing flaky test (`runbook_acceptance.test.ts` port conflict in parallel, passes in isolation).
+- 6 pre-existing Godot test failures (timing-sensitive + logic issues, unrelated to version).
+
+### Next phase
+
+**Phase 18 — Packaging, Release, and Operations.**

@@ -31,6 +31,7 @@
 ##   set_window_mode(payload: Dictionary)    ## Phase 16
 ##   activate_fallback(payload: Dictionary)  ## Phase 16
 ##   deactivate_fallback(payload: Dictionary) ## Phase 16
+##   set_quality_tier(payload: Dictionary)   ## Phase 17/Tier 4
 class_name CommandDispatcher
 extends Node
 
@@ -59,6 +60,7 @@ signal play_audio(payload: Dictionary)           ## Phase 15: audio playback
 signal set_window_mode(payload: Dictionary)       ## Phase 16: window mode change
 signal activate_fallback(payload: Dictionary)     ## Phase 16: fallback overlay on
 signal deactivate_fallback(payload: Dictionary)   ## Phase 16: fallback overlay off
+signal set_quality_tier(payload: Dictionary)      ## Phase 17/Tier 4: quality tier change
 
 ## Routes a command dictionary to the appropriate signal based on command type.
 ## Expected shape: { "type": "JOIN_FACTION" | "SPAWN_CHAMPION" | ..., ... }
@@ -114,6 +116,8 @@ func dispatch(command: Dictionary) -> void:
 			activate_fallback.emit(command)
 		"DEACTIVATE_FALLBACK":
 			deactivate_fallback.emit(command)
+		"SET_QUALITY_TIER":
+			set_quality_tier.emit(command)
 		_:
 			push_warning("CommandDispatcher: unknown command type '%s'" % cmd_type)
 

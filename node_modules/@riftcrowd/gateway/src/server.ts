@@ -25,6 +25,8 @@ const app = buildApp({
   enableFreeEngagement: true,
   enableViewerRoutes: true,
   enableTikfinity: isTikfinity,
+  enableVFX: true,
+  enableRunbook: true,
 });
 
 let shuttingDown = false;

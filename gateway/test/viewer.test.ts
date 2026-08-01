@@ -474,7 +474,7 @@ describe('ChampionSpawner', () => {
 
   it('GameCommand has correct schema version', () => {
     const cmd = spawner.spawnIfNew('v1', 'Player1', 'lions', 'evt1');
-    expect(cmd?.schemaVersion).toBe(5);
+    expect(cmd?.schemaVersion).toBe(6);
     expect(cmd?.sourceEventIds).toEqual(['evt1']);
   });
 });

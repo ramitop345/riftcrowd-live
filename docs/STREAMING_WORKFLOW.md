@@ -115,9 +115,60 @@ Control via HTTP:
 - `POST /fallback/activate` — manual activation with reason
 - `POST /fallback/deactivate` — manual deactivation
 
+## Godot 4.7.1 Runtime Validation
+
+All Godot runtime components have been validated against Godot 4.7.1 Stable (x86_64 Windows):
+
+- **Scene loading**: All 44 `.tscn` scenes load without errors.
+- **Script compilation**: All 64 `.gd` GDScript files compile cleanly (`godot --headless --path game --check` returns 0 parse errors).
+- **Godot test suite**: 92/92 tests pass via `test_shell.gd`.
+
+### Orchestrator Wiring
+
+All Phase 15/16 gateway orchestrators are now wired into the full gateway → WebSocket → Godot pipeline:
+
+| Orchestrator | Gateway Module | Godot Consumer |
+|---|---|---|
+| VFX | `VFXOrchestrator` | `VFXPool` (with LRU eviction) |
+| Audio | `AudioOrchestrator` | `AudioManager` |
+| Readability | `ReadabilityOrchestrator` | `ReadabilityOverlay` |
+| Window | `WindowOrchestrator` | `WindowManager` |
+| Preflight | `PreflightOrchestrator` | `PreflightScreen` |
+| Fallback | `FallbackOrchestrator` | `FallbackScene` |
+
+Stub handlers (logged via `push_warning`, no gameplay effect) remain for: `gift_apply`, `faction_join`, `camera_impulse`.
+
+### 4-Tier VFX Quality Ladder
+
+A 4-tier quality ladder is active and controlled by the gateway based on Godot-reported frame times:
+
+| Tier | Max Particles | Max Emitters | Max Trails | Max Misc |
+|---|---|---|---|---|
+| Ultra | 150 | 30 | 75 | 45 |
+| High | 100 | 20 | 50 | 30 |
+| Medium | 50 | 10 | 25 | 15 |
+| Low | 25 | 5 | 12 | 7 |
+
+- Gateway auto-steps tier using a 60-report rolling window (3 s downgrade threshold, 5 s upgrade threshold, 5 s hysteresis).
+- Godot `VFXPool.set_quality_tier(tier)` applies per-tier limits and trims idle nodes on downgrade.
+- Command schema: `COMMAND_SCHEMA_VERSION=6`; new types `SET_QUALITY_TIER` (gateway → Godot) and `FRAME_REPORT` (Godot → gateway).
+
+### Battle Scene
+
+The Battle scene is instantiated with 8 orchestrator nodes and 12 signal mappings:
+
+- WSClient connects to `ws://127.0.0.1:8788/ws/game` using `RIFTCROWD_TOKEN` environment variable.
+- CommandDispatcher routes inbound GameCommands to VFXPool, AudioManager, ReadabilityOverlay, WindowManager, PreflightScreen, and FallbackScene.
+- `battle.gd` grew from 207 to 396 lines to accommodate full orchestrator integration.
+
+### Known Runtime Limitations
+
+- **Headless scene transition**: Godot headless mode does not stay in the Battle scene (transitions to MainMenu) — end-to-end FRAME_REPORT flow is validated via direct calls, not real Godot ↔ gateway WebSocket.
+- **No real TikFinity testing**: Adapter is tested via MockLiveAdapter fixtures only.
+- **No real OBS or TikTok LIVE Studio testing**: Capture instructions are based on documented behavior.
+
 ## Known Limitations
 
-- **Godot not installed**: GDScript files are desk-check only; no runtime verification possible without Godot.
 - **Placeholder audio**: Audio assets are placeholders; actual audio files are not included.
-- **No real OBS/TikTok LIVE Studio testing**: Runbook instructions are based on documented behavior; real capture software has not been tested.
 - **Dashboard check**: Preflight dashboard reachability check requires the dashboard dev server to be running on port 5173.
+- **No real OBS/TikTok LIVE Studio testing**: Runbook instructions are based on documented behavior; real capture software has not been tested.

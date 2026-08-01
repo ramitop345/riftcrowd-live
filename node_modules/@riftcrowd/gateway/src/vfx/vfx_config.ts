@@ -48,6 +48,32 @@ export const VFXSafeZoneSchema = z
 export type VFXSafeZone = z.infer<typeof VFXSafeZoneSchema>;
 
 // ---------------------------------------------------------------------------
+// Per-tier multiplier table
+// ---------------------------------------------------------------------------
+
+const TierMultiplierSchema = z
+  .object({
+    particleMultiplier: z.number().positive(),
+    flashMultiplier: z.number().positive(),
+    trailMultiplier: z.number().positive(),
+    overlayMultiplier: z.number().positive(),
+  })
+  .strict();
+
+export type TierMultiplier = z.infer<typeof TierMultiplierSchema>;
+
+export const QualityTiersSchema = z
+  .object({
+    ultra: TierMultiplierSchema,
+    high: TierMultiplierSchema,
+    medium: TierMultiplierSchema,
+    low: TierMultiplierSchema,
+  })
+  .strict();
+
+export type QualityTiers = z.infer<typeof QualityTiersSchema>;
+
+// ---------------------------------------------------------------------------
 // Full VFX config
 // ---------------------------------------------------------------------------
 
@@ -59,6 +85,7 @@ export const VFXConfigSchema = z
     motionReduction: z.boolean().default(false),
     colorBlindMode: z.boolean().default(false),
     safeZone: VFXSafeZoneSchema,
+    qualityTiers: QualityTiersSchema.optional(),
   })
   .strict();
 
@@ -67,6 +94,14 @@ export type VFXConfig = z.infer<typeof VFXConfigSchema>;
 // ---------------------------------------------------------------------------
 // Defaults
 // ---------------------------------------------------------------------------
+
+/** Default per-tier multiplier tables. */
+export const QUALITY_TIER_DEFAULTS: QualityTiers = {
+  ultra: { particleMultiplier: 1.5, flashMultiplier: 1.5, trailMultiplier: 1.5, overlayMultiplier: 1.5 },
+  high: { particleMultiplier: 1.0, flashMultiplier: 1.0, trailMultiplier: 1.0, overlayMultiplier: 1.0 },
+  medium: { particleMultiplier: 0.5, flashMultiplier: 0.5, trailMultiplier: 0.5, overlayMultiplier: 0.5 },
+  low: { particleMultiplier: 0.25, flashMultiplier: 0.25, trailMultiplier: 0.25, overlayMultiplier: 0.25 },
+};
 
 export const VFX_DEFAULTS: VFXConfig = {
   pool: {
@@ -85,6 +120,7 @@ export const VFX_DEFAULTS: VFXConfig = {
     leftPx: 20,
     rightPx: 20,
   },
+  qualityTiers: QUALITY_TIER_DEFAULTS,
 };
 
 // ---------------------------------------------------------------------------
@@ -97,7 +133,12 @@ export function loadVFXConfig(configPath?: string): VFXConfig {
     join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'config', 'vfx.json');
   try {
     const raw = readFileSync(resolvedPath, 'utf8');
-    return VFXConfigSchema.parse(JSON.parse(raw));
+    const parsed = VFXConfigSchema.parse(JSON.parse(raw));
+    // Inject default qualityTiers if not present in JSON
+    if (!parsed.qualityTiers) {
+      parsed.qualityTiers = QUALITY_TIER_DEFAULTS;
+    }
+    return parsed;
   } catch {
     return { ...VFX_DEFAULTS };
   }

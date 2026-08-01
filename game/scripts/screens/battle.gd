@@ -41,6 +41,20 @@ var _faction_b: Dictionary = {}
 var _results_timer: float = -1.0
 var _max_fortress_health: float = 500.0
 
+# Orchestrator references (Tier 3 — programmatic instantiation)
+var _ws_client: WSClient = null
+var _dispatcher: CommandDispatcher = null
+var _vfx_pool: VFXPool = null
+var _audio_mgr: AudioManager = null
+var _readability: ReadabilityOverlay = null
+var _window_mgr: WindowManager = null
+var _fallback: FallbackScene = null
+var _preflight: PreflightScreen = null
+
+# Tier 4 — FRAME_REPORT sender state
+var _frame_report_timer: float = 0.0
+var _frame_times: Array = []  # rolling window of last 60 frame times (ms)
+
 
 func _ready() -> void:
 	Ui.apply_safe_margins(_safe_area)
@@ -94,6 +108,12 @@ func _ready() -> void:
 	_update_hud(_presenter.sandbox.world.get_snapshot() if _presenter.sandbox != null and _presenter.sandbox.world != null else {})
 	_speed1_btn.grab_focus()
 
+	# --- Tier 3: Programmatic orchestrator instantiation ---
+	_instantiate_orchestrators()
+	_wire_signals()
+	_connect_to_gateway()
+	_load_gateway_configs()
+
 
 func _process(delta: float) -> void:
 	if _presenter == null:
@@ -106,6 +126,9 @@ func _process(delta: float) -> void:
 	var snapshot: Dictionary = _presenter.present(delta)
 	if not snapshot.is_empty():
 		_update_hud(snapshot)
+
+	# Tier 4 — FRAME_REPORT sender
+	_tier4_frame_report_tick(delta)
 
 
 func _update_hud(snapshot: Dictionary) -> void:
@@ -204,3 +227,219 @@ func _on_round_completed(snapshot: Dictionary) -> void:
 		winner_name = str(_faction_b.get("displayName", "B"))
 	_spotlight_label.text = "Victory: %s (%s)" % [winner_name, vtype]
 	_results_timer = RESULTS_DELAY
+
+
+# ===========================================================================
+# Tier 3 — Orchestrator instantiation, signal wiring, gateway connection
+# ===========================================================================
+
+## Instantiate all orchestrator nodes programmatically (avoids editing Battle.tscn).
+func _instantiate_orchestrators() -> void:
+	var ws_client := WSClient.new()
+	ws_client.name = "WSClient"
+	add_child(ws_client)
+
+	var dispatcher := CommandDispatcher.new()
+	dispatcher.name = "CommandDispatcher"
+	add_child(dispatcher)
+
+	var vfx_pool := VFXPool.new()
+	vfx_pool.name = "VFXPool"
+	add_child(vfx_pool)
+
+	var audio_mgr := AudioManager.new()
+	audio_mgr.name = "AudioManager"
+	add_child(audio_mgr)
+
+	var readability := ReadabilityOverlay.new()
+	readability.name = "ReadabilityOverlay"
+	add_child(readability)
+
+	var window_mgr := WindowManager.new()
+	window_mgr.name = "WindowManager"
+	add_child(window_mgr)
+
+	var fallback := FallbackScene.new()
+	fallback.name = "FallbackScene"
+	fallback.visible = false
+	add_child(fallback)
+
+	var preflight := PreflightScreen.new()
+	preflight.name = "PreflightScreen"
+	preflight.visible = false
+	add_child(preflight)
+
+	_ws_client = ws_client
+	_dispatcher = dispatcher
+	_vfx_pool = vfx_pool
+	_audio_mgr = audio_mgr
+	_readability = readability
+	_window_mgr = window_mgr
+	_fallback = fallback
+	_preflight = preflight
+
+
+## Wire WSClient → CommandDispatcher → subsystem handlers.
+func _wire_signals() -> void:
+	# WSClient → CommandDispatcher
+	_ws_client.command_received.connect(_dispatcher.dispatch)
+
+	# CommandDispatcher → Battle handlers (Phase 15/16 orchestrators)
+	_dispatcher.spawn_vfx.connect(_on_spawn_vfx)
+	_dispatcher.play_audio.connect(_on_play_audio)
+	_dispatcher.activate_fallback.connect(_on_activate_fallback)
+	_dispatcher.deactivate_fallback.connect(_on_deactivate_fallback)
+	_dispatcher.set_window_mode.connect(_on_set_window_mode)
+	_dispatcher.spotlight_card.connect(_on_spotlight_card)
+	_dispatcher.supporter_callout.connect(_on_supporter_callout)
+	_dispatcher.camera_impulse.connect(_on_camera_impulse)
+
+	# Phase 17/Tier 4 — quality tier signal
+	_dispatcher.set_quality_tier.connect(_on_set_quality_tier)
+
+	# Phase 10/11/12 gameplay signals (connected for observability; stubs for Tier 4)
+	_dispatcher.gift_apply.connect(_on_gift_apply)
+	_dispatcher.faction_join.connect(_on_faction_join)
+	_dispatcher.display_spotlight.connect(_on_display_spotlight)
+	_dispatcher.end_round.connect(_on_end_round_cmd)
+
+
+## Connect WSClient to the gateway WebSocket.
+func _connect_to_gateway() -> void:
+	var token: String = OS.get_environment("RIFTCROWD_TOKEN")
+	if token.is_empty():
+		token = "change-me"  # dev fallback
+	_ws_client.connect_to_server("ws://127.0.0.1:8788/ws/game", token)
+
+
+## Load per-subsystem configs from gateway HTTP endpoints.
+func _load_gateway_configs() -> void:
+	_vfx_pool.load_config_from_gateway()
+	if _audio_mgr.has_method("load_config_from_gateway"):
+		_audio_mgr.call("load_config_from_gateway")
+	else:
+		push_warning("battle.gd: AudioManager lacks load_config_from_gateway()")
+	if _readability.has_method("load_config_from_gateway"):
+		_readability.call("load_config_from_gateway")
+	else:
+		push_warning("battle.gd: ReadabilityOverlay lacks load_config_from_gateway()")
+	# WindowManager loads its own config in _ready() via _load_config_from_gateway().
+
+
+# ---------------------------------------------------------------------------
+# Tier 3 signal handlers
+# ---------------------------------------------------------------------------
+
+func _on_spawn_vfx(cmd: Dictionary) -> void:
+	var vfx_type: String = str(cmd.get("vfxType", "particle"))
+	var params: Dictionary = {
+		"x": cmd.get("x", 540),
+		"y": cmd.get("y", 960),
+		"color": cmd.get("color", "#ffffff"),
+		"duration": cmd.get("duration", 1.0),
+	}
+	_vfx_pool.acquire(vfx_type, params)
+
+
+func _on_play_audio(cmd: Dictionary) -> void:
+	if _audio_mgr.has_method("_on_play_audio"):
+		_audio_mgr.call("_on_play_audio", cmd)
+
+
+func _on_activate_fallback(cmd: Dictionary) -> void:
+	_fallback.visible = true
+	if _fallback.has_method("handle_command"):
+		_fallback.call("handle_command", cmd)
+
+
+func _on_deactivate_fallback(cmd: Dictionary) -> void:
+	_fallback.visible = false
+	if _fallback.has_method("handle_command"):
+		_fallback.call("handle_command", cmd)
+
+
+func _on_set_window_mode(cmd: Dictionary) -> void:
+	if _window_mgr.has_method("set_mode"):
+		var mode: String = str(cmd.get("mode", "borderless"))
+		var portrait: bool = bool(cmd.get("portrait", true))
+		var width: int = int(cmd.get("width", 1080))
+		var height: int = int(cmd.get("height", 1920))
+		_window_mgr.call("set_mode", mode, portrait, width, height)
+
+
+func _on_spotlight_card(cmd: Dictionary) -> void:
+	var text: String = str(cmd.get("text", ""))
+	_spotlight_label.text = text
+
+
+func _on_supporter_callout(cmd: Dictionary) -> void:
+	var viewer: String = str(cmd.get("viewer", ""))
+	var amount: int = int(cmd.get("amount", 0))
+	_spotlight_label.text = "%s supported with %d!" % [viewer, amount]
+
+
+func _on_camera_impulse(cmd: Dictionary) -> void:
+	# Camera impulse is a visual effect — no Camera2D in Battle scene currently.
+	# Log for observability; implement in Tier 4 if needed.
+	push_warning("Camera impulse received: %s" % str(cmd))
+
+
+func _on_gift_apply(cmd: Dictionary) -> void:
+	# Stub — gift economy wiring deferred to Tier 4 gameplay integration.
+	push_warning("gift_apply received: %s (stub)" % str(cmd.get("type", "")))
+
+
+func _on_faction_join(cmd: Dictionary) -> void:
+	# Stub — faction join gameplay wiring deferred to Tier 4.
+	push_warning("faction_join received: %s (stub)" % str(cmd.get("type", "")))
+
+
+func _on_display_spotlight(cmd: Dictionary) -> void:
+	var text: String = str(cmd.get("text", ""))
+	if not text.is_empty():
+		_spotlight_label.text = text
+
+
+func _on_end_round_cmd(cmd: Dictionary) -> void:
+	# Forward to existing end-battle logic.
+	_on_end_battle_pressed()
+
+
+# ===========================================================================
+# Tier 4 — Quality tier handler + FRAME_REPORT sender
+# ===========================================================================
+
+func _on_set_quality_tier(cmd: Dictionary) -> void:
+	var tier: String = str(cmd.get("tier", "high"))
+	if _vfx_pool != null and _vfx_pool.has_method("set_quality_tier"):
+		_vfx_pool.set_quality_tier(tier)
+
+
+## Tick the frame report timer and send reports every ~1 second.
+func _tier4_frame_report_tick(delta: float) -> void:
+	_frame_times.append(delta * 1000.0)  # convert to ms
+	if _frame_times.size() > 60:
+		_frame_times.pop_front()
+	_frame_report_timer += delta
+	if _frame_report_timer >= 1.0:
+		_frame_report_timer = 0.0
+		_send_frame_report()
+
+
+## Compute avg/p95 frame times and send FRAME_REPORT to gateway.
+func _send_frame_report() -> void:
+	if _ws_client == null or _frame_times.is_empty():
+		return
+	var avg: float = 0.0
+	for t in _frame_times:
+		avg += t
+	avg /= _frame_times.size()
+	var sorted: Array = _frame_times.duplicate()
+	sorted.sort()
+	var p95: float = sorted[int(sorted.size() * 0.95)] if sorted.size() > 1 else avg
+	var report: Dictionary = {
+		"type": "FRAME_REPORT",
+		"avgFrameMs": avg,
+		"p95FrameMs": p95,
+	}
+	_ws_client.send_json(report)

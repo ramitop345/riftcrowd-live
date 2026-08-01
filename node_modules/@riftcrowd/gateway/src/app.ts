@@ -345,18 +345,23 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
 
         app.log.info('[Phase15] VFX, Audio, Readability orchestrators registered');
 
-        // Phase 16 (OBS Runbook) can integrate VFX/audio orchestrators here by
-        // registering pipeline rules:
-        // pipeline.rulesEngine.registerRule({
-        //   name: 'VFXRule',
-        //   applies: (e) => true,
-        //   execute: (e, ctx) => vfxOrchestrator.triggerVFX(e),
-        // });
-        // pipeline.rulesEngine.registerRule({
-        //   name: 'AudioRule',
-        //   applies: (e) => true,
-        //   execute: (e, ctx) => audioOrchestrator.triggerAudio(e),
-        // });
+        // Phase 16 (OBS Runbook): VFX/audio pipeline rules wired behind opt-in flag.
+        // Event-type guard prevents unnecessary calls for join/provider_status events
+        // which both orchestrators' switch statements would no-op anyway.
+        const VFX_AUDIO_EVENT_TYPES = new Set(['gift', 'follow', 'like', 'chat', 'share', 'subscribe']);
+
+        if (pipeline) {
+          pipeline.rulesEngine.registerRule({
+            name: 'VFXRule',
+            applies: (e) => VFX_AUDIO_EVENT_TYPES.has(e.type),
+            execute: (e, _ctx) => vfxOrchestrator.triggerVFX(e).commands,
+          });
+          pipeline.rulesEngine.registerRule({
+            name: 'AudioRule',
+            applies: (e) => VFX_AUDIO_EVENT_TYPES.has(e.type),
+            execute: (e, _ctx) => audioOrchestrator.triggerAudio(e).commands,
+          });
+        }
       } catch (err: unknown) {
         app.log.warn(`[Phase15] Failed to initialize: ${String(err)}`);
       }

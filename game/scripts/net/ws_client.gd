@@ -119,7 +119,7 @@ func disconnect_from_server() -> void:
 
 
 ## Returns true if the WebSocket is connected and handshake is complete.
-func is_connected() -> bool:
+func is_ws_connected() -> bool:
 	return _state == State.CONNECTED and _handshake_received
 
 
@@ -339,6 +339,11 @@ func _on_server_disconnect(msg: Dictionary) -> void:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+## Public API: send a JSON dictionary to the gateway (Tier 4: FRAME_REPORT, etc.).
+func send_json(data: Dictionary) -> void:
+	_send_json(data)
+
 
 func _send_json(data: Dictionary) -> void:
 	if _peer == null or _peer.get_ready_state() != 1:

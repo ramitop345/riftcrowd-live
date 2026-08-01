@@ -92,7 +92,7 @@ func bind_to_ws_client(ws: WSClient) -> void:
 		WSClient.State.CONNECTING:
 			set_state(ConnState.CONNECTING)
 		WSClient.State.CONNECTED:
-			if ws.is_connected():
+			if ws.is_ws_connected():
 				set_state(ConnState.CONNECTED)
 			else:
 				set_state(ConnState.CONNECTING)

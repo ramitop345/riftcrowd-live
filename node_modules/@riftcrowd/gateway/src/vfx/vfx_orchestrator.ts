@@ -13,7 +13,7 @@ import {
   type GameCommandType,
 } from '@riftcrowd/shared';
 import { VFXPool, type VFXParams, type VFXInstance, type VFXPoolStats } from './vfx_pool.js';
-import type { VFXConfig } from './vfx_config.js';
+import { type VFXConfig, type VFXQuality, QUALITY_TIER_DEFAULTS } from './vfx_config.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -23,6 +23,23 @@ export interface VFXCommandResult {
   commands: GameCommand[];
   vfxAcquired: VFXInstance | null;
   dropped: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Quality tier ladder
+// ---------------------------------------------------------------------------
+
+const QUALITY_TIERS: VFXQuality[] = ['low', 'medium', 'high', 'ultra'];
+
+export interface FrameReport {
+  avgFrameMs: number;
+  p95FrameMs: number;
+}
+
+export interface TierChangeEvent {
+  from: VFXQuality;
+  to: VFXQuality;
+  reason: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -54,9 +71,21 @@ export class VFXOrchestrator {
   /** Whether quality has been downgraded due to frame-rate budget overrun. */
   private qualityDowngraded = false;
 
+  // --- Tier 4: quality ladder state ---
+  private currentTier: VFXQuality = 'high';
+  private frameReports: FrameReport[] = [];
+  private readonly MAX_FRAME_REPORTS = 60;
+  private consecutiveOverSeconds = 0;
+  private consecutiveUnderSeconds = 0;
+  private lastTierChangeMs = 0;
+  private readonly HYSTERESIS_MS = 5000;
+  private tierChangeCallbacks: Array<(evt: TierChangeEvent) => void> = [];
+
   constructor(config: VFXConfig) {
     this.config = config;
     this.pool = new VFXPool(config);
+    // Initialize tier from config quality
+    this.currentTier = config.quality;
   }
 
   /** Main entry: decide which VFX to trigger based on event type. */
@@ -400,7 +429,14 @@ export class VFXOrchestrator {
 
   /** Quality multiplier for particle counts. */
   private getQualityMultiplier(): number {
-    switch (this.config.quality) {
+    // Use per-tier config if available
+    const tiers = this.config.qualityTiers ?? QUALITY_TIER_DEFAULTS;
+    const tierConfig = tiers[this.currentTier];
+    if (tierConfig) {
+      return tierConfig.particleMultiplier;
+    }
+    // Fallback
+    switch (this.currentTier) {
       case 'low':
         return 0.25;
       case 'medium':
@@ -457,5 +493,112 @@ export class VFXOrchestrator {
   /** Seed the rolling average (test-only hook for deterministic budget tests). */
   seedRollingAvg(ms: number): void {
     this.rollingAvgMs = ms;
+  }
+
+  // -------------------------------------------------------------------------
+  // Tier 4 — Frame report handling & automatic tier stepping
+  // -------------------------------------------------------------------------
+
+  /**
+   * Handle a frame performance report from Godot.
+   * Tracks rolling window and auto-steps quality tier based on frame time.
+   */
+  handleFrameReport(report: FrameReport): void {
+    this.frameReports.push(report);
+    if (this.frameReports.length > this.MAX_FRAME_REPORTS) {
+      this.frameReports.shift();
+    }
+
+    const budgetMs = 1000 / this.config.frameRateBudget;
+
+    // Check if average frame time exceeds budget
+    if (report.avgFrameMs > budgetMs) {
+      this.consecutiveOverSeconds++;
+      this.consecutiveUnderSeconds = 0;
+    } else {
+      this.consecutiveUnderSeconds++;
+      this.consecutiveOverSeconds = 0;
+    }
+
+    const now = Date.now();
+    const canChange = now - this.lastTierChangeMs >= this.HYSTERESIS_MS;
+
+    // Downgrade: 3 consecutive seconds over budget
+    if (this.consecutiveOverSeconds >= 3 && canChange) {
+      const idx = QUALITY_TIERS.indexOf(this.currentTier);
+      if (idx > 0) {
+        const from = this.currentTier;
+        this.currentTier = QUALITY_TIERS[idx - 1]!;
+        this.lastTierChangeMs = now;
+        this.consecutiveOverSeconds = 0;
+        this.emitTierChange(from, this.currentTier, 'frame time over budget for 3s');
+      }
+    }
+
+    // Upgrade: 5 consecutive seconds under budget
+    if (this.consecutiveUnderSeconds >= 5 && canChange) {
+      const idx = QUALITY_TIERS.indexOf(this.currentTier);
+      if (idx < QUALITY_TIERS.length - 1) {
+        const from = this.currentTier;
+        this.currentTier = QUALITY_TIERS[idx + 1]!;
+        this.lastTierChangeMs = now;
+        this.consecutiveUnderSeconds = 0;
+        this.emitTierChange(from, this.currentTier, 'frame time under budget for 5s');
+      }
+    }
+  }
+
+  /** Get the current quality tier. */
+  getQualityTier(): VFXQuality {
+    return this.currentTier;
+  }
+
+  /** Set quality tier directly (for testing or manual override). */
+  setQualityTier(tier: VFXQuality): void {
+    const from = this.currentTier;
+    this.currentTier = tier;
+    if (from !== tier) {
+      this.emitTierChange(from, tier, 'manual override');
+    }
+  }
+
+  /** Register a callback for tier change events. */
+  onTierChange(cb: (evt: TierChangeEvent) => void): void {
+    this.tierChangeCallbacks.push(cb);
+  }
+
+  /** Get the count of stored frame reports. */
+  getFrameReportCount(): number {
+    return this.frameReports.length;
+  }
+
+  /** Get the rolling average frame time from stored reports. */
+  getAvgFrameMs(): number {
+    if (this.frameReports.length === 0) return 0;
+    const sum = this.frameReports.reduce((acc, r) => acc + r.avgFrameMs, 0);
+    return sum / this.frameReports.length;
+  }
+
+  private emitTierChange(from: VFXQuality, to: VFXQuality, reason: string): void {
+    // Emit a SET_QUALITY_TIER command into the pipeline
+    const cmd: GameCommand = {
+      schemaVersion: COMMAND_SCHEMA_VERSION,
+      id: `quality_tier_${++this.cmdCounter}_${Date.now()}`,
+      type: 'SET_QUALITY_TIER',
+      createdAt: new Date().toISOString(),
+      sourceEventIds: [],
+      metadata: {
+        tier: to,
+        reason,
+        fromTier: from,
+      },
+    };
+    this.commands.push(cmd);
+
+    // Notify callbacks
+    const evt: TierChangeEvent = { from, to, reason };
+    for (const cb of this.tierChangeCallbacks) {
+      cb(evt);
+    }
   }
 }

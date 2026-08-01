@@ -4,10 +4,10 @@ import { z } from 'zod';
  * Version of the game-command contract. Bump this whenever a field is renamed, retyped, or removed,
  * or when an enum member changes. Additive optional fields do not require a bump.
  *
- * Phase 16: bumped to 5 — added SET_WINDOW_MODE, ACTIVATE_FALLBACK, DEACTIVATE_FALLBACK
- * command types for OBS/TikTok LIVE Studio streaming workflow.
+ * Phase 17/Tier 4: bumped to 6 — added FRAME_REPORT (Godot → gateway) and
+ * SET_QUALITY_TIER (gateway → Godot) command types for 4-tier VFX quality ladder.
  */
-export const COMMAND_SCHEMA_VERSION = 5;
+export const COMMAND_SCHEMA_VERSION = 6;
 
 /** The complete command vocabulary the Godot client understands. */
 export const GameCommandTypeSchema = z.enum([
@@ -37,6 +37,8 @@ export const GameCommandTypeSchema = z.enum([
   'SET_WINDOW_MODE',
   'ACTIVATE_FALLBACK',
   'DEACTIVATE_FALLBACK',
+  // Phase 17/Tier 4 — VFX quality ladder
+  'SET_QUALITY_TIER',
 ]);
 
 /** Flat primitives only: no nested objects, no arrays, no functions. Keys and strings are bounded. */
@@ -69,6 +71,33 @@ export const GameCommandSchema = z
 export type GameCommandType = z.infer<typeof GameCommandTypeSchema>;
 export type GameCommandMetadata = z.infer<typeof GameCommandMetadataSchema>;
 export type GameCommand = z.infer<typeof GameCommandSchema>;
+
+// ---------------------------------------------------------------------------
+// Tier 4 — FRAME_REPORT (Godot → gateway) and SET_QUALITY_TIER schemas
+// ---------------------------------------------------------------------------
+
+/** Frame performance report sent from Godot to gateway every ~1 second. */
+export const FrameReportSchema = z
+  .object({
+    type: z.literal('FRAME_REPORT'),
+    avgFrameMs: z.number().finite().min(0),
+    p95FrameMs: z.number().finite().min(0),
+  })
+  .strict();
+
+export type FrameReport = z.infer<typeof FrameReportSchema>;
+
+/** Quality tier command sent from gateway to Godot when auto-stepping. */
+export const SetQualityTierSchema = z
+  .object({
+    schemaVersion: z.literal(COMMAND_SCHEMA_VERSION),
+    type: z.literal('SET_QUALITY_TIER'),
+    tier: z.enum(['low', 'medium', 'high', 'ultra']),
+    reason: z.string().max(256).optional(),
+  })
+  .strict();
+
+export type SetQualityTier = z.infer<typeof SetQualityTierSchema>;
 
 /** All command types as a plain array, useful for exhaustive tests and dashboard test buttons. */
 export const GAME_COMMAND_TYPES: readonly GameCommandType[] = GameCommandTypeSchema.options;

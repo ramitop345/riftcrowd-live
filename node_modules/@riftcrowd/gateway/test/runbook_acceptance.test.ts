@@ -43,9 +43,9 @@ describe('Acceptance: fresh Windows user launches a mock stream from the runbook
 
   it('complete mock stream lifecycle (30+ assertions)', async () => {
     // =====================================================================
-    // ASSERTION 1-2: COMMAND_SCHEMA_VERSION is 5
+    // ASSERTION 1-2: COMMAND_SCHEMA_VERSION is 6
     // =====================================================================
-    expect(COMMAND_SCHEMA_VERSION).toBe(5);
+    expect(COMMAND_SCHEMA_VERSION).toBe(6);
     expect(GameCommandTypeSchema.options).toContain('SET_WINDOW_MODE');
 
     // =====================================================================

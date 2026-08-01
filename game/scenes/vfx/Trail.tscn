@@ -1,11 +1,4 @@
-[gd_scene format=3 uid="uid://trail_vfx"]
-
-[node name="Trail" type="Line2D"]
-width = 4.0
-default_color = Color(0.267, 1, 0.533, 1)
-
-[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
-autoplay = "trail_draw"
+[gd_scene load_steps=4 format=3 uid="uid://trail_vfx"]
 
 [sub_resource type="Animation" id="Animation_trail_draw"]
 resource_name = "trail_draw"
@@ -20,3 +13,16 @@ tracks/0/keys = {
 "update": 0,
 "values": [0.0, 4.0, 0.0]
 }
+
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_1"]
+_data = {
+"trail_draw": SubResource("Animation_trail_draw")
+}
+
+[node name="Trail" type="Line2D"]
+width = 4.0
+default_color = Color(0.267, 1, 0.533, 1)
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+libraries = [SubResource("AnimationLibrary_1")]
+autoplay = "trail_draw"

@@ -13,11 +13,17 @@ signal vfx_acquired(node: Node, vfx_type: String)
 ## Emitted when a VFX node is released back to the pool.
 signal vfx_released(node: Node)
 
+## Emitted when the quality tier changes (Tier 4).
+signal quality_tier_changed(new_tier: String)
+
 ## Per-type limits (loaded from gateway /vfx/config on startup).
 @export var max_particles: int = 100
 @export var max_flashes: int = 20
 @export var max_trails: int = 50
 @export var max_overlays: int = 30
+
+## Current quality tier (Tier 4). Default is "high".
+var quality_tier: String = "high"
 
 ## Preloaded VFX scene templates.
 @export var particle_scene: PackedScene
@@ -29,6 +35,7 @@ signal vfx_released(node: Node)
 var _pool: Dictionary = {}   ## type -> Array[Node]
 var _active: Dictionary = {} ## type -> int
 var _dropped: int = 0
+var _last_used: Dictionary = {} ## Node -> int (msec timestamp for LRU eviction)
 
 ## Stats for observability.
 var stats: Dictionary = {
@@ -87,6 +94,19 @@ func acquire(vfx_type: String, params: Dictionary) -> Node:
 	var max_count: int = _get_max(vfx_type)
 
 	if active_count >= max_count:
+		# Try LRU eviction before giving up
+		var evicted: Node = evict_lru(vfx_type)
+		if evicted != null:
+			if evicted is CanvasItem:
+				evicted.visible = true
+			else:
+				evicted.set_meta("active", true)
+			_apply_params(evicted, params)
+			_active[vfx_type] = active_count + 1
+			_last_used[evicted] = Time.get_ticks_msec()
+			_update_stats()
+			vfx_acquired.emit(evicted, vfx_type)
+			return evicted
 		_dropped += 1
 		_update_stats()
 		return null
@@ -97,6 +117,7 @@ func acquire(vfx_type: String, params: Dictionary) -> Node:
 			node.visible = true
 			_apply_params(node, params)
 			_active[vfx_type] = active_count + 1
+			_last_used[node] = Time.get_ticks_msec()
 			_update_stats()
 			vfx_acquired.emit(node, vfx_type)
 			return node
@@ -106,6 +127,7 @@ func acquire(vfx_type: String, params: Dictionary) -> Node:
 				node.set_meta("active", true)
 				_apply_params(node, params)
 				_active[vfx_type] = active_count + 1
+				_last_used[node] = Time.get_ticks_msec()
 				_update_stats()
 				vfx_acquired.emit(node, vfx_type)
 				return node
@@ -125,18 +147,30 @@ func release(node: Node) -> void:
 			else:
 				node.set_meta("active", false)
 			_active[vfx_type] = max(0, _active[vfx_type] - 1)
+			_last_used[node] = Time.get_ticks_msec()
 			_update_stats()
 			vfx_released.emit(node)
 			return
 
 
 ## Evict the oldest idle node (LRU) of the given type.
+## Tracks last_used timestamps to find the true least-recently-used idle node.
 func evict_lru(vfx_type: String) -> Node:
 	var pool_arr: Array = _pool.get(vfx_type, [])
+	var oldest_node: Node = null
+	var oldest_time: int = 9223372036854775807  # max int sentinel
 	for node in pool_arr:
-		if node is CanvasItem and not node.visible:
-			return node
-	return null
+		var is_idle: bool = false
+		if node is CanvasItem:
+			is_idle = not node.visible
+		else:
+			is_idle = not node.get_meta("active", false)
+		if is_idle:
+			var ts: int = _last_used.get(node, 0)
+			if ts < oldest_time:
+				oldest_time = ts
+				oldest_node = node
+	return oldest_node
 
 
 ## Get the max for a given VFX type.
@@ -197,3 +231,92 @@ func load_config_from_gateway(url: String = "http://127.0.0.1:8787/vfx/config") 
 		http.queue_free()
 	)
 	http.request(url)
+
+
+## ===========================================================================
+## Tier 4 — Quality tier management
+## ===========================================================================
+
+## Per-tier pool limits: ultra 1.5x, high 1.0x, medium 0.5x, low 0.25x.
+const TIER_LIMITS: Dictionary = {
+	"ultra": {"particles": 150, "flashes": 30, "trails": 75, "overlays": 45},
+	"high": {"particles": 100, "flashes": 20, "trails": 50, "overlays": 30},
+	"medium": {"particles": 50, "flashes": 10, "trails": 25, "overlays": 15},
+	"low": {"particles": 25, "flashes": 5, "trails": 12, "overlays": 7},
+}
+
+
+## Set the quality tier and scale pool limits accordingly.
+## When downgrading, release excess idle nodes (queue_free).
+## When upgrading, lazily re-instantiate on demand.
+func set_quality_tier(tier: String) -> void:
+	if tier == quality_tier:
+		return
+	if not TIER_LIMITS.has(tier):
+		push_warning("VFXPool: unknown quality tier '%s'" % tier)
+		return
+
+	var old_tier: String = quality_tier
+	quality_tier = tier
+
+	var limits: Dictionary = TIER_LIMITS[tier]
+	max_particles = int(limits["particles"])
+	max_flashes = int(limits["flashes"])
+	max_trails = int(limits["trails"])
+	max_overlays = int(limits["overlays"])
+
+	# When downgrading, release excess idle nodes
+	var old_limits: Dictionary = TIER_LIMITS[old_tier]
+	var tier_index_new: int = _tier_rank(tier)
+	var tier_index_old: int = _tier_rank(old_tier)
+	if tier_index_new < tier_index_old:
+		_trim_excess_idle("particle", max_particles)
+		_trim_excess_idle("flash", max_flashes)
+		_trim_excess_idle("trail", max_trails)
+		_trim_excess_idle("overlay", max_overlays)
+
+	_update_stats()
+	quality_tier_changed.emit(tier)
+
+
+## Get the rank of a tier (higher = better quality).
+func _tier_rank(tier: String) -> int:
+	match tier:
+		"low":
+			return 0
+		"medium":
+			return 1
+		"high":
+			return 2
+		"ultra":
+			return 3
+	return 2
+
+
+## Trim idle nodes of a given type if total exceeds new cap.
+func _trim_excess_idle(vfx_type: String, cap: int) -> void:
+	var pool_arr: Array = _pool.get(vfx_type, [])
+	var to_remove: Array = []
+	var total: int = pool_arr.size()
+	if total <= cap:
+		return
+	# Find idle nodes to remove (oldest first via LRU timestamp)
+	var idle_nodes: Array = []
+	for node in pool_arr:
+		var is_idle: bool = false
+		if node is CanvasItem:
+			is_idle = not node.visible
+		else:
+			is_idle = not node.get_meta("active", false)
+		if is_idle:
+			idle_nodes.append(node)
+	# Sort by last_used timestamp (oldest first)
+	idle_nodes.sort_custom(func(a: Node, b: Node) -> bool:
+		return _last_used.get(a, 0) < _last_used.get(b, 0)
+	)
+	var excess: int = total - cap
+	for i in range(mini(excess, idle_nodes.size())):
+		var node: Node = idle_nodes[i]
+		pool_arr.erase(node)
+		_last_used.erase(node)
+		node.queue_free()

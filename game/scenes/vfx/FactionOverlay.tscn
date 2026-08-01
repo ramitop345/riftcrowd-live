@@ -1,13 +1,4 @@
-[gd_scene format=3 uid="uid://faction_overlay"]
-
-[node name="FactionOverlay" type="TextureRect"]
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-stretch_mode = 5
-
-[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
-autoplay = "overlay_fade"
+[gd_scene load_steps=4 format=3 uid="uid://faction_overlay"]
 
 [sub_resource type="Animation" id="Animation_overlay_fade"]
 resource_name = "overlay_fade"
@@ -22,3 +13,18 @@ tracks/0/keys = {
 "update": 0,
 "values": [Color(1, 1, 1, 0), Color(1, 1, 1, 0.6), Color(1, 1, 1, 0.6), Color(1, 1, 1, 0)]
 }
+
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_1"]
+_data = {
+"overlay_fade": SubResource("Animation_overlay_fade")
+}
+
+[node name="FactionOverlay" type="TextureRect"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+stretch_mode = 5
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+libraries = [SubResource("AnimationLibrary_1")]
+autoplay = "overlay_fade"
