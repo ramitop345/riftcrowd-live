@@ -1,100 +1,50 @@
-import { useEffect, useState, type JSX } from 'react';
-
-const GATEWAY_HEALTH_URL = 'http://127.0.0.1:8787/health';
-
-type GatewayStatus = 'loading' | 'ok' | 'unreachable';
-
-interface HealthResponse {
-  status: string;
-  provider: string;
-  version: string;
-  timestamp: string;
-}
-
-const styles = {
-  page: {
-    fontFamily: 'system-ui, -apple-system, sans-serif',
-    minHeight: '100vh',
-    margin: 0,
-    padding: '2rem',
-    backgroundColor: '#0f1220',
-    color: '#e6e8f0',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '1.5rem',
-  },
-  statusRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    fontSize: '1.1rem',
-  },
-  dot: (color: string) => ({
-    display: 'inline-block',
-    width: '0.75rem',
-    height: '0.75rem',
-    borderRadius: '50%',
-    backgroundColor: color,
-  }),
-  footer: {
-    marginTop: 'auto',
-    fontSize: '0.85rem',
-    color: '#8a8fa3',
-  },
-} as const;
+/**
+ * Phase 13 — Creator Dashboard App.
+ * Sidebar navigation with page routing. No react-router needed for simple state-based routing.
+ */
+import { useState, type JSX } from 'react';
+import { Layout } from './components/Layout.js';
+import { StatusCards } from './components/StatusCards.js';
+import { ProviderSettings } from './components/ProviderSettings.js';
+import { ModeSelection } from './components/ModeSelection.js';
+import { GiftMapping } from './components/GiftMapping.js';
+import { Cooldown } from './components/Cooldown.js';
+import { ContentPacks } from './components/ContentPacks.js';
+import { TestEvents } from './components/TestEvents.js';
+import { EmergencyActions } from './components/EmergencyActions.js';
+import { AuthSettings } from './components/AuthSettings.js';
 
 export function App(): JSX.Element {
-  const [status, setStatus] = useState<GatewayStatus>('loading');
-  const [provider, setProvider] = useState<string | null>(null);
+  const [page, setPage] = useState('status');
 
-  useEffect(() => {
-    const controller = new AbortController();
-
-    fetch(GATEWAY_HEALTH_URL, { signal: controller.signal })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`Gateway responded with ${response.status}`);
-        }
-        return response.json() as Promise<HealthResponse>;
-      })
-      .then((health) => {
-        setProvider(health.provider);
-        setStatus('ok');
-      })
-      .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === 'AbortError') {
-          return;
-        }
-        setStatus('unreachable');
-      });
-
-    return () => {
-      controller.abort();
-    };
-  }, []);
+  const renderPage = (): JSX.Element => {
+    switch (page) {
+      case 'status':
+        return <StatusCards />;
+      case 'provider':
+        return <ProviderSettings />;
+      case 'mode':
+        return <ModeSelection />;
+      case 'gifts':
+        return <GiftMapping />;
+      case 'cooldowns':
+        return <Cooldown />;
+      case 'packs':
+        return <ContentPacks />;
+      case 'test-events':
+        return <TestEvents />;
+      case 'emergency':
+        return <EmergencyActions />;
+      case 'auth':
+        return <AuthSettings />;
+      default:
+        return <StatusCards />;
+    }
+  };
 
   return (
-    <div style={styles.page}>
-      <h1>RiftCrowd LIVE — Creator Dashboard</h1>
-      {status === 'loading' && (
-        <div style={styles.statusRow}>
-          <span style={styles.dot('#c9a227')} />
-          <span>Gateway: Checking…</span>
-        </div>
-      )}
-      {status === 'ok' && (
-        <div style={styles.statusRow}>
-          <span style={styles.dot('#2ecc71')} />
-          <span>Gateway: OK (provider: {provider})</span>
-        </div>
-      )}
-      {status === 'unreachable' && (
-        <div style={styles.statusRow}>
-          <span style={styles.dot('#e74c3c')} />
-          <span>Gateway: Unreachable</span>
-        </div>
-      )}
-      <footer style={styles.footer}>Phase 1 — Bootstrap</footer>
-    </div>
+    <Layout activePage={page} onNavigate={setPage}>
+      {renderPage()}
+    </Layout>
   );
 }

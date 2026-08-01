@@ -1,9 +1,9 @@
 # RiftCrowd LIVE — Project Status
 
 - **Working title:** RiftCrowd LIVE
-- **Current phase:** Phase 12 — Free Engagement Mechanics
+- **Current phase:** Phase 13 — Creator Dashboard
 - **Status:** COMPLETED
-- **Last updated:** 31 July 2026
+- **Last updated:** 1 August 2026
 
 ## Phase tracker
 
@@ -21,7 +21,7 @@
 - Phase 10 — Gateway-to-Godot WebSocket Integration: **COMPLETED**
 - Phase 11 — Gift Economy, Streaks, and Burst Aggregation: **COMPLETED**
 - Phase 12 — Free Engagement Mechanics: **COMPLETED**
-- Phase 13 — Creator Dashboard: not started
+- Phase 13 — Creator Dashboard: **COMPLETED**
 - Phase 14 — TikFinity Adapter: not started
 - Phase 15 — Visual Effects, Audio, and TikTok Readability: not started
 - Phase 16 — OBS and TikTok LIVE Studio Runbook: not started
@@ -854,6 +854,82 @@ Phase 7 known limitations:
   will be wired when the Godot sim bridge lands in Phase 8+.
 - **CRLF format drift is pre-existing.** Cosmetic only — lint, typecheck, and
   tests are unaffected.
+
+## Phase 13 — completed work
+
+Creator Dashboard — local React control panel for the streamer:
+
+- [x] **API Client Layer** (`dashboard/src/api/client.ts`): 26 typed fetch functions
+  returning `ApiResult<T>` (`{ ok, data, status } | { ok: false, error, status }`).
+  Token injected from `VITE_SESSION_TOKEN` env or localStorage override.
+  Functions: getHealth, getStatus, getConfig/updateConfig, getDirectorState,
+  skip/pause/resume/endRound/restart, postEvents/getEvents/getCommands, shutdown,
+  getGiftConfig/updateGiftConfig/getGiftPreview/getGiftStats,
+  getEngagementConfig/updateEngagementConfig/getEngagementStats/getTopContributors,
+  mockStart/mockStop/mockAdvance/mockState/mockRecord/mockReplay, hideUser.
+- [x] **Status Cards** (`dashboard/src/components/StatusCards.tsx`): 6 real-time cards
+  (Gateway, Provider, Game, Queue, Pipeline, Round) polling GET /status,
+  GET /director/state, GET /mock/state every 2 seconds. Stale indicator on fetch failure.
+- [x] **Provider Settings** (`dashboard/src/components/ProviderSettings.tsx`): pipeline
+  config form (rate limits, dedupe, queue capacity, log level). Zod-validated, submits
+  POST /config.
+- [x] **Mode Selection** (`dashboard/src/components/ModeSelection.tsx`): 4-mode radio
+  (countries/animals/clubs/cities), skip and restart actions. Submits POST /director/skip.
+- [x] **Gift Mapping** (`dashboard/src/components/GiftMapping.tsx`): table of giftId → tier
+  → impact loaded from GET /gifts/preview. Save sends POST /gifts/config.
+- [x] **Cooldowns** (`dashboard/src/components/Cooldown.tsx`): 5 cooldown timers
+  (perUser, perFaction, ability, cinematic, global). Zod-validated, submits POST /gifts/config.
+- [x] **Content Packs** (`dashboard/src/components/ContentPacks.tsx`): lists 4 installed
+  packs with metadata (mode, label, faction count).
+- [x] **Test Events** (`dashboard/src/components/TestEvents.tsx`): 7 scenario buttons
+  (normal_traffic, gift_streak, viral_burst, malformed_payloads, disconnect, reconnect,
+  four_mode_round). Start/Stop/Advance/Record/Replay controls. Real-time mock state display.
+- [x] **Emergency Actions** (`dashboard/src/components/EmergencyActions.tsx`): Pause,
+  End Round, Disable Gifts, Clear Queue, Reconnect, Hide User. All actions require
+  browser `confirm()` dialog before executing.
+- [x] **Auth Settings** (`dashboard/src/components/AuthSettings.tsx`): masked token input,
+  Test Connection (GET /health), Save/Clear localStorage.
+- [x] **Layout & Navigation** (`dashboard/src/App.tsx`, `Layout.tsx`): sidebar with 9 nav
+  items, header with connection status dot + director state + mode. State-based routing
+  (no react-router). Responsive dark theme (`styles.ts`).
+- [x] **Gateway Integration** (`gateway/src/routes/viewer_routes.ts`): new POST /viewer/hide
+  and POST /viewer/unhide endpoints with token auth. `server.ts` enables all feature flags
+  (director, mock routes, gift economy, free engagement, viewer routes).
+  7 gateway tests covering auth, validation, success paths.
+- [x] **Vite Dev Proxy** (`dashboard/vite.config.ts`): 11 API path prefixes proxied to
+  `127.0.0.1:8787`. Vitest configured (jsdom, setup file, src + test includes).
+- [x] **Tests**: 80 tests across 8 files — API client (26), StatusCards (8), Config
+  screens (12), TestEvents (9), EmergencyActions (10), AuthSettings (7), App/Layout (7),
+  E2E (1 test with 24 assertions covering complete mock stream workflow).
+- [x] **Docs** (`docs/CREATOR_DASHBOARD.md`): quick start, auth, all 9 screens, API client
+  table, architecture, testing, known limitations.
+
+Commands run and results:
+
+- `npm run lint` — **PASS** (zero errors/warnings)
+- `npm run typecheck` — **PASS** (shared, gateway, dashboard all clean)
+- `npm test` — **PASS** (733 tests: 653 gateway + 80 dashboard, all passing)
+- `npm run validate:packs` — **PASS** (exit 0; 4 packs checked, 4 passed, 0 warnings)
+- `npm run build` (dashboard) — **PASS** (dist/ with index.html + 276 KB JS, ~80 KB gzipped)
+
+Phase 13 known limitations:
+
+- **No WebSocket push.** Status cards use HTTP polling (2 s interval). Real-time push
+  from gateway is deferred.
+- **Gift mapping UI is basic.** Inline per-mapping editing is not implemented; the full
+  config must be saved via POST /gifts/config.
+- **Content pack preview** depends on Phase 4 asset-validation tooling; only metadata
+  is shown.
+- **No mobile app.** The dashboard is responsive web only.
+- **Cooldown config** requires a full GiftEconomyConfig payload for hot-reload; partial
+  patches return 400.
+- **Godot not installed.** All gateway-side GDScript is hand-authored and desk-checked.
+- **E2E uses mocked fetch.** Playwright browser E2E deferred; the current E2E test
+  simulates gateway responses in jsdom.
+
+**Next phase: Phase 14 — TikFinity Adapter** (real provider integration via a
+configurable WebSocket adapter for receiving LIVE events from TikFinity or
+equivalent platform).
 
 ## Phase 8 — completed work
 

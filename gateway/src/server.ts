@@ -11,7 +11,20 @@ import { Logger, createLogger } from './util/logger.js';
 const pino = createLogger(config.logLevel);
 const logger = new Logger(pino);
 
-const app = buildApp({ enableWs: true });
+// FIX 1 (Phase 13): Only expose /mock/* routes when the gateway is running in
+// mock provider mode (LIVE_PROVIDER === 'mock' or unset). In production with
+// a real provider, /mock/start|stop|advance|record|replay must not be reachable.
+const isMockProvider =
+  process.env['LIVE_PROVIDER'] === 'mock' || !process.env['LIVE_PROVIDER'];
+
+const app = buildApp({
+  enableWs: true,
+  enableDirector: true,
+  enableMockRoutes: isMockProvider,
+  enableGiftEconomy: true,
+  enableFreeEngagement: true,
+  enableViewerRoutes: true,
+});
 
 let shuttingDown = false;
 

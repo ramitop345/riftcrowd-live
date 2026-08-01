@@ -245,4 +245,19 @@ export function registerGatewayRoutes(
     const commands = pipeline.commandQueue.drain();
     reply.send({ commands, count: commands.length });
   });
+
+  // -------------------------------------------------------------------------
+  // POST /control/drain — token required (explicitly drain command queue)
+  // Phase 13 FIX 2: dashboard's "Clear Queue" button previously called the
+  // read-only GET /commands endpoint and displayed a misleading success
+  // message. This explicit POST endpoint drains the queue and returns the
+  // count of commands actually removed.
+  // -------------------------------------------------------------------------
+  app.post('/control/drain', (request, reply) => {
+    if (!validateToken(request, reply)) return;
+
+    const drained = pipeline.commandQueue.clear();
+    routesLogger.info('routes', 'POST /control/drain — queue drained', { drained });
+    reply.send({ ok: true, drained });
+  });
 }

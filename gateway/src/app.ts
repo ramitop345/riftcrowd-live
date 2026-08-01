@@ -16,6 +16,7 @@ import { registerGatewayRoutes } from './routes/gateway_routes.js';
 import { registerMockRoutes } from './routes/mock_routes.js';
 import { registerGiftRoutes } from './routes/gift_routes.js';
 import { registerEngagementRoutes } from './routes/engagement_routes.js';
+import { registerViewerRoutes } from './routes/viewer_routes.js';
 import { WsServer } from './ws/ws_server.js';
 import { GiftEconomy } from './gifts/gift_economy.js';
 import { FreeEngagement } from './engagement/free_engagement.js';
@@ -38,6 +39,8 @@ export interface BuildAppOptions {
   enableGiftEconomy?: boolean;
   /** Enable Phase 12 free engagement routes. Opt-in: defaults to false. */
   enableFreeEngagement?: boolean;
+  /** Enable Phase 13 viewer moderation routes. Opt-in: defaults to false. */
+  enableViewerRoutes?: boolean;
 }
 
 /**
@@ -260,6 +263,11 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       } catch (err: unknown) {
         app.log.warn(`[FreeEngagement] Failed to initialize: ${String(err)}`);
       }
+    }
+
+    // Phase 13: Viewer moderation routes (opt-in via enableViewerRoutes: true)
+    if (options.enableViewerRoutes === true && director) {
+      registerViewerRoutes(app, { director });
     }
 
     // Phase 10: WebSocket server (opt-in via enableWs: true)
