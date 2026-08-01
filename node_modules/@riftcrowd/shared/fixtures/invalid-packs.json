@@ -1,0 +1,352 @@
+[
+  {
+    "label": "wrong-schema-version",
+    "reason": "`schemaVersion` must be the literal 1; version 2 is unsupported.",
+    "expectedInvalidPath": ["schemaVersion"],
+    "pack": {
+      "schemaVersion": 2,
+      "id": "bad_version_pack",
+      "displayName": "Bad Version Pack",
+      "mode": "animals",
+      "factions": [
+        {
+          "id": "foxes",
+          "displayName": "Foxes",
+          "joinKeywords": ["fox", "1"],
+          "primaryColor": "#C2571B",
+          "secondaryColor": "#F4E3D0",
+          "pattern": "ember_tail",
+          "captainScene": "res://scenes/units/captain_foxes.tscn",
+          "ultimateId": "ember_dash"
+        },
+        {
+          "id": "owls",
+          "displayName": "Owls",
+          "joinKeywords": ["owl", "2"],
+          "primaryColor": "#4B4237",
+          "secondaryColor": "#D8CBB3",
+          "pattern": "night_watch",
+          "captainScene": "res://scenes/units/captain_owls.tscn",
+          "ultimateId": "silent_dive"
+        }
+      ]
+    }
+  },
+  {
+    "label": "missing-mode",
+    "reason": "Required field `mode` is absent.",
+    "expectedInvalidPath": ["mode"],
+    "pack": {
+      "schemaVersion": 1,
+      "id": "missing_mode_pack",
+      "displayName": "Missing Mode Pack",
+      "factions": [
+        {
+          "id": "foxes",
+          "displayName": "Foxes",
+          "joinKeywords": ["fox", "1"],
+          "primaryColor": "#C2571B",
+          "secondaryColor": "#F4E3D0",
+          "pattern": "ember_tail",
+          "captainScene": "res://scenes/units/captain_foxes.tscn",
+          "ultimateId": "ember_dash"
+        },
+        {
+          "id": "owls",
+          "displayName": "Owls",
+          "joinKeywords": ["owl", "2"],
+          "primaryColor": "#4B4237",
+          "secondaryColor": "#D8CBB3",
+          "pattern": "night_watch",
+          "captainScene": "res://scenes/units/captain_owls.tscn",
+          "ultimateId": "silent_dive"
+        }
+      ]
+    }
+  },
+  {
+    "label": "invalid-mode",
+    "reason": "`mode` is not a member of ContentPackMode.",
+    "expectedInvalidPath": ["mode"],
+    "pack": {
+      "schemaVersion": 1,
+      "id": "invalid_mode_pack",
+      "displayName": "Invalid Mode Pack",
+      "mode": "planets",
+      "factions": [
+        {
+          "id": "foxes",
+          "displayName": "Foxes",
+          "joinKeywords": ["fox", "1"],
+          "primaryColor": "#C2571B",
+          "secondaryColor": "#F4E3D0",
+          "pattern": "ember_tail",
+          "captainScene": "res://scenes/units/captain_foxes.tscn",
+          "ultimateId": "ember_dash"
+        },
+        {
+          "id": "owls",
+          "displayName": "Owls",
+          "joinKeywords": ["owl", "2"],
+          "primaryColor": "#4B4237",
+          "secondaryColor": "#D8CBB3",
+          "pattern": "night_watch",
+          "captainScene": "res://scenes/units/captain_owls.tscn",
+          "ultimateId": "silent_dive"
+        }
+      ]
+    }
+  },
+  {
+    "label": "too-few-factions",
+    "reason": "`factions` requires at least 2 entries; only 1 supplied.",
+    "expectedInvalidPath": ["factions"],
+    "pack": {
+      "schemaVersion": 1,
+      "id": "lonely_pack",
+      "displayName": "Lonely Pack",
+      "mode": "animals",
+      "factions": [
+        {
+          "id": "foxes",
+          "displayName": "Foxes",
+          "joinKeywords": ["fox", "1"],
+          "primaryColor": "#C2571B",
+          "secondaryColor": "#F4E3D0",
+          "pattern": "ember_tail",
+          "captainScene": "res://scenes/units/captain_foxes.tscn",
+          "ultimateId": "ember_dash"
+        }
+      ]
+    }
+  },
+  {
+    "label": "too-many-factions",
+    "reason": "`factions` allows at most 4 entries; 5 supplied.",
+    "expectedInvalidPath": ["factions"],
+    "pack": {
+      "schemaVersion": 1,
+      "id": "crowded_pack",
+      "displayName": "Crowded Pack",
+      "mode": "animals",
+      "factions": [
+        {
+          "id": "foxes",
+          "displayName": "Foxes",
+          "joinKeywords": ["fox", "1"],
+          "primaryColor": "#C2571B",
+          "secondaryColor": "#F4E3D0",
+          "pattern": "ember_tail",
+          "captainScene": "res://scenes/units/captain_foxes.tscn",
+          "ultimateId": "ember_dash"
+        },
+        {
+          "id": "owls",
+          "displayName": "Owls",
+          "joinKeywords": ["owl", "2"],
+          "primaryColor": "#4B4237",
+          "secondaryColor": "#D8CBB3",
+          "pattern": "night_watch",
+          "captainScene": "res://scenes/units/captain_owls.tscn",
+          "ultimateId": "silent_dive"
+        },
+        {
+          "id": "boars",
+          "displayName": "Boars",
+          "joinKeywords": ["boar", "3"],
+          "primaryColor": "#6B4A2F",
+          "secondaryColor": "#D9C6A5",
+          "pattern": "tusk_line",
+          "captainScene": "res://scenes/units/captain_boars.tscn",
+          "ultimateId": "tusk_charge"
+        },
+        {
+          "id": "cranes",
+          "displayName": "Cranes",
+          "joinKeywords": ["crane", "4"],
+          "primaryColor": "#8FA6B8",
+          "secondaryColor": "#F0F4F7",
+          "pattern": "wing_fold",
+          "captainScene": "res://scenes/units/captain_cranes.tscn",
+          "ultimateId": "wind_step"
+        },
+        {
+          "id": "toads",
+          "displayName": "Toads",
+          "joinKeywords": ["toad", "5"],
+          "primaryColor": "#5A7247",
+          "secondaryColor": "#C9D6B8",
+          "pattern": "pond_ring",
+          "captainScene": "res://scenes/units/captain_toads.tscn",
+          "ultimateId": "bog_slam"
+        }
+      ]
+    }
+  },
+  {
+    "label": "bad-hex-color",
+    "reason": "`primaryColor` is not a `#RRGGBB` hex color.",
+    "expectedInvalidPath": ["factions", 0, "primaryColor"],
+    "pack": {
+      "schemaVersion": 1,
+      "id": "bad_color_pack",
+      "displayName": "Bad Color Pack",
+      "mode": "animals",
+      "factions": [
+        {
+          "id": "foxes",
+          "displayName": "Foxes",
+          "joinKeywords": ["fox", "1"],
+          "primaryColor": "#GGHHII",
+          "secondaryColor": "#F4E3D0",
+          "pattern": "ember_tail",
+          "captainScene": "res://scenes/units/captain_foxes.tscn",
+          "ultimateId": "ember_dash"
+        },
+        {
+          "id": "owls",
+          "displayName": "Owls",
+          "joinKeywords": ["owl", "2"],
+          "primaryColor": "#4B4237",
+          "secondaryColor": "#D8CBB3",
+          "pattern": "night_watch",
+          "captainScene": "res://scenes/units/captain_owls.tscn",
+          "ultimateId": "silent_dive"
+        }
+      ]
+    }
+  },
+  {
+    "label": "uppercase-faction-id",
+    "reason": "Faction ids must be lowercase snake_case; `Foxes` starts with an uppercase letter.",
+    "expectedInvalidPath": ["factions", 0, "id"],
+    "pack": {
+      "schemaVersion": 1,
+      "id": "uppercase_id_pack",
+      "displayName": "Uppercase Id Pack",
+      "mode": "animals",
+      "factions": [
+        {
+          "id": "Foxes",
+          "displayName": "Foxes",
+          "joinKeywords": ["fox", "1"],
+          "primaryColor": "#C2571B",
+          "secondaryColor": "#F4E3D0",
+          "pattern": "ember_tail",
+          "captainScene": "res://scenes/units/captain_foxes.tscn",
+          "ultimateId": "ember_dash"
+        },
+        {
+          "id": "owls",
+          "displayName": "Owls",
+          "joinKeywords": ["owl", "2"],
+          "primaryColor": "#4B4237",
+          "secondaryColor": "#D8CBB3",
+          "pattern": "night_watch",
+          "captainScene": "res://scenes/units/captain_owls.tscn",
+          "ultimateId": "silent_dive"
+        }
+      ]
+    }
+  },
+  {
+    "label": "duplicate-faction-ids",
+    "reason": "Faction ids must be unique within a pack; superRefine reports the second `foxes` entry.",
+    "expectedInvalidPath": ["factions", 1, "id"],
+    "pack": {
+      "schemaVersion": 1,
+      "id": "duplicate_id_pack",
+      "displayName": "Duplicate Id Pack",
+      "mode": "animals",
+      "factions": [
+        {
+          "id": "foxes",
+          "displayName": "Foxes",
+          "joinKeywords": ["fox", "1"],
+          "primaryColor": "#C2571B",
+          "secondaryColor": "#F4E3D0",
+          "pattern": "ember_tail",
+          "captainScene": "res://scenes/units/captain_foxes.tscn",
+          "ultimateId": "ember_dash"
+        },
+        {
+          "id": "foxes",
+          "displayName": "Other Foxes",
+          "joinKeywords": ["owl", "2"],
+          "primaryColor": "#4B4237",
+          "secondaryColor": "#D8CBB3",
+          "pattern": "night_watch",
+          "captainScene": "res://scenes/units/captain_foxes.tscn",
+          "ultimateId": "silent_dive"
+        }
+      ]
+    }
+  },
+  {
+    "label": "keyword-collision-case-insensitive",
+    "reason": "`FOX` in the second faction collides case-insensitively with `fox` in the first; superRefine reports the colliding duplicate.",
+    "expectedInvalidPath": ["factions", 1, "joinKeywords", 0],
+    "pack": {
+      "schemaVersion": 1,
+      "id": "keyword_clash_pack",
+      "displayName": "Keyword Clash Pack",
+      "mode": "animals",
+      "factions": [
+        {
+          "id": "foxes",
+          "displayName": "Foxes",
+          "joinKeywords": ["fox", "1"],
+          "primaryColor": "#C2571B",
+          "secondaryColor": "#F4E3D0",
+          "pattern": "ember_tail",
+          "captainScene": "res://scenes/units/captain_foxes.tscn",
+          "ultimateId": "ember_dash"
+        },
+        {
+          "id": "owls",
+          "displayName": "Owls",
+          "joinKeywords": ["FOX", "owl", "2"],
+          "primaryColor": "#4B4237",
+          "secondaryColor": "#D8CBB3",
+          "pattern": "night_watch",
+          "captainScene": "res://scenes/units/captain_owls.tscn",
+          "ultimateId": "silent_dive"
+        }
+      ]
+    }
+  },
+  {
+    "label": "unknown-extra-key",
+    "reason": "Unknown key `theme` is rejected because the schema is strict(). Zod reports unrecognized_keys at the object root, so the expected path is [].",
+    "expectedInvalidPath": [],
+    "pack": {
+      "schemaVersion": 1,
+      "id": "extra_key_pack",
+      "displayName": "Extra Key Pack",
+      "mode": "animals",
+      "theme": "dark",
+      "factions": [
+        {
+          "id": "foxes",
+          "displayName": "Foxes",
+          "joinKeywords": ["fox", "1"],
+          "primaryColor": "#C2571B",
+          "secondaryColor": "#F4E3D0",
+          "pattern": "ember_tail",
+          "captainScene": "res://scenes/units/captain_foxes.tscn",
+          "ultimateId": "ember_dash"
+        },
+        {
+          "id": "owls",
+          "displayName": "Owls",
+          "joinKeywords": ["owl", "2"],
+          "primaryColor": "#4B4237",
+          "secondaryColor": "#D8CBB3",
+          "pattern": "night_watch",
+          "captainScene": "res://scenes/units/captain_owls.tscn",
+          "ultimateId": "silent_dive"
+        }
+      ]
+    }
+  }
+]

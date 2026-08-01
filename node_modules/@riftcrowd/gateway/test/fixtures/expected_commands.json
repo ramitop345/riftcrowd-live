@@ -1,0 +1,62 @@
+[
+  {
+    "eventId": "p8-evt-001",
+    "label": "chat mode vote (countries)",
+    "expectedCommands": [],
+    "expectedRulesTriggered": ["ModeVoteRule"]
+  },
+  {
+    "eventId": "p8-evt-002",
+    "label": "chat faction join (faction_alpha)",
+    "expectedCommands": ["JOIN_FACTION"],
+    "expectedRulesTriggered": ["JoinFactionRule"]
+  },
+  {
+    "eventId": "p8-evt-003",
+    "label": "like event",
+    "expectedCommands": [],
+    "expectedRulesTriggered": []
+  },
+  {
+    "eventId": "p8-evt-004",
+    "label": "follow event",
+    "expectedCommands": [],
+    "expectedRulesTriggered": []
+  },
+  {
+    "eventId": "p8-evt-005",
+    "label": "chat creator command (!end_round)",
+    "expectedCommands": ["END_ROUND"],
+    "expectedRulesTriggered": ["EndRoundRule"]
+  },
+  {
+    "eventId": "p8-evt-006",
+    "label": "chat creator command (!pause)",
+    "expectedCommands": ["PAUSE_EVENTS"],
+    "expectedRulesTriggered": ["PauseRule"]
+  },
+  {
+    "eventId": "p8-evt-007",
+    "label": "gift event",
+    "expectedCommands": [],
+    "expectedRulesTriggered": []
+  },
+  {
+    "eventId": "p8-evt-008",
+    "label": "chat kick command (!kick)",
+    "expectedCommands": [],
+    "expectedRulesTriggered": ["KickRule"]
+  },
+  {
+    "eventId": "p8-evt-009",
+    "label": "join event",
+    "expectedCommands": [],
+    "expectedRulesTriggered": []
+  },
+  {
+    "eventId": "p8-evt-010",
+    "label": "chat unrecognized text",
+    "expectedCommands": [],
+    "expectedRulesTriggered": []
+  }
+]

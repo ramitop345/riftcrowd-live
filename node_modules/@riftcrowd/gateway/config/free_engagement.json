@@ -1,0 +1,44 @@
+{
+  "likeMilestones": [
+    { "count": 10, "reward": { "type": "add_energy", "magnitude": 5 } },
+    { "count": 50, "reward": { "type": "add_score", "magnitude": 10 } },
+    { "count": 100, "reward": { "type": "add_energy", "magnitude": 20 } },
+    { "count": 500, "reward": { "type": "add_score", "magnitude": 50 } }
+  ],
+  "followGuardian": {
+    "enabled": true,
+    "durationMs": 30000,
+    "cooldownMs": 60000,
+    "championType": "guardian"
+  },
+  "shareShield": {
+    "enabled": true,
+    "durationMs": 15000,
+    "cooldownMs": 30000,
+    "magnitude": 10
+  },
+  "strategyVote": {
+    "windowMs": 30000,
+    "minVotes": 5,
+    "options": ["rush", "defend", "focus", "retreat"]
+  },
+  "freeEnergyAbility": {
+    "cooldownMs": 30000,
+    "magnitude": 5,
+    "maxPerViewerPerRound": 3
+  },
+  "spam": {
+    "maxCommentsPerWindowMs": 5,
+    "windowMs": 10000,
+    "duplicateVoteWindowMs": 60000
+  },
+  "topContributor": {
+    "enabled": true,
+    "rewardType": "spotlight",
+    "magnitude": 1
+  },
+  "bounds": {
+    "maxActiveGuardiansPerFaction": 3,
+    "maxActiveShieldsPerFaction": 5
+  }
+}

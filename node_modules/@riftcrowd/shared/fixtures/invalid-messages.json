@@ -1,0 +1,93 @@
+[
+  {
+    "label": "unknown-kind",
+    "reason": "`kind` is not a member of the protocol message union.",
+    "expectedInvalidPath": ["kind"],
+    "event": {
+      "protocolVersion": 1,
+      "kind": "handshake",
+      "sentAt": "2026-07-30T18:20:00.000Z"
+    }
+  },
+  {
+    "label": "missing-protocol-version",
+    "reason": "Required field `protocolVersion` is absent.",
+    "expectedInvalidPath": ["protocolVersion"],
+    "event": {
+      "kind": "heartbeat",
+      "sentAt": "2026-07-30T18:20:01.000Z",
+      "sequence": 7
+    }
+  },
+  {
+    "label": "unsupported-protocol-version",
+    "reason": "`protocolVersion` must be the literal 1; version 2 is unsupported.",
+    "expectedInvalidPath": ["protocolVersion"],
+    "event": {
+      "protocolVersion": 2,
+      "kind": "heartbeat",
+      "sentAt": "2026-07-30T18:20:02.000Z",
+      "sequence": 8
+    }
+  },
+  {
+    "label": "ack-missing-command-id",
+    "reason": "`commandId` is required on ack messages.",
+    "expectedInvalidPath": ["commandId"],
+    "event": {
+      "protocolVersion": 1,
+      "kind": "ack",
+      "receivedAt": "2026-07-30T18:20:03.000Z"
+    }
+  },
+  {
+    "label": "heartbeat-negative-sequence",
+    "reason": "`sequence` must be a non-negative integer; negative values are rejected.",
+    "expectedInvalidPath": ["sequence"],
+    "event": {
+      "protocolVersion": 1,
+      "kind": "heartbeat",
+      "sentAt": "2026-07-30T18:20:04.000Z",
+      "sequence": -1
+    }
+  },
+  {
+    "label": "event-message-malformed-event",
+    "reason": "The embedded event is missing `rawHash`, so the envelope is rejected.",
+    "expectedInvalidPath": ["event", "rawHash"],
+    "event": {
+      "protocolVersion": 1,
+      "kind": "event",
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt-bad-1001",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "2026-07-30T18:20:05.000Z",
+        "user": {
+          "id": "viewer-3001",
+          "handle": "bad.envelope.one",
+          "displayName": "Bad Envelope One"
+        },
+        "comment": "lions"
+      }
+    }
+  },
+  {
+    "label": "command-message-malformed-command",
+    "reason": "The embedded command is missing `sourceEventIds`, so the envelope is rejected.",
+    "expectedInvalidPath": ["command", "sourceEventIds"],
+    "event": {
+      "protocolVersion": 1,
+      "kind": "command",
+      "command": {
+        "schemaVersion": 1,
+        "id": "cmd-bad-1001",
+        "type": "ADD_ENERGY",
+        "createdAt": "2026-07-30T18:20:06.000Z",
+        "factionId": "faction-lions",
+        "amount": 5
+      }
+    }
+  }
+]

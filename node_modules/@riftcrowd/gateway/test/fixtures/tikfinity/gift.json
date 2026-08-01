@@ -1,0 +1,13 @@
+{
+  "type": "gift",
+  "user": {
+    "id": "user_006",
+    "nickname": "viewer_zeta",
+    "profilePictureUrl": "https://example.com/avatar/user_006.jpg"
+  },
+  "giftId": "gift_rose_001",
+  "giftName": "Rose",
+  "coinCount": 100,
+  "repeatCount": 3,
+  "timestamp": 1722500005000
+}

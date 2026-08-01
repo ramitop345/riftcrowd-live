@@ -1,0 +1,134 @@
+[
+  {
+    "label": "null-input",
+    "reason": "Input must be a non-null object.",
+    "event": null
+  },
+  {
+    "label": "missing-id",
+    "reason": "Required field id is absent.",
+    "event": {
+      "schemaVersion": 1,
+      "provider": "mock",
+      "type": "chat",
+      "receivedAt": "2026-07-31T13:00:00.000Z",
+      "user": { "id": "v-201", "handle": "bad.one", "displayName": "Bad One" },
+      "comment": "hello",
+      "rawHash": "sha256:bbbb000000000000000000000000000000000000000000000000000000000001"
+    }
+  },
+  {
+    "label": "unknown-event-type",
+    "reason": "type is not a valid LiveEventType.",
+    "event": {
+      "schemaVersion": 1,
+      "id": "p8-bad-002",
+      "provider": "mock",
+      "type": "superchat",
+      "receivedAt": "2026-07-31T13:00:01.000Z",
+      "user": { "id": "v-202", "handle": "bad.two", "displayName": "Bad Two" },
+      "rawHash": "sha256:bbbb000000000000000000000000000000000000000000000000000000000002"
+    }
+  },
+  {
+    "label": "wrong-type-for-likeCount",
+    "reason": "likeCount must be a number, not a string.",
+    "event": {
+      "schemaVersion": 1,
+      "id": "p8-bad-003",
+      "provider": "mock",
+      "type": "like",
+      "receivedAt": "2026-07-31T13:00:02.000Z",
+      "user": { "id": "v-203", "handle": "bad.three", "displayName": "Bad Three" },
+      "likeCount": "25",
+      "rawHash": "sha256:bbbb000000000000000000000000000000000000000000000000000000000003"
+    }
+  },
+  {
+    "label": "missing-user-handle",
+    "reason": "user.handle is required.",
+    "event": {
+      "schemaVersion": 1,
+      "id": "p8-bad-004",
+      "provider": "mock",
+      "type": "join",
+      "receivedAt": "2026-07-31T13:00:03.000Z",
+      "user": { "id": "v-204", "displayName": "Bad Four" },
+      "rawHash": "sha256:bbbb000000000000000000000000000000000000000000000000000000000004"
+    }
+  },
+  {
+    "label": "gift-repeat-zero",
+    "reason": "gift.repeatCount must be positive; zero is rejected.",
+    "event": {
+      "schemaVersion": 1,
+      "id": "p8-bad-005",
+      "provider": "mock",
+      "type": "gift",
+      "receivedAt": "2026-07-31T13:00:04.000Z",
+      "user": { "id": "v-205", "handle": "bad.five", "displayName": "Bad Five" },
+      "gift": { "id": "gift-rose", "name": "Rose", "repeatCount": 0 },
+      "rawHash": "sha256:bbbb000000000000000000000000000000000000000000000000000000000005"
+    }
+  },
+  {
+    "label": "unknown-extra-field",
+    "reason": "Unknown key extraField is rejected by strict schema.",
+    "event": {
+      "schemaVersion": 1,
+      "id": "p8-bad-006",
+      "provider": "mock",
+      "type": "chat",
+      "receivedAt": "2026-07-31T13:00:05.000Z",
+      "user": { "id": "v-206", "handle": "bad.six", "displayName": "Bad Six" },
+      "comment": "test",
+      "extraField": true,
+      "rawHash": "sha256:bbbb000000000000000000000000000000000000000000000000000000000006"
+    }
+  },
+  {
+    "label": "non-iso-timestamp",
+    "reason": "receivedAt must be ISO 8601 datetime.",
+    "event": {
+      "schemaVersion": 1,
+      "id": "p8-bad-007",
+      "provider": "mock",
+      "type": "follow",
+      "receivedAt": "31/07/2026 13:00:06",
+      "user": { "id": "v-207", "handle": "bad.seven", "displayName": "Bad Seven" },
+      "rawHash": "sha256:bbbb000000000000000000000000000000000000000000000000000000000007"
+    }
+  },
+  {
+    "label": "missing-schema-version",
+    "reason": "Required field schemaVersion is absent.",
+    "event": {
+      "id": "p8-bad-008",
+      "provider": "mock",
+      "type": "chat",
+      "receivedAt": "2026-07-31T13:00:07.000Z",
+      "user": { "id": "v-208", "handle": "bad.eight", "displayName": "Bad Eight" },
+      "comment": "test",
+      "rawHash": "sha256:bbbb000000000000000000000000000000000000000000000000000000000008"
+    }
+  },
+  {
+    "label": "invalid-viewer-id-empty",
+    "reason": "user.id must be non-empty.",
+    "event": {
+      "schemaVersion": 1,
+      "id": "p8-bad-009",
+      "provider": "mock",
+      "type": "chat",
+      "receivedAt": "2026-07-31T13:00:08.000Z",
+      "user": { "id": "", "handle": "bad.nine", "displayName": "Bad Nine" },
+      "comment": "test",
+      "rawHash": "sha256:bbbb000000000000000000000000000000000000000000000000000000000009"
+    }
+  },
+  {
+    "label": "array-input",
+    "reason": "Input must be a non-null object, not an array.",
+    "event": [1, 2, 3]
+  }
+]

@@ -1,0 +1,10 @@
+{
+  "type": "chat",
+  "user": {
+    "id": "user_001",
+    "nickname": "viewer_alpha",
+    "profilePictureUrl": "https://example.com/avatar/user_001.jpg"
+  },
+  "comment": "Hello from the live stream! !strategy focus",
+  "timestamp": 1722500000000
+}

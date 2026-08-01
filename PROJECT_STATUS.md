@@ -1,8 +1,8 @@
 # RiftCrowd LIVE — Project Status
 
 - **Working title:** RiftCrowd LIVE
-- **Current phase:** Phase 17 — Testing, Performance, and Failure Recovery (next)
-- **Status:** Phase 16 COMPLETED
+- **Current phase:** Phase 18 — Packaging, Release, and Operations (next)
+- **Status:** Phase 17 COMPLETED
 - **Last updated:** 1 August 2026
 
 ## Phase tracker
@@ -25,7 +25,7 @@
 - Phase 14 — TikFinity Adapter: **COMPLETED**
 - Phase 15 — Visual Effects, Audio, and TikTok Readability: **COMPLETED**
 - Phase 16 — OBS and TikTok LIVE Studio Runbook: **COMPLETED**
-- Phase 17 — Testing, Performance, and Failure Recovery: not started
+- Phase 17 — Testing, Performance, and Failure Recovery: **COMPLETED**
 - Phase 18 — Packaging, Release, and Operations: not started
 
 ## Phase 1 — completed work
@@ -1384,3 +1384,89 @@ Next phase: **Phase 17 — Testing, Performance, and Failure Recovery**.
 - **SET_WINDOW_MODE command** wired to command queue and event bus; Godot-side handler is a stub in `command_dispatcher.gd` (no consumer yet).
 - **Shared token utility** deferred to Phase 17 — GDScript files use inline env-var reading.
 
+
+## Phase 17 — Testing, Performance, and Failure Recovery (COMPLETED)
+
+### Object pooling module (new)
+
+- [x] `gateway/src/pooling/command_pool.ts` — bounded pool for `GameCommand` objects (cap 5000, LRU eviction across all slots, acquire/release/clear/getStats/setCapacity with trim).
+- [x] `gateway/src/pooling/ws_message_buffer.ts` — bounded ring buffer for outbound WS messages (cap 1000, drop-oldest overflow, sequence numbers, enqueue/dequeue/drain/getStats).
+- [x] `gateway/src/pooling/http_request_pool.ts` — bounded pool for in-flight HTTP requests (cap 100, reject-when-full 429 indicator, cancelStale with accounting invariant, acquire/release/getStats).
+- [x] `gateway/src/pooling/index.ts` — barrel re-export.
+
+### Test framework and harness
+
+- [x] `gateway/test/performance/harness.ts` — `runExtendedSession(options)` helper (options-object API); starts Pipeline + VFX + pools, emits events at configurable rate/duration, collects `SessionMetrics` with rounds tracking.
+- [x] Event generators: `generateChatEvent`, `generateLikeEvent`, `generateFollowEvent`, `generateGiftEvent`, `generateShareEvent`, `generateRandomEvent`.
+
+### Performance tests
+
+- [x] `gateway/test/performance/pooling.test.ts` — **28 tests** covering CommandPool, WSMessageBuffer, HTTPRequestPool: acquire/release, cap enforcement, LRU eviction (full-active pool with cancelled-slot tracking), setCapacity trim, drop-oldest overflow, stale cancellation with accounting invariant, hot-reload capacity, stress cycles.
+- [x] `gateway/test/performance/soak.test.ts` — **50 assertions** in a single extended session test (30s default, configurable via `SOAK_DURATION_MS`). Validates: no crash, bounded queue/pool/memory, rounds completed tracking, zero unhandled rejections.
+- [x] `gateway/test/performance/burst.test.ts` — 7 tests: chat burst, gift burst, like burst, mixed burst, recovery after burst, sustained burst, VFX sustained.
+- [x] `gateway/test/performance/reconnect.test.ts` — 6 tests: clean disconnect/reconnect, pending-command snapshot delivery, dirty disconnect, multiple reconnects (5x), reconnect during command emission with no-duplicates assertion, auth-failure reconnect rejected.
+- [x] `gateway/test/performance/malformed.test.ts` — 14 tests: missing fields, wrong type, oversized strings, HTML injection, Unicode bidi injection, null input, empty object, array input, wrong schema version, mixed valid/malformed, HTML in displayName, zero-width chars, control chars, pipeline stats tracking.
+- [x] `gateway/test/performance/low_fps.test.ts` — 8 tests: quality downgrade on over-budget, priority preservation, recovery when load drops, 30fps budget enforcement, ultra→low→ultra round-trip, zero-budget disables enforcement, rolling average updates, share under pressure.
+
+### Integration tests
+
+- [x] `gateway/test/integration/full_pipeline.test.ts` — 1 test, 42 assertions: end-to-end MockLiveAdapter → Pipeline → MatchDirector → VFX → Audio → Readability → CommandPool → WSMessageBuffer → HTTPRequestPool. 100 events processed; all stages including director state transitions validated.
+- [x] `gateway/test/integration/replay.test.ts` — 13 tests: replays `shared/fixtures/valid-events.json` (chat, like, follow, gift, share) and `shared/fixtures/invalid-events.json` plus `gateway/test/fixtures/tikfinity/*.json` (6 TikFinity fixtures) through the pipeline. Deterministic: same input → same stats.
+
+### Smoke test
+
+- [x] `gateway/test/smoke/startup.test.ts` — 1 test, 25 assertions: full gateway startup with all feature flags. Validates /health, /status, /config, /window/config, orchestrator registration, VFX pool stats, pipeline components, fallback drains.
+
+### Fixes applied
+
+| # | Fix | Severity |
+|---|-----|----------|
+| 1 | CommandPool LRU eviction now searches ALL slots (active + idle); setCapacity trims excess | CRITICAL |
+| 2 | LRU eviction test uses all-active pool, asserts specific slot evicted | CRITICAL |
+| 3 | Integration test includes MatchDirector with state transitions | CRITICAL |
+| 4 | Soak test tracks and asserts roundsCompleted | CRITICAL |
+| 5 | PROJECT_STATUS.md UTF-8 encoding restored via git checkout | CRITICAL |
+| 6 | Reconnect tests assert no duplicate command IDs | WARNING |
+| 7 | Replay tests load TikFinity fixtures through tikfinity normalizer | WARNING |
+| 8 | Pipeline stats formula corrected: processed = normalized + dropped - deduped - rateLimited | WARNING |
+| 9 | HTTPRequestPool.cancelStale increments completed counter (accounting invariant) | WARNING |
+| 10 | Harness dead ternary removed; command tracking standardized; rounds tracking added | WARNING |
+| 11 | Smoke test validates /window/config endpoint | SUGGESTION |
+| 12 | Docs updated to reflect options-object API for runExtendedSession | SUGGESTION |
+
+### Deferred to Phase 18
+
+- Low-FPS discrete named quality tiers (ultra→high→medium→low) — VFX orchestrator uses binary degradation; 4-tier ladder deferred.
+- Optional "TikTok LIVE Studio" → "Real streaming studio software" rename in test report.
+
+### Commands run and results
+
+- `npm run lint` — **PASS** (zero errors/warnings).
+- `npm run typecheck` — **PASS** (clean, zero errors).
+- `npm test` — **1179 tests passing** (1094 gateway + 85 dashboard). Prior: 1051 (966 + 85). New: 128 gateway tests.
+- `npm run validate:packs` — **PASS** (4/4 packs, 0 warnings).
+- `npm run build` (dashboard) — **PASS** (exit 0).
+
+### Public API added
+
+- `CommandPool` — `acquire(cmd)`, `release(pooled)`, `getStats()`, `setCapacity(n)`, `clear()`
+- `WSMessageBuffer` — `enqueue(payload)`, `dequeue()`, `drain()`, `getStats()`, `size`, `capacity`
+- `HTTPRequestPool` — `acquire(label)`, `release(requestId)`, `cancelStale(maxAgeMs)`, `getStats()`
+- Test harness: `runExtendedSession(options: ExtendedSessionOptions)` returns `SessionMetrics`
+- `COMMAND_SCHEMA_VERSION = 5` (unchanged)
+
+### Known limitations
+
+- **Godot not installed.** WS command delivery to a real Godot client is untested.
+- **No real OBS/TikTok LIVE Studio.** Preflight/runbook validation is mock-only.
+- **No real TikFinity.** Adapter tested via MockLiveAdapter only.
+- **No real network latency.** All tests bind 127.0.0.1; no simulated WAN latency or packet loss.
+- **No concurrent WS stress.** Reconnect tests use sequential clients; high-concurrency (100+ simultaneous) not tested.
+- **CI soak = 30s.** Full 5-minute soak available via `SOAK_DURATION_MS=300000` but not run in CI by default.
+- **Burst ceiling = 2000 events.** Higher rates (> 10K/sec) not tested.
+- **No memory profiling.** `--heap-prof` extended soak deferred to Phase 18.
+- **Binary VFX quality degradation** (enabled/disabled), not 4-tier (ultra→high→medium→low). 4-tier ladder deferred to Phase 18.
+
+### Next phase
+
+**Phase 18 — Packaging, Release, and Operations.**

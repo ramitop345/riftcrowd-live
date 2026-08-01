@@ -1,0 +1,7 @@
+{
+  "heartbeatIntervalMs": 5000,
+  "heartbeatTimeoutMs": 15000,
+  "retryBufferCapacity": 1000,
+  "maxReconnectBackoffMs": 30000,
+  "idempotencyWindowSize": 500
+}
