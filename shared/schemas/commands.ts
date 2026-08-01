@@ -4,10 +4,10 @@ import { z } from 'zod';
  * Version of the game-command contract. Bump this whenever a field is renamed, retyped, or removed,
  * or when an enum member changes. Additive optional fields do not require a bump.
  *
- * Phase 15: bumped to 4 — added SPAWN_VFX, SPOTLIGHT_CARD, SUPPORTER_CALLOUT,
- * CAMERA_IMPULSE, PLAY_AUDIO command types.
+ * Phase 16: bumped to 5 — added SET_WINDOW_MODE, ACTIVATE_FALLBACK, DEACTIVATE_FALLBACK
+ * command types for OBS/TikTok LIVE Studio streaming workflow.
  */
-export const COMMAND_SCHEMA_VERSION = 4;
+export const COMMAND_SCHEMA_VERSION = 5;
 
 /** The complete command vocabulary the Godot client understands. */
 export const GameCommandTypeSchema = z.enum([
@@ -33,6 +33,10 @@ export const GameCommandTypeSchema = z.enum([
   'SUPPORTER_CALLOUT',
   'CAMERA_IMPULSE',
   'PLAY_AUDIO',
+  // Phase 16 — streaming workflow
+  'SET_WINDOW_MODE',
+  'ACTIVATE_FALLBACK',
+  'DEACTIVATE_FALLBACK',
 ]);
 
 /** Flat primitives only: no nested objects, no arrays, no functions. Keys and strings are bounded. */

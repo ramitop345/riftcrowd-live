@@ -21,7 +21,7 @@
     "protocolVersion": 1,
     "kind": "command",
     "command": {
-      "schemaVersion": 4,
+      "schemaVersion": 5,
       "id": "cmd-0001",
       "type": "ADD_ENERGY",
       "createdAt": "2026-07-30T18:00:00.500Z",

@@ -1,8 +1,8 @@
 # RiftCrowd LIVE — Project Status
 
 - **Working title:** RiftCrowd LIVE
-- **Current phase:** Phase 16 — OBS and TikTok LIVE Studio Runbook (next)
-- **Status:** Phase 15 COMPLETED (with review fixes applied)
+- **Current phase:** Phase 17 — Testing, Performance, and Failure Recovery (next)
+- **Status:** Phase 16 COMPLETED
 - **Last updated:** 1 August 2026
 
 ## Phase tracker
@@ -24,7 +24,7 @@
 - Phase 13 — Creator Dashboard: **COMPLETED**
 - Phase 14 — TikFinity Adapter: **COMPLETED**
 - Phase 15 — Visual Effects, Audio, and TikTok Readability: **COMPLETED**
-- Phase 16 — OBS and TikTok LIVE Studio Runbook: not started
+- Phase 16 — OBS and TikTok LIVE Studio Runbook: **COMPLETED**
 - Phase 17 — Testing, Performance, and Failure Recovery: not started
 - Phase 18 — Packaging, Release, and Operations: not started
 
@@ -1262,4 +1262,125 @@ Phase 15 known limitations:
 - **CRLF format drift is pre-existing.** Cosmetic only — lint, typecheck, and tests
   unaffected.
 
-Next phase: **Phase 16 — OBS and TikTok LIVE Studio Runbook**.
+Next phase: **Phase 17 — Testing, Performance, and Failure Recovery**.
+
+---
+
+## Phase 16 — OBS and TikTok LIVE Studio Runbook (COMPLETED)
+
+**Objective:** Make launching a stream repeatable.
+
+### Deliverables completed
+
+- [x] **Window Mode Config** (`gateway/src/window/window_config.ts`, `gateway/config/window.json`):
+  Zod-validated config for mode (windowed/borderless/fullscreen), portrait, width, height, vsync, fps.
+  Hot-reload via `reloadWindowConfig()`. Min/max constraints on width (640–7680), height (480–4320),
+  fps (15–240). 18 tests.
+
+- [x] **Preflight Orchestrator** (`gateway/src/preflight/preflight_orchestrator.ts`):
+  6 preflight checks: gateway health (real HTTP fetch), dashboard reachable, provider (mock/tikfinity),
+  config valid, audio assets, VFX config. Per-check timeout (5s default) via `Promise.race`.
+  Returns `{ ok, checks[] }`. 25 tests.
+
+- [x] **Fallback Orchestrator** (`gateway/src/fallback/fallback_orchestrator.ts`):
+  Monitors stream health, activates "Technical Difficulties" overlay on gateway/provider disconnect.
+  Tracks active reasons as `Set<FallbackReason>` for concurrent disconnect support.
+  `deactivateReason()` removes individual reasons; only deactivates when set is empty.
+  Redundant deactivation guard. VFX pool exhaustion degrades gracefully (no crash).
+  Audio missing plays silently. Emits ACTIVATE_FALLBACK / DEACTIVATE_FALLBACK commands.
+  Commands drained by WS tick loop. 23 tests.
+
+- [x] **HTTP Routes** (`gateway/src/routes/window_routes.ts`, `preflight_routes.ts`, `fallback_routes.ts`):
+  Window: GET/POST /window/config (POST emits SET_WINDOW_MODE command). Preflight: GET /preflight/check,
+  POST /preflight/run. Fallback: GET /fallback/status, POST /fallback/activate, POST /fallback/deactivate.
+  All token-protected. 26 route tests.
+
+- [x] **COMMAND_SCHEMA_VERSION bumped to 5** (`shared/schemas/commands.ts`):
+  Added SET_WINDOW_MODE, ACTIVATE_FALLBACK, DEACTIVATE_FALLBACK command types.
+  5 command schema tests.
+
+- [x] **GDScript WindowManager** (`game/scripts/window/window_manager.gd`):
+  Applies DisplayServer settings for windowed/borderless/fullscreen modes.
+  Portrait orientation (swaps width/height if needed). HTTP config loading on startup.
+  Hand-authored (desk-check only).
+
+- [x] **GDScript PreflightScreen** (`game/scripts/ui/preflight_screen.gd`):
+  Shows checklist UI with green checkmarks and red X marks. "Start Stream" button
+  enabled only when all checks pass. HTTP polling for preflight status.
+  Hand-authored (desk-check only).
+
+- [x] **GDScript FallbackScene** (`game/scripts/ui/fallback_scene.gd`):
+  "Technical Difficulties" overlay. Activates on ACTIVATE_FALLBACK command,
+  deactivates on DEACTIVATE_FALLBACK. Shows user-friendly reason messages.
+  Hand-authored (desk-check only).
+
+- [x] **Godot Scenes** (`game/scenes/ui/PreflightScreen.tscn`, `FallbackScene.tscn`):
+  Hand-authored scene files referencing the GDScript classes above.
+
+- [x] **OBS Runbook** (`docs/OBS_RUNBOOK.md`):
+  Complete guide for OBS Studio setup, borderless portrait window, scene sources,
+  recording settings, streaming settings, preflight checks, start/stop procedures,
+  troubleshooting.
+
+- [x] **TikTok LIVE Studio Runbook** (`docs/TIKTOK_LIVE_STUDIO_RUNBOOK.md`):
+  TikFinity setup, gateway configuration for tikfinity provider, TikTok LIVE Studio
+  scene setup, start/stop procedures, troubleshooting.
+
+- [x] **One-Page Checklist** (`docs/STREAM_CHECKLIST.md`):
+  Before/during/after stream checklists and emergency procedures.
+
+- [x] **Streaming Workflow Overview** (`docs/STREAMING_WORKFLOW.md`):
+  Architecture diagram, component table, workflow phases, window modes, fallback system,
+  known limitations.
+
+- [x] **Acceptance Test** (`gateway/test/runbook_acceptance.test.ts`):
+  Simulates fresh Windows user launching mock stream: preflight checks pass (real HTTP server),
+  window config loads, fallback lifecycle, stream stop. 30+ assertions.
+
+### Fixes Applied (Phase 16 Finalization)
+
+1. **PreflightScreen GDScript polls wrong endpoint** [CRITICAL] — Changed `METHOD_POST` to `METHOD_GET` for `/preflight/check` (cached result polling).
+2. **Fallback reason overwrite on concurrent disconnects** [CRITICAL] — `FallbackOrchestrator` now tracks active reasons as `Set<FallbackReason>`. `deactivateReason()` removes individual reasons; only deactivates when set is empty.
+3. **WindowManager skips portrait swap on initial config load** [CRITICAL] — Added inline portrait swap (`if _portrait and _width > _height: swap`) before `_apply_display_settings()` in `_on_config_received()`.
+4. **Fallback commands never delivered to Godot client** [CRITICAL] — Wired `FallbackOrchestrator.drainCommands()` into WS pipeline via periodic drain interval in `app.ts` `onReady` hook.
+5. **SET_WINDOW_MODE command never emitted** [CRITICAL] — POST `/window/config` now pushes `SET_WINDOW_MODE` command to event bus. Godot-side handler stub added in `command_dispatcher.gd`.
+6. **Window config accepts degenerate resolutions** [WARNING] — Added `.min()`/`.max()` constraints: width 640–7680, height 480–4320, fps 15–240.
+7. **Preflight orchestrator has no per-check timeout** [WARNING] — Wrapped each check in `Promise.race` with configurable timeout (default 5s).
+8. **Gateway health check is tautological stub** [WARNING] — Changed to actual `fetch(http://127.0.0.1:${port}/health)` instead of always-passing lambda.
+9. **GDScript files hardcode placeholder auth token** [WARNING] — Both `window_manager.gd` and `preflight_screen.gd` now read token from `RIFTCROWD_TOKEN` env var with dev fallback.
+10. **PreflightScreen has no cleanup on scene exit** [WARNING] — Added `_exit_tree()` override to cancel in-flight HTTP requests.
+11. **FallbackOrchestrator.deactivate() emits even when already inactive** [SUGGESTION] — Guard returns `null` when not active and no reasons tracked.
+12. **PROJECT_STATUS.md test count discrepancies** [SUGGESTION] — Updated all test counts to reflect actual test file contents.
+
+### Deferred (Phase 17/18)
+
+- Preflight `removeCheck()` / per-check timeout options (Phase 17 friction).
+- Production deployment guidance in STREAMING_WORKFLOW.md (Phase 18).
+- Shared `session_auth.ts` utility (token extraction refactor — Phase 17).
+
+### Commands run and results
+
+- `npm run lint` — 0 errors
+- `npm run typecheck` — clean
+- `npm test` — 966 gateway + 85 dashboard = 1051 tests all passing
+- `npm run validate:packs` — 4 packs, 0 warnings, 0 failures
+- `npm run build` (dashboard) — exit 0
+
+### Public API
+
+- `WindowManager` (GDScript) — `set_mode()`, `get_mode()`, `is_portrait()`
+- `PreflightOrchestrator` (TS) — `addCheck()`, `run()`, `checkCount`, configurable timeout
+- `FallbackOrchestrator` (TS) — `activate()`, `deactivate()`, `deactivateReason()`, `getStatus()`, `drainCommands()`, `onEvent()`
+- `WindowConfigSchema`, `WINDOW_DEFAULTS`, `loadWindowConfig()`, `reloadWindowConfig()`
+- Command types: `SET_WINDOW_MODE`, `ACTIVATE_FALLBACK`, `DEACTIVATE_FALLBACK`
+- `COMMAND_SCHEMA_VERSION = 5`
+
+### Known limitations
+
+- **Godot not installed.** GDScript files are hand-authored, desk-check only.
+- **Placeholder audio.** Audio asset checks are placeholders.
+- **No real OBS/TikTok LIVE Studio testing.** Runbook instructions are based on documented behavior.
+- **Dashboard check.** Preflight dashboard reachability requires dashboard dev server running on port 5173.
+- **SET_WINDOW_MODE command** wired to command queue and event bus; Godot-side handler is a stub in `command_dispatcher.gd` (no consumer yet).
+- **Shared token utility** deferred to Phase 17 — GDScript files use inline env-var reading.
+

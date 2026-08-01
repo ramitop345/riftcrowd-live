@@ -28,6 +28,9 @@
 ##   supporter_callout(payload: Dictionary) ## Phase 15
 ##   camera_impulse(payload: Dictionary)    ## Phase 15
 ##   play_audio(payload: Dictionary)        ## Phase 15
+##   set_window_mode(payload: Dictionary)    ## Phase 16
+##   activate_fallback(payload: Dictionary)  ## Phase 16
+##   deactivate_fallback(payload: Dictionary) ## Phase 16
 class_name CommandDispatcher
 extends Node
 
@@ -53,6 +56,9 @@ signal spotlight_card(payload: Dictionary)       ## Phase 15: spotlight card
 signal supporter_callout(payload: Dictionary)    ## Phase 15: supporter callout
 signal camera_impulse(payload: Dictionary)       ## Phase 15: camera impulse
 signal play_audio(payload: Dictionary)           ## Phase 15: audio playback
+signal set_window_mode(payload: Dictionary)       ## Phase 16: window mode change
+signal activate_fallback(payload: Dictionary)     ## Phase 16: fallback overlay on
+signal deactivate_fallback(payload: Dictionary)   ## Phase 16: fallback overlay off
 
 ## Routes a command dictionary to the appropriate signal based on command type.
 ## Expected shape: { "type": "JOIN_FACTION" | "SPAWN_CHAMPION" | ..., ... }
@@ -102,5 +108,18 @@ func dispatch(command: Dictionary) -> void:
 			camera_impulse.emit(command)
 		"PLAY_AUDIO":
 			play_audio.emit(command)
+		"SET_WINDOW_MODE":
+			_set_window_mode(command)
+		"ACTIVATE_FALLBACK":
+			activate_fallback.emit(command)
+		"DEACTIVATE_FALLBACK":
+			deactivate_fallback.emit(command)
 		_:
 			push_warning("CommandDispatcher: unknown command type '%s'" % cmd_type)
+
+
+## Phase 16: Handler stub for SET_WINDOW_MODE command.
+## Wired to command queue; emits set_window_mode signal for consumers.
+## Currently no consumer connected — WindowManager handles its own config loading.
+func _set_window_mode(cmd: Dictionary) -> void:
+	set_window_mode.emit(cmd)

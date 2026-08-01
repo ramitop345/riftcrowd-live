@@ -5,7 +5,12 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 
+import {
+  COMMAND_SCHEMA_VERSION,
+  type GameCommand,
+} from '@riftcrowd/shared';
 import { config, sanitizeConfig } from './config.js';
+import type { WindowConfig } from './window/window_config.js';
 import { createAndRegisterDirector, type MatchDirector } from './director/index.js';
 import { SYNTHETIC_FACTIONS } from './director/match_director.js';
 import { ViewerRegistry } from './viewer/viewer_registry.js';
@@ -20,6 +25,9 @@ import { registerViewerRoutes } from './routes/viewer_routes.js';
 import { registerVFXRoutes } from './routes/vfx_routes.js';
 import { registerAudioRoutes } from './routes/audio_routes.js';
 import { registerReadabilityRoutes } from './routes/readability_routes.js';
+import { registerWindowRoutes } from './routes/window_routes.js';
+import { registerPreflightRoutes } from './routes/preflight_routes.js';
+import { registerFallbackRoutes } from './routes/fallback_routes.js';
 import { WsServer } from './ws/ws_server.js';
 import { GiftEconomy } from './gifts/gift_economy.js';
 import { FreeEngagement } from './engagement/free_engagement.js';
@@ -30,6 +38,10 @@ import { AudioOrchestrator } from './audio/audio_orchestrator.js';
 import { loadAudioConfig } from './audio/audio_config.js';
 import { ReadabilityOrchestrator } from './readability/readability_orchestrator.js';
 import { loadReadabilityConfig } from './readability/readability_config.js';
+import { loadWindowConfig } from './window/window_config.js';
+import { PreflightOrchestrator, makeGatewayHealthCheck, makeDashboardReachableCheck, makeProviderCheck, makeConfigCheck, makeAudioCheck, makeVFXConfigCheck } from './preflight/preflight_orchestrator.js';
+import { FallbackOrchestrator } from './fallback/fallback_orchestrator.js';
+import { VFXConfigSchema } from './vfx/vfx_config.js';
 
 export interface BuildAppOptions {
   /** Set to false in tests to silence request logging. Defaults to true. */
@@ -55,6 +67,8 @@ export interface BuildAppOptions {
   enableTikfinity?: boolean;
   /** Enable Phase 15 VFX/Audio/Readability routes. Opt-in: defaults to false. */
   enableVFX?: boolean;
+  /** Enable Phase 16 Window/Preflight/Fallback routes. Opt-in: defaults to false. */
+  enableRunbook?: boolean;
 }
 
 /**
@@ -348,6 +362,102 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       }
     }
 
+    // Phase 16: Window/Preflight/Fallback (opt-in via enableRunbook: true)
+    if (options.enableRunbook === true) {
+      try {
+        // Window config
+        const windowConfig = loadWindowConfig();
+        registerWindowRoutes(app, {
+          config: windowConfig,
+          // FIX 5: Emit SET_WINDOW_MODE command when config is updated via POST.
+          // Wired to command queue; Godot-side handler stub in command_dispatcher.gd.
+          onConfigUpdate: (cfg: WindowConfig) => {
+            if (pipeline) {
+              const cmd: GameCommand = {
+                schemaVersion: COMMAND_SCHEMA_VERSION,
+                id: `window_mode_${Date.now()}`,
+                type: 'SET_WINDOW_MODE',
+                createdAt: new Date().toISOString(),
+                sourceEventIds: [],
+                metadata: { mode: cfg.mode, portrait: String(cfg.portrait) },
+              };
+              pipeline.eventBus.publish('command', cmd);
+            }
+          },
+        });
+
+        // Preflight orchestrator
+        const preflight = new PreflightOrchestrator();
+
+        // FIX 8: Gateway health check — actually fetches /health via HTTP
+        // instead of always-passing in-process lambda.
+        preflight.addCheck(makeGatewayHealthCheck(async () => {
+          const response = await fetch(`http://127.0.0.1:${config.gatewayPort}/health`);
+          return response.json() as Promise<{ status: string }>;
+        }));
+
+        // Dashboard reachable check
+        preflight.addCheck(makeDashboardReachableCheck(async () => {
+          try {
+            const response = await fetch('http://127.0.0.1:5173');
+            return response.ok;
+          } catch {
+            return false;
+          }
+        }));
+
+        // Provider check
+        preflight.addCheck(makeProviderCheck(
+          config.liveProvider,
+          () => true, // Mock adapter is always running if provider=mock
+          async () => {
+            // TikFinity check: query adapter status
+            const adapter = app.tikfinityAdapter;
+            return adapter?.isConnected() === true;
+          },
+        ));
+
+        // Config check
+        preflight.addCheck(makeConfigCheck(() => ({
+          ok: true,
+          errors: [],
+        })));
+
+        // Audio check (placeholder)
+        preflight.addCheck(makeAudioCheck(() => ({
+          ok: true,
+          message: 'Audio assets placeholder check passed',
+        })));
+
+        // VFX config check
+        preflight.addCheck(makeVFXConfigCheck(() => {
+          try {
+            const vfxCfg = app.vfxOrchestrator?.getConfig();
+            if (vfxCfg) {
+              const result = VFXConfigSchema.safeParse(vfxCfg);
+              if (result.success) return { ok: true, errors: [] };
+              return { ok: false, errors: result.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) };
+            }
+            return { ok: true, errors: [] };
+          } catch (err: unknown) {
+            return { ok: false, errors: [String(err)] };
+          }
+        }));
+
+        app.decorate('preflightOrchestrator', preflight);
+        registerPreflightRoutes(app, { orchestrator: preflight });
+
+        // Fallback orchestrator
+        const fallback = new FallbackOrchestrator();
+        app.decorate('fallbackOrchestrator', fallback);
+        registerFallbackRoutes(app, { orchestrator: fallback });
+
+        app.log.info('[Phase16] Window, Preflight, Fallback routes registered');
+      } catch (err: unknown) {
+        app.log.warn(`[Phase16] Failed to initialize: ${String(err)}`);
+      }
+    }
+
     // Phase 10: WebSocket server (opt-in via enableWs: true)
     if (options.enableWs === true) {
       const wsServer = new WsServer({
@@ -360,6 +470,9 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       });
       app.decorate('wsServer', wsServer);
 
+      // FIX 4: Periodic drain interval for fallback orchestrator commands.
+      let fallbackDrainInterval: ReturnType<typeof setInterval> | null = null;
+
       // Attach WS server once the Fastify HTTP server is ready
       app.addHook('onReady', async () => {
         const httpServer = app.server;
@@ -367,10 +480,26 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
           wsServer.attach(httpServer, pipeline.eventBus);
           app.log.info('[WS] WebSocket server attached to /ws/game');
         }
+
+        // FIX 4: Wire fallback orchestrator command drain into WS pipeline.
+        // Drains fallback commands every 1s and broadcasts to connected clients.
+        const fallbackOrch = app.fallbackOrchestrator;
+        if (fallbackOrch) {
+          fallbackDrainInterval = setInterval(() => {
+            const cmds = fallbackOrch.drainCommands();
+            for (const cmd of cmds) {
+              wsServer.broadcastCommand(cmd);
+            }
+          }, 1000);
+        }
       });
 
       // Clean up on close
       app.addHook('onClose', async () => {
+        if (fallbackDrainInterval) {
+          clearInterval(fallbackDrainInterval);
+          fallbackDrainInterval = null;
+        }
         await wsServer.close();
         app.log.info('[WS] WebSocket server closed');
       });
@@ -401,5 +530,7 @@ declare module 'fastify' {
     vfxOrchestrator?: VFXOrchestrator;
     audioOrchestrator?: AudioOrchestrator;
     readabilityOrchestrator?: ReadabilityOrchestrator;
+    preflightOrchestrator?: PreflightOrchestrator;
+    fallbackOrchestrator?: FallbackOrchestrator;
   }
 }

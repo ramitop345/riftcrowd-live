@@ -207,7 +207,7 @@ describe('AudioOrchestrator', () => {
 
   it('PLAY_AUDIO command has correct schema version', () => {
     const result = orchestrator.triggerAudio(makeEvent('like'));
-    expect(result.commands[0]!.schemaVersion).toBe(4);
+    expect(result.commands[0]!.schemaVersion).toBe(5);
   });
 
   it('PLAY_AUDIO command includes sourceEventIds', () => {
