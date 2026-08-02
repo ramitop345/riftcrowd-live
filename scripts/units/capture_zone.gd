@@ -6,6 +6,10 @@ const RADIUS: float = 170.0
 var _ring: ColorRect
 
 
+func _ready() -> void:
+	_ring = $Ring
+
+
 func update_visual(pressure: Variant) -> void:
 	var total: float = 0.0
 	if typeof(pressure) == TYPE_ARRAY:

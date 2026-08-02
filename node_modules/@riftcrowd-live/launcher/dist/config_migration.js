@@ -142,9 +142,10 @@ function migrateConfigFile(configDir, def, timestamp) {
         }
         return { migrated: false, skipped: true, error: null, backupPath: null };
     }
+    let raw = '';
     try {
         // Step 1: Read existing config
-        const raw = readFileSync(configPath, 'utf8');
+        raw = readFileSync(configPath, 'utf8');
         // Step 2: Parse JSON
         const parsed = JSON.parse(raw);
         // Step 3: Validate and migrate (fill defaults)
@@ -171,7 +172,20 @@ function migrateConfigFile(configDir, def, timestamp) {
     }
     catch (err) {
         // Parse error or other failure: do NOT create backup, leave file untouched
-        return { migrated: false, skipped: false, error: `${def.name} error (file left untouched): ${String(err)}`, backupPath: null };
+        // Write a .invalid sidecar for manual review (mirrors schema validation path)
+        const invalidPath = configPath + '.invalid';
+        try {
+            const sidecarContent = raw;
+            writeFileSync(invalidPath, JSON.stringify({
+                error: String(err),
+                originalContent: sidecarContent.slice(0, 1000),
+                timestamp: new Date().toISOString(),
+            }, null, 2) + '\n', 'utf8');
+        }
+        catch {
+            // Sidecar write failure is non-fatal
+        }
+        return { migrated: false, skipped: false, error: `${def.name} error (file left untouched, .invalid sidecar created): ${String(err)}`, backupPath: null };
     }
 }
 /**

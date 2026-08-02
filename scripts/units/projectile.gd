@@ -10,6 +10,10 @@ const FACTION_COLORS: Array = [
 const NEUTRAL_COLOR: Color = Color(0.7, 0.7, 0.7)
 
 
+func _ready() -> void:
+	_dot = $Dot
+
+
 func update_visual(proj_snapshot: Dictionary) -> void:
 	position = Vector2(float(proj_snapshot.get("x", 0.0)), float(proj_snapshot.get("y", 0.0)))
 	var faction: int = int(proj_snapshot.get("faction", -1))

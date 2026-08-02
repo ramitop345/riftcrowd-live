@@ -1,9 +1,9 @@
-# Headless content-pack test. Run from the repository root:
-#   godot --headless --path game --script tests/test_packs.gd
+# Headless content-pack test. Run from the project root:
+#   godot --headless --script res://tests/test_packs.gd
 # Exercises the GDScript mirror of shared/schemas/packs.ts against the SAME
 # sources of truth the TypeScript tests use: the shared fixtures
-# (../shared/fixtures/valid-packs.json, invalid-packs.json) and the four
-# shipping launch packs under ../content/packs. Also covers the loader
+# (shared/fixtures/valid-packs.json, invalid-packs.json) and the four
+# shipping launch packs under content/packs. Also covers the loader
 # (directory scan, mode/directory match, failure reporting), the keyword
 # helpers (case-insensitivity, numeric shortcuts, first-token rule, 200-char
 # inspection cap, non-string guard), and the presence of every pack's
@@ -328,10 +328,10 @@ func _quote(text: String) -> String:
 	return "\"%s\"" % text
 
 
-## Reads a fixture from the shared location (never copied into game/).
+## Reads a fixture from the shared location.
 ## Returns the parsed JSON Variant, or null on any load/parse failure.
 func _load_fixture(file_name: String) -> Variant:
-	var path := ProjectSettings.globalize_path("res://").path_join("../shared/fixtures").path_join(file_name).simplify_path()
+	var path := ProjectSettings.globalize_path("res://").path_join("shared/fixtures").path_join(file_name).simplify_path()
 	return _load_json(path)
 
 

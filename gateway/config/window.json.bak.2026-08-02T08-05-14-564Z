@@ -1,0 +1,8 @@
+{
+  "mode": "windowed",
+  "portrait": true,
+  "width": 1080,
+  "height": 1920,
+  "vsync": true,
+  "fps": 60
+}

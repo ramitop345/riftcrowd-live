@@ -1,4 +1,4 @@
-# Headless protocol fixture test. Run from the game/ directory:
+# Headless protocol fixture test. Run from the project root:
 #   godot --headless --script res://tests/test_protocol.gd
 # Parses the SHARED fixture files (same source of truth as the TypeScript
 # tests) and exits 0 only when every valid fixture parses ok, every invalid
@@ -95,10 +95,10 @@ func _parse(parse_kind: String, data: Dictionary) -> Dictionary:
 	return {"ok": false, "value": null, "errors": ["unknown parse kind: " + parse_kind]}
 
 
-## Reads a fixture from the shared location (never copied into game/).
+## Reads a fixture from the shared location.
 ## Returns the parsed JSON Variant, or null on any load/parse failure.
 func _load_fixture(file_name: String) -> Variant:
-	var path := ProjectSettings.globalize_path("res://").path_join("../shared/fixtures").path_join(file_name).simplify_path()
+	var path := ProjectSettings.globalize_path("res://").path_join("shared/fixtures").path_join(file_name).simplify_path()
 	if not FileAccess.file_exists(path):
 		printerr("Fixture not found: " + path)
 		return null

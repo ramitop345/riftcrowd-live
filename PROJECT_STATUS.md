@@ -92,8 +92,8 @@ Shared protocol and schema validation:
   `expectedInvalidPath`.
 - [x] TypeScript tests (`gateway/test/`): fixtures parse/reject at the documented Zod issue path;
   identity helper stability, divergence, and delimiter-collision cases.
-- [x] GDScript mirror `game/scripts/protocol/protocol_validator.gd` (accepts any Variant root,
-  rejects non-object JSON) + headless fixture test `game/tests/test_protocol.gd` consuming the
+- [x] GDScript mirror `scripts/protocol/protocol_validator.gd` (accepts any Variant root,
+  rejects non-object JSON) + headless fixture test `tests/test_protocol.gd` consuming the
   same shared fixtures.
 
 Commands run and results:
@@ -106,18 +106,18 @@ Commands run and results:
 Phase 2 known limitations:
 
 - **Godot headless test pending manual run.** Godot is not installed on this machine. Run from
-  the `game/` directory: `godot --headless --script res://tests/test_protocol.gd` (exits 0 on
+  the project root: `godot --headless --script res://tests/test_protocol.gd` (exits 0 on
   success).
 - **`snapshot.state` is untyped** (`Record<string, unknown>`) until the WebSocket integration
   firms it up in Phase 10.
 - **GDScript datetime regex is shape-only.** It mirrors what Zod's `z.string().datetime()`
   accepts structurally but does not validate calendar semantics (e.g. month 13 passes the shape).
-- **Game test depends on the monorepo layout.** `game/tests/test_protocol.gd` loads fixtures from
-  `../shared/fixtures` relative to `game/`; it will not run from an exported/relocated game build.
+- **Game test depends on the monorepo layout.** `tests/test_protocol.gd` loads fixtures from
+  `shared/fixtures` relative to the project root; it will not run from an exported/relocated game build.
 
 ## Phase 3 — completed work
 
-Godot portrait foundation (`game/`):
+Godot portrait foundation:
 
 - [x] 1080x1920 portrait viewport with `canvas_items` stretch, `keep` aspect, and handheld
   orientation locked to portrait. No `window/size/*_override` values: they would shrink exported
@@ -145,7 +145,7 @@ Godot portrait foundation (`game/`):
   `MAX_MESSAGE_LENGTH` = 300 before reaching a `Label`. Node lookups are defensive
   (`get_node_or_null` + `push_error`, documented path contract) so a scene/script drift degrades
   instead of crashing.
-- [x] Headless shell test `game/tests/test_shell.gd` (37 assertions): all six scenes load and
+- [x] Headless shell test `tests/test_shell.gd` (37 assertions): all six scenes load and
   instantiate with a `Control` root, every allowed and forbidden transition pair (including
   `LOBBY → MAIN_MENU`), every `SCENE_PATHS` target exists, safe-zone margins are positive,
   typography constants clear a 20 px readability floor, and `ErrorOverlay._sanitize` strips control
@@ -164,13 +164,13 @@ Commands run and results:
 Phase 3 known limitations:
 
 - **Godot is not installed on this machine**, so the live run and the acceptance resize check are
-  pending. Run these manually from the `game/` directory:
+  pending. Run these manually from the project root:
 
   ```powershell
-  cd "c:\Program Files\Developper\riftcrowd-live\game"
-  & "C:\path\to\Godot_v4.3-stable_win64.exe" --headless --script res://tests/test_shell.gd
-  & "C:\path\to\Godot_v4.3-stable_win64.exe" --headless --script res://tests/test_protocol.gd
-  & "C:\path\to\Godot_v4.3-stable_win64.exe" .
+  cd "c:\Program Files\Developper\riftcrowd-live"
+  & "C:\Program Files\Godot\godot.exe" --headless --script res://tests/test_shell.gd
+  & "C:\Program Files\Godot\godot.exe" --headless --script res://tests/test_protocol.gd
+  & "C:\Program Files\Godot\godot.exe" .
   ```
 
   Expected: `SHELL TESTS: 37 passed, 0 failed` and `PROTOCOL TESTS: 30 passed, 0 failed` (exit 0).
@@ -215,18 +215,18 @@ Content-pack system and four launch packs:
   factions, fixtures parse/reject at the documented Zod path, keyword index contents, collision
   throw, cache purity (fresh index per `buildKeywordIndex` call, identical matches for repeated
   calls and structural clones), matching rules, and hostile-input behavior.
-- [x] GDScript mirror `game/scripts/packs/pack_validator.gd` (strict keys, bounds, cross-faction
+- [x] GDScript mirror `scripts/packs/pack_validator.gd` (strict keys, bounds, cross-faction
   rules, error paths like `factions[1].joinKeywords[0]`; `match_join_keyword` takes a Variant and
   returns `""` for non-string input, mirroring the TS guard) and loader
-  `game/scripts/packs/pack_loader.gd` (scans `../content/packs` resolved from `res://`, never
-  copies packs into `game/`, reports failures with file + reasons, rasterizes SVGs defensively).
+  `scripts/packs/pack_loader.gd` (scans `content/packs` resolved from `res://`, never
+  copies packs into the project, reports failures with file + reasons, rasterizes SVGs defensively).
 - [x] `PackRegistry` autoload (loads once at boot, exposes `packs` / `failures` /
   `select_pack` / `find_pack`) and `PackPreview` screen (`scenes/PackPreview.tscn` +
   `scripts/screens/pack_preview.gd`): one button per pack with the pack icon rasterized from
   `svg/pack_icon.svg` beside it (missing icon degrades silently), faction cards with color
   swatches, sanitized display text, join keywords, and pattern art; failure list below. Reached
   through the new `PACK_PREVIEW` state in `AppState` (menu ↔ preview side trip).
-- [x] Headless test `game/tests/test_packs.gd` (61 assertions): shared fixtures parse/reject at
+- [x] Headless test `tests/test_packs.gd` (61 assertions): shared fixtures parse/reject at
   the documented paths, every launch pack ships 4 factions with `mode` == directory, every pack
   directory carries `svg/pack_icon.svg` at the loader-provided path, `load_packs_from_dir`
   returns 4 packs / 0 failures, keyword index and matching rules mirror TypeScript (including
@@ -239,7 +239,7 @@ Commands run and results:
 - `npm test` — **PASS** (33 tests in 5 files: identity 15, packs 12, messages 3, schemas 2,
   health 1)
 - `npm run validate:packs` — **PASS** (exit 0; `4 pack(s) checked — 0 passed, 4 with warnings,
-  0 failed`; exactly 16 warnings, all `captainScene ... not found under game/ (expected —
+  0 failed`; exactly 16 warnings, all `captainScene ... not found (expected —
   captain scenes arrive in Phase 5)`; 0 errors)
 - Static validation of all `.tscn` / `.gd` files — **PASS** (desk-checked: `load_steps` match the
   declared `ext_resource` counts, every `@onready` path resolves against its scene tree,
@@ -263,8 +263,8 @@ Phase 4 known limitations:
 - **`captainScene` targets do not exist yet.** Every launch pack points at
   `res://scenes/units/captain_*.tscn`; the validator reports these as 16 warnings by design.
   Phase 5 ships the scenes, at which point missing targets get promoted to errors.
-- **Pack root assumes the repository layout.** The game loads packs from `../content/packs`
-  relative to `game/`, so exported/packaged builds need a copy step or a configurable pack root
+- **Pack root assumes the repository layout.** The game loads packs from `content/packs`
+  relative to the project root, so exported/packaged builds need a copy step or a configurable pack root
   in a later phase (documented in `docs/CONTENT_PACK_FORMAT.md` and
   `tools/asset-validation/README.md`).
 - **CRLF format drift is pre-existing.** Files on this Windows checkout carry CRLF endings;
@@ -278,7 +278,7 @@ Phase 4 known limitations:
 
 Autonomous arena simulation core, scenes, sandbox, and tests:
 
-- [x] Headless simulation core (`game/scripts/simulation/`): `SimWorld`, `SimUnit`, `SimRng`,
+- [x] Headless simulation core (`scripts/simulation/`): `SimWorld`, `SimUnit`, `SimRng`,
   `SimProjectile`, `UnitPool`, `ProjectilePool`, `GameplayConfig` — deterministic seeded RNG,
   typed state machines (SPAWNING → ADVANCE → ATTACK ↔ RETREAT → DEFEND → DEAD), combat (melee
   and projectile), death events, pool acquire/release/reuse, capture pressure, Dominion accrual
@@ -292,9 +292,9 @@ Autonomous arena simulation core, scenes, sandbox, and tests:
   lowest unit id, removing hidden positional bias from pool iteration order.
 - [x] Boss pool routing: `_get_pool("boss")` returns the champion pool (singletons reuse the
   large pool), eliminating the dead-code branch in `_resolve_cleanup`.
-- [x] `GameplayConfig` validator (`gameplay_config.gd`): loads and validates `game/config/gameplay.json`
+- [x] `GameplayConfig` validator (`gameplay_config.gd`): loads and validates `config/gameplay.json`
   with type, range, and required-key checks; rejects malformed configs with descriptive errors.
-- [x] Arena scene (`game/scenes/Arena.tscn` + `scripts/arena/arena.gd`): fortress, crown,
+- [x] Arena scene (`scenes/Arena.tscn` + `scripts/arena/arena.gd`): fortress, crown,
   capture-zone, unit and projectile visual nodes with pooled reuse; `apply_snapshot()` syncs
   every visual from the sim snapshot each frame; `restart()` public method encapsulates
   clear + setup.
@@ -312,14 +312,14 @@ Autonomous arena simulation core, scenes, sandbox, and tests:
   `PackRegistry`.
 - [x] Design seam comments in `sim_world.gd`: Phase 6 `enqueue_stage_override` /
   `stage_changed` signal; Phase 8 `enqueue_command` for `GameCommand` injection.
-- [x] Headless simulation test `game/tests/test_simulation.gd` (137 assertions): config
+- [x] Headless simulation test `tests/test_simulation.gd` (137 assertions): config
   load + parse rejection, determinism, state machine transitions, combat, pooling,
   capture/dominion, fortress victory, sudden death, 5-round full-round acceptance, snapshot
   shape, crisis-stage boss spawn, and ProjectilePool exhaustion.
-- [x] Headless sandbox test `game/tests/test_sandbox.gd` (39 assertions): creation, speed
+- [x] Headless sandbox test `tests/test_sandbox.gd` (39 assertions): creation, speed
   values, tick counts at 1×/2×/4×, pause, toggle, reset cleanliness, multiple resets,
   speed changes.
-- [x] Headless shell test `game/tests/test_shell.gd` (92 assertions): all shell scenes,
+- [x] Headless shell test `tests/test_shell.gd` (92 assertions): all shell scenes,
   transitions, SCENE_PATHS, UI config, typography, sanitize, arena scene, 9 unit scenes,
   16 captain scenes, sandbox speeds.
 
@@ -441,7 +441,7 @@ Phase 6 known limitations:
 - **Node version.** Node.js v22.16.0 in use; guide recommends Node 24 LTS. No incompatibilities
   observed but documented as deviation.
 - **Godot verification is manual.** Godot 4.7.1 is not installed on PATH; opening
-  `game/project.godot` is a manual verification step.
+  `project.godot` is a manual verification step.
 - **Shared package ships raw TypeScript.** `shared/` exports raw `.ts` (consumed by tsx/vitest);
   future phases may add a build step if needed for non-tsx consumers.
 - **Audit advisories.** 6 npm audit advisories (all in upstream transitive dependencies).
@@ -655,10 +655,10 @@ Free Engagement Mechanics:
   wiring all subsystems. `processEvent()`, `getStats()`, `getTopContributors()`, `reloadConfig()`.
 - [x] **HTTP Routes** (`gateway/src/routes/engagement_routes.ts`): 4 token-protected endpoints —
   GET/POST /engagement/config, GET /engagement/stats, GET /engagement/top.
-- [x] **GDScript Bridge** (`game/scripts/engagement/free_engagement.gd`): subscribes to
+- [x] **GDScript Bridge** (`scripts/engagement/free_engagement.gd`): subscribes to
   CommandDispatcher signals (follow_guardian, share_shield, strategy_vote, free_energy_ability,
   add_score). Tracks active guardians/shields per faction with expiry cleanup.
-- [x] **HUD** (`game/scenes/ui/FreeEngagementInstructions.tscn`): non-intrusive instructions
+- [x] **HUD** (`scenes/ui/FreeEngagementInstructions.tscn`): non-intrusive instructions
   displayed in Battle scene.
 - [x] **COMMAND_SCHEMA_VERSION bumped to 3** (`shared/schemas/commands.ts`): added
   FOLLOW_GUARDIAN, SHARE_SHIELD, STRATEGY_VOTE, FREE_ENERGY_ABILITY, ADD_SCORE.
@@ -741,7 +741,7 @@ Gift Economy, Streaks, and Burst Aggregation:
 - [x] **App Integration** (`gateway/src/app.ts`): proxy rule registration ensures
   hot-reload doesn't leave pipeline with stale GiftRule reference. ViewerRegistry
   faction lookup injected into GiftEconomy constructor.
-- [x] **GDScript Bridge** (`game/scripts/net/command_dispatcher.gd`): `gift_apply` signal
+- [x] **GDScript Bridge** (`scripts/net/command_dispatcher.gd`): `gift_apply` signal
   declared; routing arm for GIFT_APPLY command type.
 - [x] **COMMAND_SCHEMA_VERSION bumped to 2** (`shared/schemas/commands.ts`): signals
   expanded command vocabulary with GIFT_APPLY.
@@ -825,15 +825,15 @@ Gateway-to-Godot WebSocket Integration:
 - [x] **App Integration** (`gateway/src/app.ts`): `enableWs: true` option creates
   WsServer, attaches via `onReady` hook, closes via `onClose` hook. Decorates
   FastifyInstance with `wsServer`.
-- [x] **Godot WS Client** (`game/scripts/net/ws_client.gd`): GDScript 2.0 class using
+- [x] **Godot WS Client** (`scripts/net/ws_client.gd`): GDScript 2.0 class using
   `WebSocketPeer`. Exponential backoff reconnect (1s→30s). Signals: handshake_completed,
   command_received, snapshot_received, disconnected, error_received. Idempotent command
   application.
-- [x] **Command Dispatcher** (`game/scripts/net/command_dispatcher.gd`): routes commands
+- [x] **Command Dispatcher** (`scripts/net/command_dispatcher.gd`): routes commands
   by type to subsystem signals (faction_join, spawn_champion, add_energy, add_shield,
   spawn_squad, cast_ability, start_world_event, display_spotlight, pause_events,
   end_round). gift_apply (signal declared; routing deferred to Phase 11).
-- [x] **Connection Status HUD** (`game/scripts/ui/connection_status.gd` + scene):
+- [x] **Connection Status HUD** (`scripts/ui/connection_status.gd` + scene):
   non-intrusive 32×32 icon + label. States: CONNECTING (yellow), CONNECTED (green),
   DISCONNECTED (red), RECONNECTING (orange). Added to Battle scene.
 - [x] **86 tests**: ws_protocol (18), ws_retry_buffer (11), ws_server (26),
@@ -1187,11 +1187,11 @@ Visual Effects, Audio, and TikTok Readability — polished launch visual languag
   `readability_routes.ts`): Token-protected endpoints for config, stats, and test triggers.
 - [x] **COMMAND_SCHEMA_VERSION bumped to 4** (`shared/schemas/commands.ts`): New command
   types: `SPAWN_VFX`, `SPOTLIGHT_CARD`, `SUPPORTER_CALLOUT`, `CAMERA_IMPULSE`, `PLAY_AUDIO`.
-- [x] **GDScript VFXPool** (`game/scripts/vfx/VFXPool.gd`): Godot-side object pool for
+- [x] **GDScript VFXPool** (`scripts/vfx/VFXPool.gd`): Godot-side object pool for
   GPUParticles2D instances. Per-type limits, LRU eviction, HTTP config loading.
-- [x] **GDScript AudioManager** (`game/scripts/audio/AudioManager.gd`): Audio playback
+- [x] **GDScript AudioManager** (`scripts/audio/AudioManager.gd`): Audio playback
   with volume groups, track caching, HTTP config loading.
-- [x] **GDScript ReadabilityOverlay** (`game/scripts/ui/ReadabilityOverlay.gd`): Safe-zone
+- [x] **GDScript ReadabilityOverlay** (`scripts/ui/ReadabilityOverlay.gd`): Safe-zone
   overlay with F9 debug toggle, HTTP config loading.
 - [x] **Godot Scenes**: ParticleBurst, HitFlash, Trail, FactionOverlay, SpotlightCard,
   SupporterCallout, CameraImpulse.
@@ -1299,22 +1299,22 @@ Next phase: **Phase 17 — Testing, Performance, and Failure Recovery**.
   Added SET_WINDOW_MODE, ACTIVATE_FALLBACK, DEACTIVATE_FALLBACK command types.
   5 command schema tests.
 
-- [x] **GDScript WindowManager** (`game/scripts/window/window_manager.gd`):
+- [x] **GDScript WindowManager** (`scripts/window/window_manager.gd`):
   Applies DisplayServer settings for windowed/borderless/fullscreen modes.
   Portrait orientation (swaps width/height if needed). HTTP config loading on startup.
   Hand-authored (desk-check only).
 
-- [x] **GDScript PreflightScreen** (`game/scripts/ui/preflight_screen.gd`):
+- [x] **GDScript PreflightScreen** (`scripts/ui/preflight_screen.gd`):
   Shows checklist UI with green checkmarks and red X marks. "Start Stream" button
   enabled only when all checks pass. HTTP polling for preflight status.
   Hand-authored (desk-check only).
 
-- [x] **GDScript FallbackScene** (`game/scripts/ui/fallback_scene.gd`):
+- [x] **GDScript FallbackScene** (`scripts/ui/fallback_scene.gd`):
   "Technical Difficulties" overlay. Activates on ACTIVATE_FALLBACK command,
   deactivates on DEACTIVATE_FALLBACK. Shows user-friendly reason messages.
   Hand-authored (desk-check only).
 
-- [x] **Godot Scenes** (`game/scenes/ui/PreflightScreen.tscn`, `FallbackScene.tscn`):
+- [x] **Godot Scenes** (`scenes/ui/PreflightScreen.tscn`, `FallbackScene.tscn`):
   Hand-authored scene files referencing the GDScript classes above.
 
 - [x] **OBS Runbook** (`docs/OBS_RUNBOOK.md`):
@@ -1482,7 +1482,7 @@ diagnostics export, version display, license inventory, and comprehensive IP/pla
 
 ### New files added
 
-- `game/export_presets.cfg` — Godot Windows Desktop export preset (templates not installed)
+- `export_presets.cfg` — Godot Windows Desktop export preset (templates not installed)
 - `launcher/package.json` — `@riftcrowd-live/launcher` workspace
 - `launcher/tsconfig.json` — TypeScript config for launcher
 - `launcher/vitest.config.ts` — Vitest config for launcher

@@ -1,4 +1,4 @@
-# Headless sandbox test. Run from the game/ directory:
+# Headless sandbox test. Run from the project root:
 #   godot --headless --script res://tests/test_sandbox.gd
 # Exercises the SimulationSandbox wrapper around SimWorld: tick counts at
 # different playback speeds (1x, 2x, 4x), pause behaviour, reset cleanliness,

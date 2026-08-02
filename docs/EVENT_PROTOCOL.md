@@ -208,9 +208,9 @@ See `shared/fixtures/README.md` for the wrapper format shared by both invalid fi
 
 ### GDScript mirror
 
-The Godot client mirrors these schemas in `game/scripts/protocol/protocol_validator.gd` and
-validates the same fixture files via `game/tests/test_protocol.gd` (run from `game/`:
-`godot --headless --script res://tests/test_protocol.gd`; see `game/tests/README.md`).
+The Godot client mirrors these schemas in `scripts/protocol/protocol_validator.gd` and
+validates the same fixture files via `tests/test_protocol.gd` (run from the project root:
+`godot --headless --script res://tests/test_protocol.gd`; see `tests/README.md`).
 
 ## Changelog
 

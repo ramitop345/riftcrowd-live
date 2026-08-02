@@ -15,7 +15,7 @@
  *   `&#58;`/`&#40;` entity escapes) — placeholder art must be self-contained.
  *
  * WARNINGS (allowed, exit code stays 0):
- * - `captainScene` pointing at a `.tscn` that does not exist under `game/` yet.
+ * - `captainScene` pointing at a `.tscn` that does not exist under the project root yet.
  *   Captain scenes are Phase 5 work; the reference is validated for existence only.
  *
  * Run from the repository root: `npm run validate:packs`
@@ -28,7 +28,7 @@ import { ContentPackSchema, type ContentPack } from '../../shared/schemas/packs.
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const packsRoot = join(repoRoot, 'content', 'packs');
-const gameRoot = join(repoRoot, 'game');
+const gameRoot = repoRoot;
 
 /**
  * Substrings that make a placeholder SVG unacceptable: external refs or active content.
@@ -143,7 +143,7 @@ function validatePackFile(file: string, seenPackIds: Map<string, string>): PackR
     const scenePath = join(gameRoot, faction.captainScene.slice('res://'.length));
     if (!existsSync(scenePath)) {
       report.warnings.push(
-        `faction "${faction.id}": captainScene ${faction.captainScene} not found under game/ ` +
+        `faction "${faction.id}": captainScene ${faction.captainScene} not found ` +
           `(expected — captain scenes arrive in Phase 5)`,
       );
     }

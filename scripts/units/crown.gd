@@ -5,6 +5,10 @@ var _body: ColorRect
 var _pulse_time: float = 0.0
 
 
+func _ready() -> void:
+	_body = $Body
+
+
 func _process(delta: float) -> void:
 	_pulse_time += delta
 	var pulse: float = 1.0 + 0.1 * sin(_pulse_time * 3.0)

@@ -4,7 +4,7 @@
  * Spawns:
  *  - Gateway with ALL feature flags enabled.
  *  - MockLiveAdapter emitting events at 50/sec for 60 seconds.
- *  - Godot 4.7.1 headless child process loading game/scripts/boot.gd.
+ *  - Godot 4.7.1 headless child process loading scripts/boot.gd.
  *
  * Asserts (≥40):
  *  - Gateway health returns 200.
@@ -34,7 +34,7 @@ import { getScenario } from '../src/adapters/scenarios.js';
 // ---------------------------------------------------------------------------
 
 const GODOT_PATH = 'C:\\Program Files\\Godot\\godot.exe';
-const GAME_PATH = 'c:\\Program Files\\Developper\\riftcrowd-live\\game';
+const GAME_PATH = 'c:\\Program Files\\Developper\\riftcrowd-live';
 const TOKEN = process.env['LOCAL_SESSION_TOKEN'] ?? 'change-me'; // Match config default
 const E2E_DURATION_MS = 60_000; // 60 seconds
 const E2E_EVENT_RATE = 50; // events/sec

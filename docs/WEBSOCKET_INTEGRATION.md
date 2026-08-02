@@ -134,7 +134,7 @@ Environment variable overrides:
 
 ## Godot Client
 
-### WSClient (`game/scripts/net/ws_client.gd`)
+### WSClient (`scripts/net/ws_client.gd`)
 
 GDScript 2.0 class using `WebSocketPeer` (Godot 4.3 API).
 
@@ -153,7 +153,7 @@ GDScript 2.0 class using `WebSocketPeer` (Godot 4.3 API).
 
 **Reconnect**: exponential backoff (1s, 2s, 4s, 8s, max 30s)
 
-### CommandDispatcher (`game/scripts/net/command_dispatcher.gd`)
+### CommandDispatcher (`scripts/net/command_dispatcher.gd`)
 
 Routes commands from WSClient to game subsystems via signals:
 
@@ -173,7 +173,7 @@ Routes commands from WSClient to game subsystems via signals:
 > **Note**: `gift_apply` signal is declared in CommandDispatcher but routing is deferred to Phase 11
 > (add `GIFT_APPLY` case in `dispatch()` + `GameCommandTypeSchema` when gift economy lands).
 
-### Connection Status HUD (`game/scripts/ui/connection_status.gd`)
+### Connection Status HUD (`scripts/ui/connection_status.gd`)
 
 Non-intrusive HUD element (top-right corner, 32×32 icon + label).
 
@@ -183,7 +183,7 @@ Non-intrusive HUD element (top-right corner, 32×32 icon + label).
 - `DISCONNECTED` — red
 - `RECONNECTING` — orange
 
-Added to the Battle scene (`game/scenes/Battle.tscn`).
+Added to the Battle scene (`scenes/Battle.tscn`).
 
 ## File Manifest
 
@@ -195,10 +195,10 @@ Added to the Battle scene (`game/scenes/Battle.tscn`).
 | `gateway/config/ws.json` | Default WS configuration |
 | `gateway/src/config.ts` | WS env var validation |
 | `gateway/src/app.ts` | WS server integration with Fastify |
-| `game/scripts/net/ws_client.gd` | Godot WS client |
-| `game/scripts/net/command_dispatcher.gd` | Godot command router |
-| `game/scripts/ui/connection_status.gd` | Godot connection HUD |
-| `game/scenes/ui/ConnectionStatus.tscn` | HUD scene |
+| `scripts/net/ws_client.gd` | Godot WS client |
+| `scripts/net/command_dispatcher.gd` | Godot command router |
+| `scripts/ui/connection_status.gd` | Godot connection HUD |
+| `scenes/ui/ConnectionStatus.tscn` | HUD scene |
 
 ## Test Coverage
 

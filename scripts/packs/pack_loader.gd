@@ -16,8 +16,8 @@ extends RefCounted
 const Validator := preload("res://scripts/packs/pack_validator.gd")
 
 ## Repository-relative location of the pack root, resolved from res:// (the
-## Godot project lives in game/, the packs live in content/packs/).
-const PACK_ROOT_FROM_PROJECT: String = "../content/packs"
+## Godot project lives at the repository root, packs live in content/packs/).
+const PACK_ROOT_FROM_PROJECT: String = "content/packs"
 
 ## Pattern art lives next to the pack file: <mode>/svg/<pattern>.svg.
 const SVG_DIR_NAME: String = "svg"

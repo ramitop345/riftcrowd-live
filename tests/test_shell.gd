@@ -1,4 +1,4 @@
-# Headless application-shell smoke test. Run from the game/ directory:
+# Headless application-shell smoke test. Run from the project root:
 #   godot --headless --script res://tests/test_shell.gd
 # Verifies that every shell scene loads and instantiates with a Control root,
 # that the AppState transition table matches the Phase 3 design plus the Phase 4

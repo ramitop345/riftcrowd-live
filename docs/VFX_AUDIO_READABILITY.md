@@ -131,29 +131,29 @@ All endpoints are token-protected (Bearer token).
 
 ## Godot Integration
 
-### VFXPool (`game/scripts/vfx/VFXPool.gd`)
+### VFXPool (`scripts/vfx/VFXPool.gd`)
 - Object pool for GPUParticles2D, ColorRect, Line2D, TextureRect instances.
 - Per-type limits from config (loaded via HTTP on startup).
 - Signals: `vfx_acquired`, `vfx_released`.
 
-### AudioManager (`game/scripts/audio/AudioManager.gd`)
+### AudioManager (`scripts/audio/AudioManager.gd`)
 - Audio playback with volume groups.
 - Track caching to avoid re-loading.
 - Signal handler: `_on_play_audio(command)`.
 
-### ReadabilityOverlay (`game/scripts/ui/ReadabilityOverlay.gd`)
+### ReadabilityOverlay (`scripts/ui/ReadabilityOverlay.gd`)
 - Safe-zone overlay (toggleable via F9 debug key).
 - Reads config via HTTP on startup.
 - Draws safe-zone bounds and corner markers.
 
 ### Scenes
-- `game/scenes/vfx/ParticleBurst.tscn` — GPUParticles2D template.
-- `game/scenes/vfx/HitFlash.tscn` — ColorRect + AnimationPlayer.
-- `game/scenes/vfx/Trail.tscn` — Line2D + AnimationPlayer.
-- `game/scenes/vfx/FactionOverlay.tscn` — TextureRect + AnimationPlayer.
-- `game/scenes/ui/SpotlightCard.tscn` — Panel + Labels + AnimationPlayer.
-- `game/scenes/ui/SupporterCallout.tscn` — Panel + Labels + AnimationPlayer.
-- `game/scenes/ui/CameraImpulse.tscn` — Camera2D + Tween.
+- `scenes/vfx/ParticleBurst.tscn` — GPUParticles2D template.
+- `scenes/vfx/HitFlash.tscn` — ColorRect + AnimationPlayer.
+- `scenes/vfx/Trail.tscn` — Line2D + AnimationPlayer.
+- `scenes/vfx/FactionOverlay.tscn` — TextureRect + AnimationPlayer.
+- `scenes/ui/SpotlightCard.tscn` — Panel + Labels + AnimationPlayer.
+- `scenes/ui/SupporterCallout.tscn` — Panel + Labels + AnimationPlayer.
+- `scenes/ui/CameraImpulse.tscn` — Camera2D + Tween.
 
 ## Known Limitations
 

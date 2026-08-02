@@ -122,11 +122,11 @@ New signals:
 - `free_energy_ability(payload: Dictionary)` — free energy
 - `add_score(payload: Dictionary)` — score from milestones
 
-### FreeEngagement (game/scripts/engagement/free_engagement.gd)
+### FreeEngagement (scripts/engagement/free_engagement.gd)
 
 Subscribes to CommandDispatcher signals. Tracks active guardians and shields per faction with expiry cleanup.
 
-### HUD (game/scenes/ui/FreeEngagementInstructions.tscn)
+### HUD (scenes/ui/FreeEngagementInstructions.tscn)
 
 Non-intrusive instructions displayed in Battle scene:
 - Follow for Guardian (60s cooldown)
