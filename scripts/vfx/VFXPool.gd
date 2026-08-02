@@ -46,6 +46,15 @@ var stats: Dictionary = {
 
 
 func _ready() -> void:
+	# Preload VFX scene templates so pool nodes have proper visuals.
+	if particle_scene == null and ResourceLoader.exists("res://scenes/vfx/ParticleBurst.tscn"):
+		particle_scene = load("res://scenes/vfx/ParticleBurst.tscn") as PackedScene
+	if flash_scene == null and ResourceLoader.exists("res://scenes/vfx/HitFlash.tscn"):
+		flash_scene = load("res://scenes/vfx/HitFlash.tscn") as PackedScene
+	if trail_scene == null and ResourceLoader.exists("res://scenes/vfx/Trail.tscn"):
+		trail_scene = load("res://scenes/vfx/Trail.tscn") as PackedScene
+	if overlay_scene == null and ResourceLoader.exists("res://scenes/vfx/FactionOverlay.tscn"):
+		overlay_scene = load("res://scenes/vfx/FactionOverlay.tscn") as PackedScene
 	_init_pool("particle", max_particles)
 	_init_pool("flash", max_flashes)
 	_init_pool("trail", max_trails)
@@ -187,6 +196,18 @@ func _get_max(vfx_type: String) -> int:
 	return 0
 
 
+## Auto-release expired VFX nodes each frame.
+func _process(_delta: float) -> void:
+	var now: int = Time.get_ticks_msec()
+	var to_release: Array = []
+	for node in _last_used:
+		var dur_ms: int = int(node.get_meta("duration", 0.0) * 1000.0)
+		if dur_ms > 0 and now - _last_used[node] >= dur_ms:
+			to_release.append(node)
+	for node in to_release:
+		release(node)
+
+
 ## Apply params dictionary to a node.
 func _apply_params(node: Node, params: Dictionary) -> void:
 	if params.has("x") and params.has("y") and node is CanvasItem:
@@ -198,6 +219,13 @@ func _apply_params(node: Node, params: Dictionary) -> void:
 		(node as ColorRect).color = Color(str(params["color"]))
 	if params.has("duration"):
 		node.set_meta("duration", float(params["duration"]))
+	# Restart GPUParticles2D so they actually emit when re-acquired.
+	if node is GPUParticles2D:
+		(node as GPUParticles2D).restart()
+	# Play AnimationPlayer if present (e.g. HitFlash).
+	var anim_player: AnimationPlayer = node.get_node_or_null("AnimationPlayer")
+	if anim_player != null and anim_player.has_animation("flash"):
+		anim_player.play("flash")
 
 
 ## Update stats dictionary.

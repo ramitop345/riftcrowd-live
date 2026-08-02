@@ -25,3 +25,6 @@ obj/
 
 # Windows
 Thumbs.db
+
+# Godot MCP local client configuration and authentication
+.mcp.json

@@ -23,20 +23,20 @@ var _track_cache: Dictionary = {}
 
 func _ready() -> void:
 	_music_player = AudioStreamPlayer.new()
-	_music_player.bus = "Music"
+	_music_player.bus = "Master"
 	add_child(_music_player)
 
 	_sfx_player = AudioStreamPlayer.new()
-	_sfx_player.bus = "SFX"
+	_sfx_player.bus = "Master"
 	add_child(_sfx_player)
 
 	_ui_player = AudioStreamPlayer.new()
-	_ui_player.bus = "UI"
+	_ui_player.bus = "Master"
 	add_child(_ui_player)
 
 
 ## Play a track in the given volume group.
-## track: resource path (e.g., "res://audio/sfx/hit.ogg")
+## track: resource path (e.g., "res://audio/sfx/hit.ogg") or logical name
 ## volume_group: "master", "music", "sfx", "ui"
 ## volume_override: optional 0-1 override (default: computed from groups)
 func play(track: String, volume_group: String = "sfx", volume_override: float = -1.0) -> void:
@@ -50,8 +50,9 @@ func play(track: String, volume_group: String = "sfx", volume_override: float = 
 			stream = ResourceLoader.load(track) as AudioStream
 			_track_cache[track] = stream
 		else:
-			push_warning("AudioManager: track not found '%s'" % track)
-			return
+			# Fallback: generate a procedural synth tone so audio works without .ogg files.
+			stream = _generate_synth(track)
+			_track_cache[track] = stream
 
 	player.stream = stream
 	player.volume_db = linear_to_db(vol)
@@ -82,6 +83,37 @@ func _get_player(volume_group: String) -> AudioStreamPlayer:
 			return _ui_player
 		_:
 			return _sfx_player
+
+
+## Generate a procedural synth tone as fallback when audio files are missing.
+## Different track names produce different tones so they're distinguishable.
+func _generate_synth(track: String) -> AudioStream:
+	var mix_rate: int = 22050
+
+	# Derive pitch and duration from track name so each SFX sounds different.
+	var hash_val: int = track.hash()
+	var freq: float = 220.0 + float(absi(hash_val) % 400)  # 220-620 Hz
+	var duration: float = 0.15 + float(absi(hash_val >> 8) % 20) / 100.0  # 0.15-0.35s
+
+	var num_samples: int = int(mix_rate * duration)
+	var raw_bytes: PackedByteArray = PackedByteArray()
+	raw_bytes.resize(num_samples * 2)
+
+	for i in range(num_samples):
+		var t: float = float(i) / float(mix_rate)
+		var envelope: float = 1.0 - (t / duration)
+		envelope *= envelope  # quadratic fade-out
+		var sample: float = sin(t * freq * TAU) * 0.3 * envelope
+		var s: int = clampi(int(sample * 32767.0), -32768, 32767)
+		raw_bytes[i * 2] = s & 0xFF
+		raw_bytes[i * 2 + 1] = (s >> 8) & 0xFF
+
+	var wav := AudioStreamWAV.new()
+	wav.format = AudioStreamWAV.FORMAT_16_BITS
+	wav.mix_rate = mix_rate
+	wav.stereo = false
+	wav.data = raw_bytes
+	return wav
 
 
 ## Stop all currently playing audio.

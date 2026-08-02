@@ -55,6 +55,12 @@ var _preflight: PreflightScreen = null
 var _frame_report_timer: float = 0.0
 var _frame_times: Array = []  # rolling window of last 60 frame times (ms)
 
+# Camera shake state
+var _shake_node: Node2D = null
+var _shake_intensity: float = 0.0
+var _shake_duration: float = 0.0
+var _shake_timer: float = 0.0
+
 
 func _ready() -> void:
 	Ui.apply_safe_margins(_safe_area)
@@ -82,6 +88,7 @@ func _ready() -> void:
 	if arena_packed != null:
 		_arena_node = arena_packed.instantiate()
 		_arena_panel.add_child(_arena_node)
+		_shake_node = _arena_node  # shake the arena directly
 	# Set up presenter.
 	_presenter = BattlePresenter.new()
 	_presenter.setup(_config, randi(), _faction_a, _faction_b, _arena_node)
@@ -129,6 +136,18 @@ func _process(delta: float) -> void:
 
 	# Tier 4 — FRAME_REPORT sender
 	_tier4_frame_report_tick(delta)
+
+	# Camera shake update
+	if _shake_timer > 0.0:
+		_shake_timer -= delta
+		var t: float = _shake_timer / maxf(_shake_duration, 0.01)
+		var offset := Vector2(
+			randf_range(-1.0, 1.0) * _shake_intensity * t,
+			randf_range(-1.0, 1.0) * _shake_intensity * t
+		)
+		_shake_node.position = offset
+	elif _shake_node != null and _shake_node.position != Vector2.ZERO:
+		_shake_node.position = Vector2.ZERO
 
 
 func _update_hud(snapshot: Dictionary) -> void:
@@ -384,19 +403,46 @@ func _on_supporter_callout(cmd: Dictionary) -> void:
 
 
 func _on_camera_impulse(cmd: Dictionary) -> void:
-	# Camera impulse is a visual effect — no Camera2D in Battle scene currently.
-	# Log for observability; implement in Tier 4 if needed.
-	push_warning("Camera impulse received: %s" % str(cmd))
+	var metadata: Dictionary = cmd.get("metadata", {})
+	var intensity: float = float(metadata.get("intensity", 0.5))
+	var duration: float = float(metadata.get("duration", 0.3))
+	# Clamp to reasonable values
+	intensity = clampf(intensity, 0.1, 2.0)
+	duration = clampf(duration, 0.1, 2.0)
+	_shake_intensity = intensity * 15.0  # scale to pixels
+	_shake_duration = duration
+	_shake_timer = duration
 
 
 func _on_gift_apply(cmd: Dictionary) -> void:
-	# Stub — gift economy wiring deferred to Tier 4 gameplay integration.
-	push_warning("gift_apply received: %s (stub)" % str(cmd.get("type", "")))
+	var viewer: String = str(cmd.get("displayName", cmd.get("viewerId", "Viewer")))
+	var gift_name: String = str(cmd.get("metadata", {}).get("giftName", "a gift"))
+	_spotlight_label.text = "%s sent %s!" % [viewer, gift_name]
+	# Spawn a celebratory VFX burst at a random arena position.
+	if _vfx_pool != null:
+		var params: Dictionary = {
+			"x": randf_range(200.0, 880.0),
+			"y": randf_range(300.0, 900.0),
+			"color": "#ffd700",
+			"duration": 1.5,
+		}
+		_vfx_pool.acquire("particle", params)
 
 
 func _on_faction_join(cmd: Dictionary) -> void:
-	# Stub — faction join gameplay wiring deferred to Tier 4.
-	push_warning("faction_join received: %s (stub)" % str(cmd.get("type", "")))
+	var viewer: String = str(cmd.get("displayName", cmd.get("viewerId", "Viewer")))
+	var faction: String = str(cmd.get("metadata", {}).get("faction", "unknown"))
+	_spotlight_label.text = "%s joined %s!" % [viewer, faction]
+	# Spawn a faction-colored VFX burst.
+	if _vfx_pool != null:
+		var color: String = "#4488ff" if faction.to_lower().contains("alpha") or faction.to_lower().contains("a") else "#ff4444"
+		var params: Dictionary = {
+			"x": randf_range(200.0, 880.0),
+			"y": randf_range(300.0, 900.0),
+			"color": color,
+			"duration": 1.0,
+		}
+		_vfx_pool.acquire("particle", params)
 
 
 func _on_display_spotlight(cmd: Dictionary) -> void:

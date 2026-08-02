@@ -119,11 +119,14 @@ export function registerMockRoutes(
 
       await adapter.start();
 
+      // Auto-play: advance the TestClock through the entire scenario so events
+      // fire immediately. Without this the clock sits at 0 and nothing happens.
+      adapter.runToEnd();
+
       state.adapter = adapter;
       state.clock = clock;
       state.scenario = scenario;
-      state.eventsEmitted = 0;
-      state.commandsProduced = 0;
+      // eventsEmitted and commandsProduced already updated by onEvent callback during runToEnd
 
       reply.send({
         ok: true,

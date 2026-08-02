@@ -25,6 +25,7 @@ AppState="*res://autoload/app_state.gd"
 PackRegistry="*res://autoload/pack_registry.gd"
 ErrorOverlay="*res://autoload/error_overlay.gd"
 DebugPanel="*res://autoload/debug_panel.gd"
+MCPRuntimeServer="*res://addons/godot_mcp_toolkit/runtime/mcp_runtime_server.gd"
 
 [display]
 
@@ -32,3 +33,11 @@ window/size/viewport_width=1080
 window/size/viewport_height=1920
 window/stretch/mode="canvas_items"
 window/handheld/orientation=1
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/godot_mcp_toolkit/plugin.cfg")
+
+[mcp_toolkit]
+
+status="No .mcp.json found — use Project > Tools > MCP Toolkit > Write .mcp.json to create one."

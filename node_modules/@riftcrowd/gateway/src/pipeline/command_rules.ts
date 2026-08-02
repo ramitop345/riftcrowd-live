@@ -164,6 +164,32 @@ export const KickRule: Rule = {
   },
 };
 
+/**
+ * GiftApplyRule: gift event → GIFT_APPLY command so the game client
+ * can show visual feedback (spotlight text, VFX burst).
+ */
+export const GiftApplyRule: Rule = {
+  name: 'GiftApplyRule',
+  applies(event) {
+    return event.type === 'gift';
+  },
+  execute(event) {
+    const gift = event.gift;
+    return [
+      makeCommand('GIFT_APPLY', event, {
+        viewerId: event.user.id,
+        displayName: event.user.displayName,
+        metadata: {
+          giftId: gift?.id ?? 'unknown',
+          giftName: gift?.name ?? 'Gift',
+          repeatCount: gift?.repeatCount ?? 1,
+          providerValue: gift?.providerValue ?? 0,
+        },
+      }),
+    ];
+  },
+};
+
 // ---------------------------------------------------------------------------
 // CommandRulesEngine
 // ---------------------------------------------------------------------------
@@ -173,7 +199,7 @@ export class CommandRulesEngine {
 
   constructor() {
     // Register built-in rules by default
-    this.rules = [ModeVoteRule, JoinFactionRule, EndRoundRule, PauseRule, KickRule];
+    this.rules = [ModeVoteRule, JoinFactionRule, GiftApplyRule, EndRoundRule, PauseRule, KickRule];
   }
 
   /** Registers a custom rule. */
