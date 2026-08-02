@@ -1,6 +1,7 @@
 ## Arena visual manager. Hosts fortress/crown/capture-zone instances and manages
 ## pooled unit and projectile visual nodes, syncing them each frame from the
 ## simulation snapshot produced by SimulationSandbox.
+## Also draws the animated background: grid, center glow, faction side tints.
 extends Node2D
 
 const UNIT_SCENE_PATHS: Dictionary = {
@@ -15,6 +16,9 @@ const FORTRESS_SCENE_PATH: String = "res://scenes/units/Fortress.tscn"
 const CROWN_SCENE_PATH: String = "res://scenes/units/Crown.tscn"
 const CAPTURE_ZONE_SCENE_PATH: String = "res://scenes/units/CaptureZone.tscn"
 const DEAD_FADE_DURATION: float = 0.3
+const GRID_SPACING: float = 60.0
+const ARENA_W: float = 1080.0
+const ARENA_H: float = 1180.0
 
 signal round_ended(victory_type: String, winner: int)
 
@@ -22,13 +26,14 @@ signal round_ended(victory_type: String, winner: int)
 var _unit_visuals: Dictionary = {}
 var _projectile_visuals: Dictionary = {}
 
-## Node references for static elements.
+## Child references for static elements.
 var _fortress_a: Node = null
 var _fortress_b: Node = null
 var _crown: Node = null
 var _capture_zone: Node = null
+var _background: ColorRect = null
 
-## Child containers for dynamic nodes.
+## Dynamic containers.
 var _unit_container: Node2D
 var _projectile_container: Node2D
 
@@ -36,6 +41,7 @@ var _config: Dictionary = {}
 var _faction_a: Dictionary = {}
 var _faction_b: Dictionary = {}
 var _victory_emitted: bool = false
+var _arena_time: float = 0.0
 
 
 ## Instantiates fortress/crown/capture-zone nodes with correct positions.
@@ -45,6 +51,10 @@ func setup(config: Dictionary, faction_a: Dictionary, faction_b: Dictionary) -> 
 	_faction_b = faction_b
 	_victory_emitted = false
 	_clear_all()
+	# Hide the .tscn Background — we draw our own enhanced background.
+	_background = $Background
+	if _background != null:
+		_background.visible = false
 	# Capture zone first (renders behind everything).
 	var cz_packed: PackedScene = load(CAPTURE_ZONE_SCENE_PATH) as PackedScene
 	_capture_zone = cz_packed.instantiate()
@@ -76,6 +86,51 @@ func setup(config: Dictionary, faction_a: Dictionary, faction_b: Dictionary) -> 
 	add_child(_projectile_container)
 
 
+func _process(delta: float) -> void:
+	_arena_time += delta
+	queue_redraw()
+
+
+func _draw() -> void:
+	# Dark base
+	draw_rect(Rect2(0, 0, ARENA_W, ARENA_H), Color(0.08, 0.05, 0.1, 1.0))
+	# Faction side tints
+	draw_rect(Rect2(0, 0, ARENA_W * 0.5, ARENA_H), Color(0.15, 0.3, 0.6, 0.03))
+	draw_rect(Rect2(ARENA_W * 0.5, 0, ARENA_W * 0.5, ARENA_H), Color(0.6, 0.15, 0.15, 0.03))
+	# Grid lines
+	var grid_color := Color(0.2, 0.5, 0.7, 0.04)
+	var x: float = 0.0
+	while x <= ARENA_W:
+		draw_line(Vector2(x, 0), Vector2(x, ARENA_H), grid_color, 1.0)
+		x += GRID_SPACING
+	var y: float = 0.0
+	while y <= ARENA_H:
+		draw_line(Vector2(0, y), Vector2(ARENA_W, y), grid_color, 1.0)
+		y += GRID_SPACING
+	# Lane markers (two faint horizontal lines)
+	var lane_color := Color(0.3, 0.5, 0.6, 0.03)
+	draw_line(Vector2(0, ARENA_H * 0.35), Vector2(ARENA_W, ARENA_H * 0.35), lane_color, 1.5)
+	draw_line(Vector2(0, ARENA_H * 0.65), Vector2(ARENA_W, ARENA_H * 0.65), lane_color, 1.5)
+	# Center glow (pulsing)
+	var center := Vector2(540, 590)
+	var glow_pulse: float = 1.0 + sin(_arena_time * 1.5) * 0.15
+	for i in 6:
+		var t: float = float(i) / 6.0
+		var r: float = (40.0 + t * 80.0) * glow_pulse
+		var a: float = 0.025 * (1.0 - t)
+		_draw_bg_circle(center, r, Color(1.0, 0.9, 0.5, a))
+
+
+func _draw_bg_circle(center: Vector2, radius: float, color: Color) -> void:
+	var pts := PackedVector2Array()
+	var segs: int = maxi(int(radius * 0.4), 16)
+	for i in range(segs + 1):
+		var angle: float = (float(i) / float(segs)) * TAU
+		pts.append(center + Vector2(cos(angle), sin(angle)) * radius)
+	if pts.size() >= 3:
+		draw_colored_polygon(pts, color)
+
+
 ## Removes all visual nodes and clears registries.
 func clear_round() -> void:
 	_clear_all()
@@ -83,8 +138,7 @@ func clear_round() -> void:
 
 
 ## Public restart: clears the current round and re-initialises with the given
-## (or previously stored) config and factions. Encapsulates clear+setup so that
-## callers (e.g. BattlePresenter) don't need to reach into private fields.
+## (or previously stored) config and factions.
 func restart(config: Dictionary = _config, faction_a: Dictionary = _faction_a, faction_b: Dictionary = _faction_b) -> void:
 	clear_round()
 	setup(config, faction_a, faction_b)
@@ -229,7 +283,7 @@ func _fade_and_free(node: Node) -> void:
 
 
 func _clear_all() -> void:
-	# Free static elements first.
+	# Free static elements.
 	if _fortress_a != null and is_instance_valid(_fortress_a):
 		_fortress_a.queue_free()
 		_fortress_a = null
@@ -242,14 +296,14 @@ func _clear_all() -> void:
 	if _capture_zone != null and is_instance_valid(_capture_zone):
 		_capture_zone.queue_free()
 		_capture_zone = null
-	# Free containers — this also frees all their children (unit/projectile visuals).
+	# Free containers (children freed with them).
 	if _unit_container != null and is_instance_valid(_unit_container):
 		_unit_container.queue_free()
 		_unit_container = null
 	if _projectile_container != null and is_instance_valid(_projectile_container):
 		_projectile_container.queue_free()
 		_projectile_container = null
-	# Clear registries without re-freeing (children already freed with containers).
+	# Clear registries.
 	_unit_visuals.clear()
 	_projectile_visuals.clear()
 
