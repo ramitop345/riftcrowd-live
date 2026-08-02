@@ -303,13 +303,18 @@ func _wire_signals() -> void:
 	_dispatcher.display_spotlight.connect(_on_display_spotlight)
 	_dispatcher.end_round.connect(_on_end_round_cmd)
 
+	# Bind ConnectionStatus HUD to WSClient signals.
+	var conn_status := $ConnectionStatus as ConnectionStatus
+	if conn_status != null:
+		conn_status.bind_to_ws_client(_ws_client)
+
 
 ## Connect WSClient to the gateway WebSocket.
 func _connect_to_gateway() -> void:
 	var token: String = OS.get_environment("RIFTCROWD_TOKEN")
 	if token.is_empty():
 		token = "change-me"  # dev fallback
-	_ws_client.connect_to_server("ws://127.0.0.1:8788/ws/game", token)
+	_ws_client.connect_to_server("ws://127.0.0.1:8787/ws/game", token)
 
 
 ## Load per-subsystem configs from gateway HTTP endpoints.
@@ -427,6 +432,10 @@ func _tier4_frame_report_tick(delta: float) -> void:
 
 
 ## Compute avg/p95 frame times and send FRAME_REPORT to gateway.
+## NOTE: FRAME_REPORT is not yet a recognised WS message type on the gateway
+## (only handshake_ack, heartbeat_pong, command_ack are). Sending it causes
+## the server to reply with UNSUPPORTED_VERSION which breaks the connection.
+## Disabled until the gateway adds a frame_report handler.
 func _send_frame_report() -> void:
 	if _ws_client == null or _frame_times.is_empty():
 		return
@@ -437,9 +446,10 @@ func _send_frame_report() -> void:
 	var sorted: Array = _frame_times.duplicate()
 	sorted.sort()
 	var p95: float = sorted[int(sorted.size() * 0.95)] if sorted.size() > 1 else avg
-	var report: Dictionary = {
-		"type": "FRAME_REPORT",
-		"avgFrameMs": avg,
-		"p95FrameMs": p95,
-	}
-	_ws_client.send_json(report)
+	# Disabled — gateway does not handle FRAME_REPORT yet.
+	# var report: Dictionary = {
+	# 	"type": "FRAME_REPORT",
+	# 	"avgFrameMs": avg,
+	# 	"p95FrameMs": p95,
+	# }
+	# _ws_client.send_json(report)

@@ -1,0 +1,871 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-08-02T11:35:01.933Z",
+  "events": [
+    {
+      "timeMs": 5000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000001",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:01.000Z",
+        "user": {
+          "id": "viewer_001",
+          "handle": "@viewer_001",
+          "displayName": "viewer_001"
+        },
+        "comment": "1",
+        "rawHash": "sha256:mock_evt_mock_000001_1"
+      }
+    },
+    {
+      "timeMs": 5000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000002",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:02.000Z",
+        "user": {
+          "id": "viewer_002",
+          "handle": "@viewer_002",
+          "displayName": "viewer_002"
+        },
+        "comment": "1",
+        "rawHash": "sha256:mock_evt_mock_000002_1"
+      }
+    },
+    {
+      "timeMs": 5000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000003",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:03.000Z",
+        "user": {
+          "id": "viewer_003",
+          "handle": "@viewer_003",
+          "displayName": "viewer_003"
+        },
+        "comment": "1",
+        "rawHash": "sha256:mock_evt_mock_000003_1"
+      }
+    },
+    {
+      "timeMs": 5000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000004",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:04.000Z",
+        "user": {
+          "id": "viewer_004",
+          "handle": "@viewer_004",
+          "displayName": "viewer_004"
+        },
+        "comment": "1",
+        "rawHash": "sha256:mock_evt_mock_000004_1"
+      }
+    },
+    {
+      "timeMs": 5000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000005",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:05.000Z",
+        "user": {
+          "id": "viewer_005",
+          "handle": "@viewer_005",
+          "displayName": "viewer_005"
+        },
+        "comment": "1",
+        "rawHash": "sha256:mock_evt_mock_000005_1"
+      }
+    },
+    {
+      "timeMs": 10000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000006",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:06.000Z",
+        "user": {
+          "id": "viewer_006",
+          "handle": "@viewer_006",
+          "displayName": "viewer_006"
+        },
+        "comment": "1",
+        "rawHash": "sha256:mock_evt_mock_000006_1"
+      }
+    },
+    {
+      "timeMs": 10000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000007",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:07.000Z",
+        "user": {
+          "id": "viewer_007",
+          "handle": "@viewer_007",
+          "displayName": "viewer_007"
+        },
+        "comment": "1",
+        "rawHash": "sha256:mock_evt_mock_000007_1"
+      }
+    },
+    {
+      "timeMs": 10000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000008",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:08.000Z",
+        "user": {
+          "id": "viewer_008",
+          "handle": "@viewer_008",
+          "displayName": "viewer_008"
+        },
+        "comment": "1",
+        "rawHash": "sha256:mock_evt_mock_000008_1"
+      }
+    },
+    {
+      "timeMs": 10000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000009",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:09.000Z",
+        "user": {
+          "id": "viewer_009",
+          "handle": "@viewer_009",
+          "displayName": "viewer_009"
+        },
+        "comment": "1",
+        "rawHash": "sha256:mock_evt_mock_000009_1"
+      }
+    },
+    {
+      "timeMs": 10000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000010",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:10.000Z",
+        "user": {
+          "id": "viewer_010",
+          "handle": "@viewer_010",
+          "displayName": "viewer_010"
+        },
+        "comment": "1",
+        "rawHash": "sha256:mock_evt_mock_000010_1"
+      }
+    },
+    {
+      "timeMs": 25000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000011",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:25.000Z",
+        "user": {
+          "id": "viewer_001",
+          "handle": "@viewer_001",
+          "displayName": "viewer_001"
+        },
+        "comment": "faction_alpha",
+        "rawHash": "sha256:mock_evt_mock_000011_faction_alpha"
+      }
+    },
+    {
+      "timeMs": 30000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000012",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:26.000Z",
+        "user": {
+          "id": "viewer_002",
+          "handle": "@viewer_002",
+          "displayName": "viewer_002"
+        },
+        "comment": "faction_beta",
+        "rawHash": "sha256:mock_evt_mock_000012_faction_beta"
+      }
+    },
+    {
+      "timeMs": 30000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000013",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:27.000Z",
+        "user": {
+          "id": "viewer_003",
+          "handle": "@viewer_003",
+          "displayName": "viewer_003"
+        },
+        "comment": "faction_alpha",
+        "rawHash": "sha256:mock_evt_mock_000013_faction_alpha"
+      }
+    },
+    {
+      "timeMs": 30000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000014",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:28.000Z",
+        "user": {
+          "id": "viewer_004",
+          "handle": "@viewer_004",
+          "displayName": "viewer_004"
+        },
+        "comment": "faction_beta",
+        "rawHash": "sha256:mock_evt_mock_000014_faction_beta"
+      }
+    },
+    {
+      "timeMs": 30000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000015",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:29.000Z",
+        "user": {
+          "id": "viewer_005",
+          "handle": "@viewer_005",
+          "displayName": "viewer_005"
+        },
+        "comment": "faction_alpha",
+        "rawHash": "sha256:mock_evt_mock_000015_faction_alpha"
+      }
+    },
+    {
+      "timeMs": 30000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000016",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:30.000Z",
+        "user": {
+          "id": "viewer_006",
+          "handle": "@viewer_006",
+          "displayName": "viewer_006"
+        },
+        "comment": "faction_beta",
+        "rawHash": "sha256:mock_evt_mock_000016_faction_beta"
+      }
+    },
+    {
+      "timeMs": 35000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000017",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:31.000Z",
+        "user": {
+          "id": "viewer_007",
+          "handle": "@viewer_007",
+          "displayName": "viewer_007"
+        },
+        "comment": "faction_alpha",
+        "rawHash": "sha256:mock_evt_mock_000017_faction_alpha"
+      }
+    },
+    {
+      "timeMs": 35000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000018",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:32.000Z",
+        "user": {
+          "id": "viewer_008",
+          "handle": "@viewer_008",
+          "displayName": "viewer_008"
+        },
+        "comment": "faction_beta",
+        "rawHash": "sha256:mock_evt_mock_000018_faction_beta"
+      }
+    },
+    {
+      "timeMs": 35000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000019",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:33.000Z",
+        "user": {
+          "id": "viewer_009",
+          "handle": "@viewer_009",
+          "displayName": "viewer_009"
+        },
+        "comment": "faction_alpha",
+        "rawHash": "sha256:mock_evt_mock_000019_faction_alpha"
+      }
+    },
+    {
+      "timeMs": 35000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000020",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:34.000Z",
+        "user": {
+          "id": "viewer_010",
+          "handle": "@viewer_010",
+          "displayName": "viewer_010"
+        },
+        "comment": "faction_beta",
+        "rawHash": "sha256:mock_evt_mock_000020_faction_beta"
+      }
+    },
+    {
+      "timeMs": 35000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000021",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:35.000Z",
+        "user": {
+          "id": "viewer_001",
+          "handle": "@viewer_001",
+          "displayName": "viewer_001"
+        },
+        "comment": "faction_alpha",
+        "rawHash": "sha256:mock_evt_mock_000021_faction_alpha"
+      }
+    },
+    {
+      "timeMs": 40000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000022",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:36.000Z",
+        "user": {
+          "id": "viewer_002",
+          "handle": "@viewer_002",
+          "displayName": "viewer_002"
+        },
+        "comment": "faction_beta",
+        "rawHash": "sha256:mock_evt_mock_000022_faction_beta"
+      }
+    },
+    {
+      "timeMs": 40000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000023",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:37.000Z",
+        "user": {
+          "id": "viewer_003",
+          "handle": "@viewer_003",
+          "displayName": "viewer_003"
+        },
+        "comment": "faction_alpha",
+        "rawHash": "sha256:mock_evt_mock_000023_faction_alpha"
+      }
+    },
+    {
+      "timeMs": 40000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000024",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:38.000Z",
+        "user": {
+          "id": "viewer_004",
+          "handle": "@viewer_004",
+          "displayName": "viewer_004"
+        },
+        "comment": "faction_beta",
+        "rawHash": "sha256:mock_evt_mock_000024_faction_beta"
+      }
+    },
+    {
+      "timeMs": 40000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000025",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:39.000Z",
+        "user": {
+          "id": "viewer_005",
+          "handle": "@viewer_005",
+          "displayName": "viewer_005"
+        },
+        "comment": "faction_alpha",
+        "rawHash": "sha256:mock_evt_mock_000025_faction_alpha"
+      }
+    },
+    {
+      "timeMs": 40000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000026",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:40.000Z",
+        "user": {
+          "id": "viewer_006",
+          "handle": "@viewer_006",
+          "displayName": "viewer_006"
+        },
+        "comment": "faction_beta",
+        "rawHash": "sha256:mock_evt_mock_000026_faction_beta"
+      }
+    },
+    {
+      "timeMs": 45000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000027",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:41.000Z",
+        "user": {
+          "id": "viewer_007",
+          "handle": "@viewer_007",
+          "displayName": "viewer_007"
+        },
+        "comment": "faction_alpha",
+        "rawHash": "sha256:mock_evt_mock_000027_faction_alpha"
+      }
+    },
+    {
+      "timeMs": 45000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000028",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:42.000Z",
+        "user": {
+          "id": "viewer_008",
+          "handle": "@viewer_008",
+          "displayName": "viewer_008"
+        },
+        "comment": "faction_beta",
+        "rawHash": "sha256:mock_evt_mock_000028_faction_beta"
+      }
+    },
+    {
+      "timeMs": 45000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000029",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:43.000Z",
+        "user": {
+          "id": "viewer_009",
+          "handle": "@viewer_009",
+          "displayName": "viewer_009"
+        },
+        "comment": "faction_alpha",
+        "rawHash": "sha256:mock_evt_mock_000029_faction_alpha"
+      }
+    },
+    {
+      "timeMs": 45000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000030",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:44.000Z",
+        "user": {
+          "id": "viewer_010",
+          "handle": "@viewer_010",
+          "displayName": "viewer_010"
+        },
+        "comment": "faction_beta",
+        "rawHash": "sha256:mock_evt_mock_000030_faction_beta"
+      }
+    },
+    {
+      "timeMs": 50000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000031",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:50.000Z",
+        "user": {
+          "id": "viewer_001",
+          "handle": "@viewer_001",
+          "displayName": "viewer_001"
+        },
+        "comment": "gg",
+        "rawHash": "sha256:mock_evt_mock_000031_gg"
+      }
+    },
+    {
+      "timeMs": 55000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000032",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:53.000Z",
+        "user": {
+          "id": "viewer_002",
+          "handle": "@viewer_002",
+          "displayName": "viewer_002"
+        },
+        "comment": "nice",
+        "rawHash": "sha256:mock_evt_mock_000032_nice"
+      }
+    },
+    {
+      "timeMs": 60000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000033",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:56.000Z",
+        "user": {
+          "id": "viewer_003",
+          "handle": "@viewer_003",
+          "displayName": "viewer_003"
+        },
+        "comment": "go go go",
+        "rawHash": "sha256:mock_evt_mock_000033_go go go"
+      }
+    },
+    {
+      "timeMs": 60000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000034",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:00:59.000Z",
+        "user": {
+          "id": "viewer_004",
+          "handle": "@viewer_004",
+          "displayName": "viewer_004"
+        },
+        "comment": "push now",
+        "rawHash": "sha256:mock_evt_mock_000034_push now"
+      }
+    },
+    {
+      "timeMs": 65000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000035",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:01:02.000Z",
+        "user": {
+          "id": "viewer_005",
+          "handle": "@viewer_005",
+          "displayName": "viewer_005"
+        },
+        "comment": "defend base",
+        "rawHash": "sha256:mock_evt_mock_000035_defend base"
+      }
+    },
+    {
+      "timeMs": 65000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000036",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:01:05.000Z",
+        "user": {
+          "id": "viewer_006",
+          "handle": "@viewer_006",
+          "displayName": "viewer_006"
+        },
+        "comment": "focus left",
+        "rawHash": "sha256:mock_evt_mock_000036_focus left"
+      }
+    },
+    {
+      "timeMs": 70000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000037",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:01:08.000Z",
+        "user": {
+          "id": "viewer_007",
+          "handle": "@viewer_007",
+          "displayName": "viewer_007"
+        },
+        "comment": "retreat",
+        "rawHash": "sha256:mock_evt_mock_000037_retreat"
+      }
+    },
+    {
+      "timeMs": 75000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000038",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:01:11.000Z",
+        "user": {
+          "id": "viewer_008",
+          "handle": "@viewer_008",
+          "displayName": "viewer_008"
+        },
+        "comment": "wow",
+        "rawHash": "sha256:mock_evt_mock_000038_wow"
+      }
+    },
+    {
+      "timeMs": 75000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000039",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:01:14.000Z",
+        "user": {
+          "id": "viewer_009",
+          "handle": "@viewer_009",
+          "displayName": "viewer_009"
+        },
+        "comment": "lol",
+        "rawHash": "sha256:mock_evt_mock_000039_lol"
+      }
+    },
+    {
+      "timeMs": 80000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000040",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:01:17.000Z",
+        "user": {
+          "id": "viewer_010",
+          "handle": "@viewer_010",
+          "displayName": "viewer_010"
+        },
+        "comment": "good game",
+        "rawHash": "sha256:mock_evt_mock_000040_good game"
+      }
+    },
+    {
+      "timeMs": 80000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000041",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:01:20.000Z",
+        "user": {
+          "id": "viewer_001",
+          "handle": "@viewer_001",
+          "displayName": "viewer_001"
+        },
+        "comment": "lets go",
+        "rawHash": "sha256:mock_evt_mock_000041_lets go"
+      }
+    },
+    {
+      "timeMs": 85000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000042",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:01:23.000Z",
+        "user": {
+          "id": "viewer_002",
+          "handle": "@viewer_002",
+          "displayName": "viewer_002"
+        },
+        "comment": "come on",
+        "rawHash": "sha256:mock_evt_mock_000042_come on"
+      }
+    },
+    {
+      "timeMs": 90000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000043",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:01:26.000Z",
+        "user": {
+          "id": "viewer_003",
+          "handle": "@viewer_003",
+          "displayName": "viewer_003"
+        },
+        "comment": "yes",
+        "rawHash": "sha256:mock_evt_mock_000043_yes"
+      }
+    },
+    {
+      "timeMs": 90000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000044",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:01:29.000Z",
+        "user": {
+          "id": "viewer_004",
+          "handle": "@viewer_004",
+          "displayName": "viewer_004"
+        },
+        "comment": "no",
+        "rawHash": "sha256:mock_evt_mock_000044_no"
+      }
+    },
+    {
+      "timeMs": 95000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000045",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:01:32.000Z",
+        "user": {
+          "id": "viewer_005",
+          "handle": "@viewer_005",
+          "displayName": "viewer_005"
+        },
+        "comment": "amazing",
+        "rawHash": "sha256:mock_evt_mock_000045_amazing"
+      }
+    },
+    {
+      "timeMs": 95000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000046",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:01:35.000Z",
+        "user": {
+          "id": "viewer_006",
+          "handle": "@viewer_006",
+          "displayName": "viewer_006"
+        },
+        "comment": "great play",
+        "rawHash": "sha256:mock_evt_mock_000046_great play"
+      }
+    },
+    {
+      "timeMs": 100000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000047",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:01:38.000Z",
+        "user": {
+          "id": "viewer_007",
+          "handle": "@viewer_007",
+          "displayName": "viewer_007"
+        },
+        "comment": "close one",
+        "rawHash": "sha256:mock_evt_mock_000047_close one"
+      }
+    },
+    {
+      "timeMs": 105000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000048",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:01:41.000Z",
+        "user": {
+          "id": "viewer_008",
+          "handle": "@viewer_008",
+          "displayName": "viewer_008"
+        },
+        "comment": "well played",
+        "rawHash": "sha256:mock_evt_mock_000048_well played"
+      }
+    },
+    {
+      "timeMs": 105000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000049",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:01:44.000Z",
+        "user": {
+          "id": "viewer_009",
+          "handle": "@viewer_009",
+          "displayName": "viewer_009"
+        },
+        "comment": "thanks",
+        "rawHash": "sha256:mock_evt_mock_000049_thanks"
+      }
+    },
+    {
+      "timeMs": 110000,
+      "event": {
+        "schemaVersion": 1,
+        "id": "evt_mock_000050",
+        "provider": "mock",
+        "type": "chat",
+        "receivedAt": "1970-01-01T00:01:47.000Z",
+        "user": {
+          "id": "viewer_010",
+          "handle": "@viewer_010",
+          "displayName": "viewer_010"
+        },
+        "comment": "bye",
+        "rawHash": "sha256:mock_evt_mock_000050_bye"
+      }
+    }
+  ],
+  "commands": [],
+  "directorSnapshots": [
+    {
+      "state": "BATTLE_FINAL_SURGE"
+    },
+    {
+      "state": "BATTLE_SUDDEN_DEATH"
+    },
+    {
+      "state": "RESULTS"
+    },
+    {
+      "state": "MODE_VOTE"
+    }
+  ]
+}

@@ -70,6 +70,7 @@ func _process(delta: float) -> void:
 			pass
 		1:  # OPEN
 			if _state == State.CONNECTING or _state == State.RECONNECTING:
+				print("[WSClient] WebSocket OPEN — transitioning to CONNECTED")
 				_state = State.CONNECTED
 				_reconnect_attempt = 0
 				_reconnect_timer = 0.0
@@ -85,6 +86,7 @@ func _process(delta: float) -> void:
 					reason = "code=%d: %s" % [close_code, close_reason]
 				else:
 					reason = "connection lost"
+				print("[WSClient] WebSocket CLOSED: %s (auto_reconnect=%s)" % [reason, str(_auto_reconnect)])
 				_state = State.DISCONNECTED
 				_handshake_received = false
 				disconnected.emit(reason)
@@ -92,6 +94,7 @@ func _process(delta: float) -> void:
 					_start_reconnect()
 			elif _state == State.RECONNECTING:
 				# Connection attempt failed; try again with backoff
+				print("[WSClient] Reconnect attempt failed, scheduling next")
 				_schedule_reconnect()
 
 	# Handle reconnect timer
@@ -105,6 +108,7 @@ func _process(delta: float) -> void:
 ## url: "ws://127.0.0.1:8787/ws/game"
 ## token: LOCAL_SESSION_TOKEN value.
 func connect_to_server(url: String, token: String) -> void:
+	print("[WSClient] connect_to_server: url=%s" % url)
 	_url = url
 	_token = token
 	_auto_reconnect = true
@@ -148,6 +152,7 @@ func _do_connect() -> void:
 	_peer = WebSocketPeer.new()
 	var full_url: String = "%s?token=%s" % [_url, _token]
 	var err: int = _peer.connect_to_url(full_url)
+	print("[WSClient] _do_connect: url=%s err=%d" % [full_url, err])
 	if err != OK:
 		push_error("WSClient: connect_to_url failed: %d" % err)
 		_state = State.DISCONNECTED
@@ -202,6 +207,7 @@ func _process_packets() -> void:
 func _handle_message(msg: Dictionary) -> void:
 	var msg_type: String = str(msg.get("type", ""))
 	var pv: Variant = msg.get("protocolVersion")
+	print("[WSClient] RECV type=%s protocolVersion=%s (type=%s)" % [msg_type, str(pv), typeof(pv)])
 	if pv == null or int(pv) != PROTOCOL_VERSION:
 		push_warning("WSClient: protocol version missing or mismatch (got %s, expected %d)" % [str(pv), PROTOCOL_VERSION])
 		error_received.emit("UNSUPPORTED_VERSION", "Protocol version missing or mismatch")
@@ -232,6 +238,7 @@ func _on_handshake(msg: Dictionary) -> void:
 	_server_id = str(msg.get("serverId", ""))
 	_heartbeat_interval_ms = int(msg.get("heartbeatIntervalMs", 5000))
 	_handshake_received = true
+	print("[WSClient] Handshake complete — serverId=%s" % _server_id)
 
 	# Send handshake_ack with our last applied sequence.
 	var ack: Dictionary = {
@@ -324,6 +331,7 @@ func _on_snapshot(msg: Dictionary) -> void:
 func _on_error(msg: Dictionary) -> void:
 	var code: String = str(msg.get("code", "UNKNOWN"))
 	var message: String = str(msg.get("message", ""))
+	print("[WSClient] Server error: [%s] %s" % [code, message])
 	push_warning("WSClient error from server: [%s] %s" % [code, message])
 	error_received.emit(code, message)
 
@@ -349,4 +357,5 @@ func _send_json(data: Dictionary) -> void:
 	if _peer == null or _peer.get_ready_state() != 1:
 		return
 	var text: String = JSON.stringify(data)
+	print("[WSClient] SEND: %s" % text.left(200))
 	_peer.send_text(text)

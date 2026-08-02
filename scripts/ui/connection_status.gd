@@ -58,7 +58,12 @@ func _ready() -> void:
 func set_state(new_state: int) -> void:
 	if new_state == _current_state:
 		return
+	var old_state := _current_state
 	_current_state = new_state
+	var state_names: Array = ["CONNECTING", "CONNECTED", "DISCONNECTED", "RECONNECTING"]
+	var old_name: String = str(state_names[old_state]) if old_state >= 0 and old_state < state_names.size() else str(old_state)
+	var new_name: String = str(state_names[new_state]) if new_state >= 0 and new_state < state_names.size() else str(new_state)
+	print("[ConnectionStatus] %s -> %s" % [old_name, new_name])
 	match new_state:
 		ConnState.CONNECTING:
 			_icon.color = COLOR_CONNECTING
@@ -115,5 +120,7 @@ func _on_ws_disconnected(_reason: String) -> void:
 
 
 func _on_ws_error(_code: String, _message: String) -> void:
-	# Flash disconnected state on error.
-	set_state(ConnState.DISCONNECTED)
+	# Server error messages don't mean the connection is dead — leave the
+	# current state unchanged. The WS will close explicitly if the server
+	# wants to terminate the session.
+	pass
