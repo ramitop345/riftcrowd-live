@@ -1,0 +1,21 @@
+{
+  "volumeGroups": {
+    "master": 80,
+    "music": 60,
+    "sfx": 90,
+    "ui": 70
+  },
+  "tracks": {
+    "backgroundMusic": "audio/music/background.ogg",
+    "battleMusic": "audio/music/battle.ogg",
+    "resultsMusic": "audio/music/results.ogg"
+  },
+  "sfx": {
+    "hit": "audio/sfx/hit.ogg",
+    "follow": "audio/sfx/follow.ogg",
+    "share": "audio/sfx/share.ogg",
+    "gift": "audio/sfx/gift.ogg",
+    "ability": "audio/sfx/ability.ogg",
+    "spotlight": "audio/sfx/spotlight.ogg"
+  }
+}

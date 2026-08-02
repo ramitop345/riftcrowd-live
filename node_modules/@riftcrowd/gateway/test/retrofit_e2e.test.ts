@@ -284,7 +284,7 @@ describe('Tier 5 — E2E with Godot headless', () => {
 
   it('8. WS client can connect from test harness', async () => {
     wsClient = new WebSocket(`ws://127.0.0.1:${WS_PORT}/ws/game?token=${TOKEN}`);
-    return new Promise<void>((resolve, reject) => {
+    return new Promise<void>((resolve, _reject) => {
       const timeout = setTimeout(() => {
         // If WS connection times out, skip this test
         console.log('[Test] WS connection timeout — skipping harness test');

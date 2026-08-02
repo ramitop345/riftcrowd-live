@@ -27,6 +27,7 @@ const app = buildApp({
   enableTikfinity: isTikfinity,
   enableVFX: true,
   enableRunbook: true,
+  enableDiagnostics: true,
 });
 
 let shuttingDown = false;

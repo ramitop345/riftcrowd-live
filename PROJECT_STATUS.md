@@ -1,9 +1,9 @@
 # RiftCrowd LIVE — Project Status
 
 - **Working title:** RiftCrowd LIVE
-- **Current phase:** Phase 18 — Packaging, Release, and Operations (next)
-- **Status:** Phase 17 COMPLETED
-- **Last updated:** 1 August 2026
+- **Current phase:** Phase 19 — Community Feedback and Iteration (next)
+- **Status:** Phase 18 COMPLETED (with fixes applied)
+- **Last updated:** 2 August 2026
 
 ## Phase tracker
 
@@ -26,7 +26,7 @@
 - Phase 15 — Visual Effects, Audio, and TikTok Readability: **COMPLETED**
 - Phase 16 — OBS and TikTok LIVE Studio Runbook: **COMPLETED**
 - Phase 17 — Testing, Performance, and Failure Recovery: **COMPLETED**
-- Phase 18 — Packaging, Release, and Operations: not started
+- Phase 18 — Packaging, Release, and Operations: **COMPLETED**
 
 ## Phase 1 — completed work
 
@@ -1470,6 +1470,126 @@ Next phase: **Phase 17 — Testing, Performance, and Failure Recovery**.
 ### Next phase
 
 **Phase 18 — Packaging, Release, and Operations.**
+
+---
+
+## Phase 18 — Packaging, Release, and Operations: COMPLETED
+
+### Summary
+
+Created a creator-friendly Windows release package with launcher orchestrator, configuration migration,
+diagnostics export, version display, license inventory, and comprehensive IP/platform checklist.
+
+### New files added
+
+- `game/export_presets.cfg` — Godot Windows Desktop export preset (templates not installed)
+- `launcher/package.json` — `@riftcrowd-live/launcher` workspace
+- `launcher/tsconfig.json` — TypeScript config for launcher
+- `launcher/vitest.config.ts` — Vitest config for launcher
+- `launcher/src/index.ts` — Launcher orchestrator (arg parsing, process management, health check, graceful shutdown)
+- `launcher/src/config_migration.ts` — Config migration with backup, validation, rollback
+- `launcher/test/config_migration.test.ts` — Migration idempotency, backup, rollback tests
+- `launcher/test/launcher.test.ts` — Arg parsing, shutdown behavior tests
+- `gateway/src/routes/version_route.ts` — `GET /version` endpoint
+- `gateway/src/routes/diagnostics_route.ts` — `POST /diagnostics/export` (ZIP) + `GET /diagnostics/info`
+- `gateway/test/diagnostics.test.ts` — Version endpoint, diagnostics ZIP, config redaction tests
+- `release/START.bat` — Mock mode launcher batch file
+- `release/START-PROD.bat` — Production mode launcher batch file
+- `release/gateway/start.bat` — Gateway standalone start
+- `release/gateway/start-mock.bat` — Gateway standalone mock start
+- `release/gateway/` — Production-built gateway files (dist + config)
+- `release/dashboard/` — Production-built dashboard static files
+- `release/dashboard/README.md` — Dashboard serving instructions
+- `release/UPDATES.md` — Release notes, schema history, known limitations
+- `release/LICENSE_INVENTORY.md` — Third-party dependency license inventory
+- `release/godot/` — Directory for Godot export (templates not installed, export skipped)
+
+### Modified files
+
+- `package.json` — Added `launcher` to workspaces array
+- `gateway/package.json` — Added `archiver` and `@types/archiver` dependencies
+- `gateway/src/app.ts` — Added `enableDiagnostics` option, register version/diagnostics routes
+- `gateway/src/server.ts` — Enable diagnostics routes by default
+- `gateway/test/retrofit_e2e.test.ts` — Fixed unused `reject` param lint error
+- `dashboard/vite.config.ts` — Added `/version` and `/diagnostics` proxies
+- `dashboard/src/api/client.ts` — Added `getVersion()` API function
+- `dashboard/src/components/Layout.tsx` — Added version info display in header
+- `eslint.config.js` — Added `release/**` to ignore list
+- `docs/IP_AND_PLATFORM_CHECKLIST.md` — Added Phase 18 platform readiness checklist
+
+### Commands run and results
+
+- `npm install` — **469 packages**, added archiver, rimraf, @types/archiver
+- `cd gateway; npx tsc` — **exit 0** (gateway build)
+- `cd dashboard; npm run build` — **exit 0** (vite build: 278KB JS bundle)
+- `cd launcher; npx tsc` — **exit 0** (launcher build)
+- `npm run lint` — **0 errors**
+- `npm run typecheck` — **clean** (shared + gateway + dashboard + launcher + tools)
+- `npm test` — **1342 total** (1233 gateway + 85 dashboard + 24 launcher)
+- `npm run validate:packs` — **4/4 passed, 0 warnings**
+- Godot export: **SKIPPED** (export templates not installed at `%APPDATA%\Godot\export_templates\4.7.1.stable\`)
+
+### Test counts
+
+| Suite | Tests | Status |
+|-------|-------|--------|
+| Gateway | 1233 | All passing |
+| Dashboard | 85 | All passing |
+| Launcher | 24 | All passing |
+| **Total** | **1342** | **All passing** |
+
+### Known limitations
+
+- **Godot export templates not installed.** Download from:
+  `https://github.com/godotengine/godot/releases/download/4.7.1-stable/Godot_v4.7.1-stable_export_templates.tpz`
+- **No actual .exe produced.** `release/godot/RiftCrowd_LIVE.exe` does not exist.
+- **Audio assets are placeholder paths.** Background music and SFX files must be provided.
+- **TikFinity adapter.** Production mode requires TikFinity running on port 23184.
+- **Single creator session.** No multi-creator support.
+- **No persistent storage.** Session data is in-memory only.
+
+### Next phase
+
+**Phase 19 — Community Feedback and Iteration.**
+
+### Phase 18 — Fixes Applied
+
+Five bugs identified during verification were fixed:
+
+| # | Severity | Bug | Fix |
+|---|----------|-----|-----|
+| 1 | CRITICAL | Launcher spawned `node index.js` (wrong entry point) | Resolves `gateway/dist/server.js` (dev) or `release/gateway/server.js` (release); added `--dev` and `--release-dir` CLI flags |
+| 2 | CRITICAL | Release batch files ran `node index.js` | Updated `start.bat` and `start-mock.bat` to `node server.js`; added `LOCAL_SESSION_TOKEN`, `HOST`, `GATEWAY_PORT` env vars |
+| 3 | MEDIUM | `@riftcrowd/shared` exported `.ts` files (Node cannot run) | Added `tsc` build to `shared/` compiling `schemas/` → `dist/`; updated `package.json` `main`/`types`/`exports` to `dist/`; added root `build` script (shared → gateway → dashboard → launcher) |
+| 4 | MEDIUM | Gateway missing `build:prod` script | Added `"build:prod": "tsc"` alias to `gateway/package.json` |
+| 5 | LOW | Config migration backed up corrupt files before validation | Reordered: read → parse → validate → backup → write; corrupt files left untouched with `.invalid` sidecar |
+
+### Updated test counts (post-fixes)
+
+| Suite | Tests | Status |
+|-------|-------|--------|
+| Gateway | 1233 | All passing (1 pre-existing flaky: `tikfinity_adapter` connection timing) |
+| Dashboard | 85 | All passing |
+| Launcher | 24 | All passing |
+| **Total** | **1342** | **All passing** |
+
+### Smoke test results
+
+- `node launcher/dist/index.js --mode mock --skip-godot --skip-dashboard --dev` — gateway started, healthy within 2s
+- `GET /health` → **200** `{"status":"ok"}`
+- `GET /version` → **200** `{"version":"1.0.0","schemaVersion":6}`
+- Graceful shutdown — no orphaned processes
+
+### Known limitations (updated)
+
+- Godot export templates not installed — no `.exe` produced
+- Audio assets are placeholder paths
+- No persistent storage — session data is in-memory only
+- 1 pre-existing flaky gateway test (`tikfinity_adapter` connection timing)
+
+### Next phase
+
+**Phase 19 — Community Feedback and Iteration.**
 
 ---
 

@@ -1,0 +1,26 @@
+{
+  "name": "@riftcrowd-live/launcher",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "RiftCrowd LIVE launcher — orchestrates gateway, dashboard, and Godot game startup.",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "zod": "^3",
+    "archiver": "^7",
+    "rimraf": "^6",
+    "@riftcrowd/shared": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "vitest": "^3",
+    "@types/node": "^22",
+    "@types/archiver": "^6"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "@riftcrowd/gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "fastify": "^5",
+    "@fastify/cors": "^10",
+    "@fastify/static": "^8",
+    "ws": "^8",
+    "zod": "^3",
+    "pino": "^9",
+    "pino-pretty": "^11",
+    "dotenv": "^16",
+    "nanoid": "^5",
+    "archiver": "^7",
+    "@riftcrowd/shared": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "tsx": "^4",
+    "vitest": "^3",
+    "@types/node": "^22",
+    "@types/ws": "^8",
+    "@types/archiver": "^6"
+  }
+}

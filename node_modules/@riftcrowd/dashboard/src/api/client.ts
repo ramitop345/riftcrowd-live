@@ -321,3 +321,16 @@ export function mockReplay(sessionPath: string): Promise<ApiResult<OkResponse>> 
 export function hideUser(viewerId: string): Promise<ApiResult<OkResponse>> {
   return post<OkResponse>('/viewer/hide', { viewerId });
 }
+
+// Phase 18: Version info
+export interface VersionResponse {
+  version: string;
+  schemaVersion: number;
+  nodeVersion: string;
+  buildTime: string;
+  godotVersion: string;
+}
+
+export function getVersion(): Promise<ApiResult<VersionResponse>> {
+  return get<VersionResponse>('/version');
+}

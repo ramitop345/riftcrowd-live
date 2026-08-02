@@ -1,0 +1,6 @@
+{
+  "displayNameMaxLength": 64,
+  "chatCommandMaxLength": 200,
+  "contributionCategoryCap": 1000000,
+  "strategyKeywords": ["focus", "defend", "push", "retreat"]
+}

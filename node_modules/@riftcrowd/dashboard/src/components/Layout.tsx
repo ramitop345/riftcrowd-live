@@ -10,7 +10,7 @@
  * sidebar from consuming ≥35% of the screen on mobile.
  */
 import { type JSX, useState, useEffect, useCallback, useRef } from 'react';
-import { getHealth, getDirectorState } from '../api/client.js';
+import { getHealth, getDirectorState, getVersion, type VersionResponse } from '../api/client.js';
 import { css } from '../styles.js';
 
 export interface NavItem {
@@ -42,6 +42,7 @@ export function Layout({ activePage, onNavigate, children }: LayoutProps): JSX.E
   const [connected, setConnected] = useState(false);
   const [directorState, setDirectorState] = useState<string>('—');
   const [currentMode, setCurrentMode] = useState<string>('—');
+  const [versionInfo, setVersionInfo] = useState<VersionResponse | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const poll = useCallback(async (): Promise<void> => {
@@ -52,7 +53,14 @@ export function Layout({ activePage, onNavigate, children }: LayoutProps): JSX.E
       setDirectorState(dir.data.state);
       setCurrentMode(dir.data.currentMode ?? '—');
     }
-  }, []);
+    // Fetch version once on first successful connection
+    if (health.ok && !versionInfo) {
+      const ver = await getVersion();
+      if (ver.ok) {
+        setVersionInfo(ver.data);
+      }
+    }
+  }, [versionInfo]);
 
   const startPolling = useCallback(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
@@ -126,6 +134,11 @@ export function Layout({ activePage, onNavigate, children }: LayoutProps): JSX.E
           <span style={{ fontSize: '0.8rem', color: '#8a8fa3' }}>
             Phase: {directorState} | Mode: {currentMode}
           </span>
+          {versionInfo && (
+            <span style={{ fontSize: '0.75rem', color: '#6b7280', marginLeft: 'auto' }} data-testid="version-info">
+              v{versionInfo.version} | Schema: {versionInfo.schemaVersion} | Godot: {versionInfo.godotVersion}
+            </span>
+          )}
         </header>
         <main style={css.content}>
           {children}

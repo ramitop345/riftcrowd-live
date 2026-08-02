@@ -14,8 +14,10 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "isolatedModules": true,
-    "declaration": false,
-    "noEmit": true
+    "declaration": true,
+    "outDir": "dist",
+    "rootDir": "schemas",
+    "noEmit": false
   },
   "include": ["schemas"]
 }

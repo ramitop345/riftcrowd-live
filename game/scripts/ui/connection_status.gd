@@ -45,7 +45,7 @@ func _ready() -> void:
 	# Label.
 	_label = Label.new()
 	_label.text = LABEL_DISCONNECTED
-	_label.theme_override_font_sizes = {} # use theme default
+	#_label.theme_override_font_sizes = {} # use theme default
 	_label.add_theme_font_size_override("font_size", 20)
 	_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_label)

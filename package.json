@@ -8,12 +8,14 @@
   "workspaces": [
     "shared",
     "gateway",
-    "dashboard"
+    "dashboard",
+    "launcher"
   ],
   "engines": {
     "node": ">=22"
   },
   "scripts": {
+    "build": "npm run build --workspace=shared && npm run build --workspace=gateway && npm run build --workspace=dashboard --if-present && npm run build --workspace=launcher",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

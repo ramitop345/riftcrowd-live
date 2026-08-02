@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
+    "build:prod": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
@@ -19,6 +20,7 @@
     "pino-pretty": "^11",
     "dotenv": "^16",
     "nanoid": "^5",
+    "archiver": "^7",
     "@riftcrowd/shared": "*"
   },
   "devDependencies": {
@@ -26,6 +28,7 @@
     "tsx": "^4",
     "vitest": "^3",
     "@types/node": "^22",
-    "@types/ws": "^8"
+    "@types/ws": "^8",
+    "@types/archiver": "^6"
   }
 }

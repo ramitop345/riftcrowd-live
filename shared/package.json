@@ -4,16 +4,37 @@
   "private": true,
   "type": "module",
   "description": "Versioned Zod schemas and fixtures shared by the RiftCrowd LIVE gateway, dashboard, and tests.",
-  "main": "./schemas/index.ts",
-  "types": "./schemas/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./schemas/index.ts",
-    "./events": "./schemas/events.ts",
-    "./commands": "./schemas/commands.ts",
-    "./identity": "./schemas/identity.ts",
-    "./messages": "./schemas/messages.ts",
-    "./packs": "./schemas/packs.ts",
-    "./ws_protocol": "./schemas/ws_protocol.ts",
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./events": {
+      "import": "./dist/events.js",
+      "types": "./dist/events.d.ts"
+    },
+    "./commands": {
+      "import": "./dist/commands.js",
+      "types": "./dist/commands.d.ts"
+    },
+    "./identity": {
+      "import": "./dist/identity.js",
+      "types": "./dist/identity.d.ts"
+    },
+    "./messages": {
+      "import": "./dist/messages.js",
+      "types": "./dist/messages.d.ts"
+    },
+    "./packs": {
+      "import": "./dist/packs.js",
+      "types": "./dist/packs.d.ts"
+    },
+    "./ws_protocol": {
+      "import": "./dist/ws_protocol.js",
+      "types": "./dist/ws_protocol.d.ts"
+    },
     "./fixtures/valid-events.json": "./fixtures/valid-events.json",
     "./fixtures/invalid-events.json": "./fixtures/invalid-events.json",
     "./fixtures/valid-messages.json": "./fixtures/valid-messages.json",
@@ -22,10 +43,11 @@
     "./fixtures/invalid-packs.json": "./fixtures/invalid-packs.json"
   },
   "files": [
-    "schemas",
+    "dist",
     "fixtures"
   ],
   "scripts": {
+    "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

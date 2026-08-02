@@ -1,3 +1,27 @@
 # Godot 4+ specific ignores
 .godot/
 /android/
+.qoder
+
+# Exported executables
+/export/
+
+# Export presets containing local paths (optional)
+export_presets.cfg
+
+# Mono/C# build folders
+.mono/
+bin/
+obj/
+
+# VS Code
+.vscode/
+
+# JetBrains
+.idea/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db

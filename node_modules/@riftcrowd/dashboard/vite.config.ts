@@ -19,6 +19,8 @@ export default defineConfig({
       '/gifts': 'http://127.0.0.1:8787',
       '/engagement': 'http://127.0.0.1:8787',
       '/viewer': 'http://127.0.0.1:8787',
+      '/version': 'http://127.0.0.1:8787',
+      '/diagnostics': 'http://127.0.0.1:8787',
     },
   },
   test: {

@@ -28,6 +28,8 @@ import { registerReadabilityRoutes } from './routes/readability_routes.js';
 import { registerWindowRoutes } from './routes/window_routes.js';
 import { registerPreflightRoutes } from './routes/preflight_routes.js';
 import { registerFallbackRoutes } from './routes/fallback_routes.js';
+import { registerVersionRoute } from './routes/version_route.js';
+import { registerDiagnosticsRoute } from './routes/diagnostics_route.js';
 import { WsServer } from './ws/ws_server.js';
 import { GiftEconomy } from './gifts/gift_economy.js';
 import { FreeEngagement } from './engagement/free_engagement.js';
@@ -69,6 +71,8 @@ export interface BuildAppOptions {
   enableVFX?: boolean;
   /** Enable Phase 16 Window/Preflight/Fallback routes. Opt-in: defaults to false. */
   enableRunbook?: boolean;
+  /** Enable Phase 18 diagnostics routes. Opt-in: defaults to false. */
+  enableDiagnostics?: boolean;
 }
 
 /**
@@ -461,6 +465,15 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       } catch (err: unknown) {
         app.log.warn(`[Phase16] Failed to initialize: ${String(err)}`);
       }
+    }
+
+    // Phase 18: Version endpoint (always registered, public)
+    registerVersionRoute(app);
+
+    // Phase 18: Diagnostics export (opt-in via enableDiagnostics: true)
+    if (options.enableDiagnostics === true) {
+      registerDiagnosticsRoute(app, { config });
+      app.log.info('[Phase18] Diagnostics routes registered');
     }
 
     // Phase 10: WebSocket server (opt-in via enableWs: true)
