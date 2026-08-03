@@ -4,8 +4,8 @@
  * Each scenario exports a name, duration, and array of ScheduledEvent objects
  * (timeMs + NormalizedLiveEvent). Scenarios are deterministic: same input → same output.
  *
- * Seven scenarios: normal_traffic, gift_streak, viral_burst, malformed_payloads,
- * disconnect, reconnect, four_mode_round.
+ * Eight scenarios: normal_traffic, gift_streak, viral_burst, malformed_payloads,
+ * disconnect, reconnect, four_mode_round, technique_demo.
  */
 
 import type { NormalizedLiveEvent } from '@riftcrowd/shared';
@@ -587,6 +587,23 @@ export function fourModeRound(): Scenario {
 }
 
 // ---------------------------------------------------------------------------
+// Scenario 8: technique_demo
+// One gift per tier (Spark/Flare/Nova) from different viewers, spaced well
+// beyond all gift cooldowns so each gift produces its CAST_TECHNIQUE
+// command. Lets the game demo all three technique tiers in mock mode.
+// ---------------------------------------------------------------------------
+
+export function techniqueDemo(): Scenario {
+  resetEventCounter();
+  const events: ScheduledEvent[] = [
+    makeGiftEvent({ timeMs: 2000, viewerId: 'tech_viewer_1', giftId: 'gift_001', giftName: 'Rose', providerValue: 1 }),
+    makeGiftEvent({ timeMs: 8000, viewerId: 'tech_viewer_2', giftId: 'gift_008', giftName: 'Blaze', providerValue: 10 }),
+    makeGiftEvent({ timeMs: 14000, viewerId: 'tech_viewer_3', giftId: 'gift_015', giftName: 'Phoenix', providerValue: 100 }),
+  ];
+  return { name: 'technique_demo', events, durationMs: 20_000 };
+}
+
+// ---------------------------------------------------------------------------
 // Scenario registry
 // ---------------------------------------------------------------------------
 
@@ -598,6 +615,7 @@ export const SCENARIO_REGISTRY: Record<string, () => Scenario> = {
   disconnect,
   reconnect,
   four_mode_round: fourModeRound,
+  technique_demo: techniqueDemo,
 };
 
 /** Returns a scenario by name, or throws if not found. */

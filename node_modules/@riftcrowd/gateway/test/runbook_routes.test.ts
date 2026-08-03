@@ -276,9 +276,9 @@ describe('Command Schema Phase 16 additions', () => {
     expect(GameCommandTypeSchema.parse('DEACTIVATE_FALLBACK')).toBe('DEACTIVATE_FALLBACK');
   });
 
-  it('ACTIVATE_FALLBACK command validates with schemaVersion 6', () => {
+  it('ACTIVATE_FALLBACK command validates with schemaVersion 7', () => {
     const cmd = {
-      schemaVersion: 6,
+      schemaVersion: 7,
       id: 'cmd-fallback-1',
       type: 'ACTIVATE_FALLBACK',
       createdAt: new Date().toISOString(),

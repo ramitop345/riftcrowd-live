@@ -41,6 +41,9 @@ var _faction_b: Dictionary = {}
 var _results_timer: float = -1.0
 var _max_fortress_health: float = 500.0
 
+## Alternates technique factions for commands with an unknown factionId (mock mode).
+var _next_technique_faction: int = 0
+
 # Orchestrator references (Tier 3 — programmatic instantiation)
 var _ws_client: WSClient = null
 var _dispatcher: CommandDispatcher = null
@@ -267,6 +270,21 @@ func _on_round_completed(snapshot: Dictionary) -> void:
 	elif winner == 1:
 		winner_name = str(_faction_b.get("displayName", "B"))
 	_spotlight_label.text = "Victory: %s (%s) — restarting..." % [winner_name, vtype]
+	# Celebratory gold bursts across the arena to punctuate the win.
+	if _vfx_pool != null:
+		var burst_color: String = "#ffd700"
+		if winner == 0:
+			burst_color = "#66aaff"
+		elif winner == 1:
+			burst_color = "#ff6655"
+		for i in 4:
+			var params: Dictionary = {
+				"x": randf_range(200.0, 880.0),
+				"y": randf_range(300.0, 900.0),
+				"color": burst_color,
+				"duration": 2.0,
+			}
+			_vfx_pool.acquire("particle", params)
 	# Auto-restart after a brief delay so the battle loops continuously.
 	_results_timer = RESULTS_DELAY
 
@@ -344,6 +362,9 @@ func _wire_signals() -> void:
 	_dispatcher.faction_join.connect(_on_faction_join)
 	_dispatcher.display_spotlight.connect(_on_display_spotlight)
 	_dispatcher.end_round.connect(_on_end_round_cmd)
+
+	# Gift technique system — CAST_TECHNIQUE drives sim effects + arena visuals.
+	_dispatcher.cast_technique.connect(_on_cast_technique)
 
 	# Bind ConnectionStatus HUD to WSClient signals.
 	var conn_status := $ConnectionStatus as ConnectionStatus
@@ -482,6 +503,38 @@ func _on_display_spotlight(cmd: Dictionary) -> void:
 func _on_end_round_cmd(cmd: Dictionary) -> void:
 	# Forward to existing end-battle logic.
 	_on_end_battle_pressed()
+
+
+## CAST_TECHNIQUE: resolves the gift's faction to a sim faction index and
+## triggers the technique in the deterministic world. The arena picks up the
+## resulting "technique:<faction>:<tier>" sim event for animations + camera.
+func _on_cast_technique(cmd: Dictionary) -> void:
+	var metadata: Dictionary = cmd.get("metadata", {}) if typeof(cmd.get("metadata", {})) == TYPE_DICTIONARY else {}
+	var tier: int = int(metadata.get("techniqueTier", 1))
+	var faction_id: String = str(cmd.get("factionId", ""))
+	var faction_index: int = -1
+	if faction_id == str(_faction_a.get("id", "")):
+		faction_index = 0
+	elif faction_id == str(_faction_b.get("id", "")):
+		faction_index = 1
+	else:
+		# Unknown faction (mock mode / free gifts) — alternate between sides.
+		faction_index = _next_technique_faction
+		_next_technique_faction = 1 - _next_technique_faction
+	var viewer: String = str(cmd.get("displayName", cmd.get("viewerId", "Viewer")))
+	var gift_name: String = str(metadata.get("giftName", "a gift"))
+	_spotlight_label.text = "%s unleashed a tier %d technique (%s)!" % [viewer, tier, gift_name]
+	if _presenter != null and _presenter.sandbox != null and _presenter.sandbox.world != null:
+		_presenter.sandbox.world.trigger_technique(faction_index, tier)
+	# Gold burst VFX at the performing faction's side of the arena.
+	if _vfx_pool != null:
+		var params: Dictionary = {
+			"x": 300.0 if faction_index == 0 else 780.0,
+			"y": 590.0,
+			"color": "#ffd700" if tier >= 3 else "#88ccff",
+			"duration": 0.8 + 0.4 * float(tier),
+		}
+		_vfx_pool.acquire("particle", params)
 
 
 # ===========================================================================

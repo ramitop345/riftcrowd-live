@@ -19,6 +19,7 @@ export const GiftImpactTypeSchema = z.enum([
   'cast_ability',
   'start_world_event',
   'display_spotlight',
+  'trigger_technique',
 ]);
 
 export type GiftImpactType = z.infer<typeof GiftImpactTypeSchema>;
@@ -39,6 +40,22 @@ export const TierImpactSchema = z
 export type TierImpact = z.infer<typeof TierImpactSchema>;
 
 // ---------------------------------------------------------------------------
+// Secondary technique impact (gift tiers trigger faction techniques alongside
+// the primary impact)
+// ---------------------------------------------------------------------------
+
+export const TechniqueImpactSchema = z
+  .object({
+    type: z.literal('trigger_technique'),
+    /** Technique tier performed by the faction: 1 (minor), 2 (average), 3 (major), 4 (lion, reserved). */
+    magnitude: z.number().int().min(1).max(4),
+    cinematic: z.boolean().optional(),
+  })
+  .strict();
+
+export type TechniqueImpact = z.infer<typeof TechniqueImpactSchema>;
+
+// ---------------------------------------------------------------------------
 // Tier
 // ---------------------------------------------------------------------------
 
@@ -49,6 +66,7 @@ export const GiftTierSchema = z
     minValue: z.number().int().min(0),
     maxValue: z.number().int().min(0),
     impact: TierImpactSchema,
+    technique: TechniqueImpactSchema.optional(),
   })
   .strict();
 

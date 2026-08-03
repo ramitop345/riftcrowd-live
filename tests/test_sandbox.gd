@@ -29,16 +29,19 @@ func _initialize() -> void:
 	quit(0 if _failed == 0 else 1)
 
 
-# --- Test config helpers (same SHORT config as test_simulation) ---
+# --- Test config helpers ---
+# Stages are long and fortress health is huge so the perf tests below
+# (up to 4x * 60s = 240 sim-seconds) never end the round early — even with
+# final_surge siege escalation the fortress must survive the full run.
 
 func _make_config() -> Dictionary:
 	return {
 		"schemaVersion": 1, "tickRate": 20,
-		"stages": {"opening": 12, "crisis": 6, "finalSurge": 6, "suddenDeath": 6},
+		"stages": {"opening": 120, "crisis": 60, "finalSurge": 60, "suddenDeath": 600},
 		"arena": {"width": 1080, "height": 1180, "captureZoneRadius": 170},
-		"fortressHealth": 50,
+		"fortressHealth": 1000000,
 		"capturePressureWeights": {"champion": 1.0, "guardian": 0.6, "striker": 0.8, "captain": 1.5},
-		"dominion": {"ratePerSecondAtFullAdvantage": 10.0, "smoothing": 0.15},
+		"dominion": {"ratePerSecondAtFullAdvantage": 0.0, "smoothing": 0.15},
 		"unitStats": {
 			"champion": {"maxHealth": 100, "attackDamage": 12, "attackIntervalSeconds": 1.0, "moveSpeed": 140, "attackRange": 60, "retreatHealthFraction": 0.25},
 			"guardian": {"maxHealth": 160, "attackDamage": 8, "attackIntervalSeconds": 1.2, "moveSpeed": 100, "attackRange": 50, "retreatHealthFraction": 0.25},

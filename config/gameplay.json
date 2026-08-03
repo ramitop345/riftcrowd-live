@@ -89,5 +89,37 @@
   },
   "projectile": {
     "speed": 420
+  },
+  "camera": {
+    "driftAmplitude": 1.2,
+    "driftSpeed": 0.15,
+    "masterFov": 75.0,
+    "focusFov": 55.0,
+    "masterPos": [0.0, 24.0, -28.0]
+  },
+  "technique": {
+    "tier1": {
+      "damageBuffFraction": 0.5,
+      "buffDurationSeconds": 3.0
+    },
+    "tier2": {
+      "aoeRadius": 140,
+      "aoeDamage": 30
+    },
+    "tier3": {
+      "aoeRadius": 240,
+      "aoeDamage": 60,
+      "teamDamageBuffFraction": 0.25,
+      "teamSpeedBuffFraction": 0.15,
+      "buffDurationSeconds": 6.0,
+      "cinematic": true
+    },
+    "performDurationSeconds": 1.6,
+    "staggerStepSeconds": 0.08
+  },
+  "celebration": {
+    "durationSeconds": 2.8,
+    "staggerStepSeconds": 0.06,
+    "cameraPushIn": true
   }
 }

@@ -21,6 +21,7 @@ const TOP_LEVEL_KEYS: PackedStringArray = [
 	"schemaVersion", "tickRate", "stages", "arena", "fortressHealth",
 	"capturePressureWeights", "dominion", "unitStats", "pools",
 	"bots", "finalSurge", "suddenDeath", "crisis", "projectile",
+	"camera", "technique", "celebration",
 ]
 const ARENA_KEYS: PackedStringArray = ["width", "height", "captureZoneRadius"]
 const DOMINION_KEYS: PackedStringArray = ["ratePerSecondAtFullAdvantage", "smoothing"]
@@ -30,6 +31,15 @@ const FINAL_SURGE_KEYS: PackedStringArray = ["spawnIntervalMultiplier"]
 const SUDDEN_DEATH_KEYS: PackedStringArray = ["dominionRateMultiplier", "healingAllowed"]
 const CRISIS_KEYS: PackedStringArray = ["bossEnabled", "bossCaptureBonus", "bossCaptureBonusSeconds"]
 const PROJECTILE_KEYS: PackedStringArray = ["speed"]
+const CAMERA_KEYS: PackedStringArray = ["driftAmplitude", "driftSpeed", "masterFov", "focusFov", "masterPos"]
+const TECHNIQUE_KEYS: PackedStringArray = ["tier1", "tier2", "tier3", "performDurationSeconds", "staggerStepSeconds"]
+const TECHNIQUE_TIER1_KEYS: PackedStringArray = ["damageBuffFraction", "buffDurationSeconds"]
+const TECHNIQUE_TIER2_KEYS: PackedStringArray = ["aoeRadius", "aoeDamage"]
+const TECHNIQUE_TIER3_KEYS: PackedStringArray = [
+	"aoeRadius", "aoeDamage", "teamDamageBuffFraction", "teamSpeedBuffFraction",
+	"buffDurationSeconds", "cinematic",
+]
+const CELEBRATION_KEYS: PackedStringArray = ["durationSeconds", "staggerStepSeconds", "cameraPushIn"]
 const CAPTURE_WEIGHT_KEYS: PackedStringArray = ["champion", "guardian", "striker", "captain"]
 const BOT_UNIT_CYCLE: PackedStringArray = ["champion", "guardian", "striker"]
 
@@ -66,6 +76,9 @@ static func parse(data: Variant) -> Dictionary:
 	_validate_sudden_death(cfg, errors)
 	_validate_crisis(cfg, errors)
 	_validate_projectile(cfg, errors)
+	_validate_camera(cfg, errors)
+	_validate_technique(cfg, errors)
+	_validate_celebration(cfg, errors)
 	if errors.is_empty():
 		return {"ok": true, "value": cfg, "errors": errors}
 	return {"ok": false, "value": null, "errors": errors}
@@ -248,6 +261,104 @@ static func _validate_projectile(cfg: Dictionary, errors: Array[String]) -> void
 	var proj: Dictionary = cfg["projectile"]
 	_check_unknown_keys(proj, PROJECTILE_KEYS, path, errors)
 	_check_positive_number(proj, "speed", 1.0, path, errors)
+
+
+## Optional camera director section (Godot-side presentation config).
+static func _validate_camera(cfg: Dictionary, errors: Array[String]) -> void:
+	var path := "camera"
+	if not cfg.has("camera"):
+		return
+	if typeof(cfg["camera"]) != TYPE_DICTIONARY:
+		errors.append(path + ": expected an object")
+		return
+	var cam: Dictionary = cfg["camera"]
+	_check_unknown_keys(cam, CAMERA_KEYS, path, errors)
+	if cam.has("driftAmplitude"):
+		_check_non_negative_number(cam, "driftAmplitude", path, errors)
+	if cam.has("driftSpeed"):
+		_check_non_negative_number(cam, "driftSpeed", path, errors)
+	if cam.has("masterFov"):
+		_check_positive_number(cam, "masterFov", 10.0, path, errors)
+	if cam.has("focusFov"):
+		_check_positive_number(cam, "focusFov", 10.0, path, errors)
+	if cam.has("masterPos"):
+		if typeof(cam["masterPos"]) != TYPE_ARRAY or (cam["masterPos"] as Array).size() != 3:
+			errors.append(path + ".masterPos: expected an array of 3 numbers")
+		else:
+			for i in 3:
+				if not _is_finite_number((cam["masterPos"] as Array)[i]):
+					errors.append(path + ".masterPos[%d]: expected a finite number" % i)
+
+
+## Optional gift technique section (tier effects for CAST_TECHNIQUE).
+static func _validate_technique(cfg: Dictionary, errors: Array[String]) -> void:
+	var path := "technique"
+	if not cfg.has("technique"):
+		return
+	if typeof(cfg["technique"]) != TYPE_DICTIONARY:
+		errors.append(path + ": expected an object")
+		return
+	var tech: Dictionary = cfg["technique"]
+	_check_unknown_keys(tech, TECHNIQUE_KEYS, path, errors)
+	if tech.has("performDurationSeconds"):
+		_check_positive_number(tech, "performDurationSeconds", 0.1, path, errors)
+	if tech.has("staggerStepSeconds"):
+		_check_non_negative_number(tech, "staggerStepSeconds", path, errors)
+	if tech.has("tier1"):
+		var t1_path := path + ".tier1"
+		if typeof(tech["tier1"]) != TYPE_DICTIONARY:
+			errors.append(t1_path + ": expected an object")
+		else:
+			var t1: Dictionary = tech["tier1"]
+			_check_unknown_keys(t1, TECHNIQUE_TIER1_KEYS, t1_path, errors)
+			for key: String in TECHNIQUE_TIER1_KEYS:
+				_check_positive_number(t1, key, 0.01, t1_path, errors)
+	if tech.has("tier2"):
+		var t2_path := path + ".tier2"
+		if typeof(tech["tier2"]) != TYPE_DICTIONARY:
+			errors.append(t2_path + ": expected an object")
+		else:
+			var t2: Dictionary = tech["tier2"]
+			_check_unknown_keys(t2, TECHNIQUE_TIER2_KEYS, t2_path, errors)
+			for key: String in TECHNIQUE_TIER2_KEYS:
+				_check_positive_number(t2, key, 0.01, t2_path, errors)
+	if tech.has("tier3"):
+		var t3_path := path + ".tier3"
+		if typeof(tech["tier3"]) != TYPE_DICTIONARY:
+			errors.append(t3_path + ": expected an object")
+		else:
+			var t3: Dictionary = tech["tier3"]
+			_check_unknown_keys(t3, TECHNIQUE_TIER3_KEYS, t3_path, errors)
+			if t3.has("aoeRadius"):
+				_check_positive_number(t3, "aoeRadius", 0.01, t3_path, errors)
+			if t3.has("aoeDamage"):
+				_check_positive_number(t3, "aoeDamage", 0.01, t3_path, errors)
+			if t3.has("teamDamageBuffFraction"):
+				_check_non_negative_number(t3, "teamDamageBuffFraction", t3_path, errors)
+			if t3.has("teamSpeedBuffFraction"):
+				_check_non_negative_number(t3, "teamSpeedBuffFraction", t3_path, errors)
+			if t3.has("buffDurationSeconds"):
+				_check_positive_number(t3, "buffDurationSeconds", 0.01, t3_path, errors)
+			if t3.has("cinematic"):
+				_check_bool(t3, "cinematic", t3_path, errors)
+
+
+## Optional victory celebration section (winner celebration pacing + camera).
+static func _validate_celebration(cfg: Dictionary, errors: Array[String]) -> void:
+	var path := "celebration"
+	if not cfg.has("celebration"):
+		return
+	if typeof(cfg["celebration"]) != TYPE_DICTIONARY:
+		errors.append(path + ": expected an object")
+		return
+	var cel: Dictionary = cfg["celebration"]
+	_check_unknown_keys(cel, CELEBRATION_KEYS, path, errors)
+	if cel.has("durationSeconds"):
+		_check_positive_number(cel, "durationSeconds", 0.1, path, errors)
+	if cel.has("staggerStepSeconds"):
+		_check_non_negative_number(cel, "staggerStepSeconds", path, errors)
+	if cel.has("cameraPushIn"):
+		_check_bool(cel, "cameraPushIn", path, errors)
 
 
 # --- Primitive check helpers ---

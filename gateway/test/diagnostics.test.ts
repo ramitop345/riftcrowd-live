@@ -42,7 +42,7 @@ describe('Phase 18 — Version Endpoint', () => {
   it('getVersionInfo returns correct structure', () => {
     const info = getVersionInfo();
     expect(info.version).toBe('1.0.0');
-    expect(info.schemaVersion).toBe(6);
+    expect(info.schemaVersion).toBe(7);
     expect(info.nodeVersion).toBe(process.version);
     expect(info.godotVersion).toBe('4.7.1');
     expect(typeof info.buildTime).toBe('string');

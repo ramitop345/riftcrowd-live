@@ -571,12 +571,44 @@ describe('GiftRule', () => {
     expect(cmds![0]!.type).toBe('ADD_ENERGY');
   });
 
-  it('cinematic gift produces spawn + spotlight', () => {
+  it('cinematic gift produces spawn + technique + spotlight', () => {
     const cmds = rule.execute(makeGiftEvent('gift_015', 'v1'), {});
     expect(cmds).not.toBeNull();
-    expect(cmds!.length).toBe(2);
+    expect(cmds!.length).toBe(3);
     expect(cmds![0]!.type).toBe('START_WORLD_EVENT');
-    expect(cmds![1]!.type).toBe('DISPLAY_SPOTLIGHT');
+    expect(cmds![1]!.type).toBe('CAST_TECHNIQUE');
+    expect(cmds![2]!.type).toBe('DISPLAY_SPOTLIGHT');
+  });
+
+  it('spark gift produces CAST_TECHNIQUE with tier 1 payload', () => {
+    const cmds = rule.execute(makeGiftEvent('gift_001', 'v1'), {});
+    expect(cmds).not.toBeNull();
+    const tech = cmds!.find((c) => c.type === 'CAST_TECHNIQUE');
+    expect(tech).toBeDefined();
+    expect(tech!.factionId).toBeDefined();
+    expect(tech!.viewerId).toBe('v1');
+    expect(tech!.metadata?.['techniqueTier']).toBe(1);
+    expect(tech!.metadata?.['giftTier']).toBe('tier_spark');
+    expect(tech!.metadata?.['cinematic']).toBeUndefined();
+  });
+
+  it('flare gift produces CAST_TECHNIQUE with tier 2 payload', () => {
+    const cmds = rule.execute(makeGiftEvent('gift_008', 'v1'), {});
+    expect(cmds).not.toBeNull();
+    const tech = cmds!.find((c) => c.type === 'CAST_TECHNIQUE');
+    expect(tech).toBeDefined();
+    expect(tech!.metadata?.['techniqueTier']).toBe(2);
+    expect(tech!.metadata?.['giftTier']).toBe('tier_flare');
+  });
+
+  it('nova gift produces CAST_TECHNIQUE with tier 3 cinematic payload', () => {
+    const cmds = rule.execute(makeGiftEvent('gift_015', 'v1'), {});
+    expect(cmds).not.toBeNull();
+    const tech = cmds!.find((c) => c.type === 'CAST_TECHNIQUE');
+    expect(tech).toBeDefined();
+    expect(tech!.metadata?.['techniqueTier']).toBe(3);
+    expect(tech!.metadata?.['cinematic']).toBe(true);
+    expect(tech!.metadata?.['giftName']).toBe('Phoenix');
   });
 
   it('cooldown blocks second gift from same user', () => {
@@ -640,7 +672,7 @@ describe('GiftRule', () => {
     // gift_015 is tier_nova with cinematic=true, impactType=start_world_event
     const cmds1 = rule.execute(makeGiftEvent('gift_015', 'v1'), {});
     expect(cmds1).not.toBeNull();
-    expect(cmds1!.length).toBe(2); // spawn + spotlight
+    expect(cmds1!.length).toBe(3); // world event + technique + spotlight
 
     // Advance past global (1000), per-user (3000), per-faction (2000) but not cinematic (30000)
     clock.advance(4000);

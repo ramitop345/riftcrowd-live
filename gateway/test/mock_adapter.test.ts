@@ -182,8 +182,8 @@ describe('TestClock', () => {
 // ===========================================================================
 
 describe('Scenarios', () => {
-  it('listScenarios returns 7 scenarios', () => {
-    expect(listScenarios()).toHaveLength(7);
+  it('listScenarios returns 8 scenarios', () => {
+    expect(listScenarios()).toHaveLength(8);
     expect(listScenarios()).toContain('normal_traffic');
     expect(listScenarios()).toContain('gift_streak');
     expect(listScenarios()).toContain('viral_burst');
@@ -191,6 +191,7 @@ describe('Scenarios', () => {
     expect(listScenarios()).toContain('disconnect');
     expect(listScenarios()).toContain('reconnect');
     expect(listScenarios()).toContain('four_mode_round');
+    expect(listScenarios()).toContain('technique_demo');
   });
 
   it('getScenario throws on unknown name', () => {
@@ -696,7 +697,8 @@ describe('Dashboard mock endpoints', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.availableScenarios).toContain('normal_traffic');
-    expect(body.availableScenarios).toHaveLength(7);
+    expect(body.availableScenarios).toContain('technique_demo');
+    expect(body.availableScenarios).toHaveLength(8);
   });
 
   it('GET /mock/state without token → 401', async () => {

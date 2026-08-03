@@ -5,10 +5,11 @@ import { z } from 'zod';
  *
  * Phase 17/Tier 4: bumped to 6 — added FRAME_REPORT (Godot → gateway) and
  * SET_QUALITY_TIER (gateway → Godot) command types for 4-tier VFX quality ladder.
+ * Gift techniques: bumped to 7 — added CAST_TECHNIQUE (gift tiers trigger faction techniques).
  */
-export declare const COMMAND_SCHEMA_VERSION = 6;
+export declare const COMMAND_SCHEMA_VERSION = 7;
 /** The complete command vocabulary the Godot client understands. */
-export declare const GameCommandTypeSchema: z.ZodEnum<["JOIN_FACTION", "SPAWN_CHAMPION", "ADD_ENERGY", "ADD_SHIELD", "SPAWN_SQUAD", "CAST_ABILITY", "START_WORLD_EVENT", "DISPLAY_SPOTLIGHT", "PAUSE_EVENTS", "END_ROUND", "GIFT_APPLY", "FOLLOW_GUARDIAN", "SHARE_SHIELD", "STRATEGY_VOTE", "FREE_ENERGY_ABILITY", "ADD_SCORE", "SPAWN_VFX", "SPOTLIGHT_CARD", "SUPPORTER_CALLOUT", "CAMERA_IMPULSE", "PLAY_AUDIO", "SET_WINDOW_MODE", "ACTIVATE_FALLBACK", "DEACTIVATE_FALLBACK", "SET_QUALITY_TIER"]>;
+export declare const GameCommandTypeSchema: z.ZodEnum<["JOIN_FACTION", "SPAWN_CHAMPION", "ADD_ENERGY", "ADD_SHIELD", "SPAWN_SQUAD", "CAST_ABILITY", "START_WORLD_EVENT", "DISPLAY_SPOTLIGHT", "PAUSE_EVENTS", "END_ROUND", "GIFT_APPLY", "FOLLOW_GUARDIAN", "SHARE_SHIELD", "STRATEGY_VOTE", "FREE_ENERGY_ABILITY", "ADD_SCORE", "SPAWN_VFX", "SPOTLIGHT_CARD", "SUPPORTER_CALLOUT", "CAMERA_IMPULSE", "PLAY_AUDIO", "SET_WINDOW_MODE", "ACTIVATE_FALLBACK", "DEACTIVATE_FALLBACK", "SET_QUALITY_TIER", "CAST_TECHNIQUE"]>;
 /** Flat primitives only: no nested objects, no arrays, no functions. Keys and strings are bounded. */
 export declare const GameCommandMetadataSchema: z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodString, z.ZodNumber, z.ZodBoolean]>>;
 /**
@@ -16,9 +17,9 @@ export declare const GameCommandMetadataSchema: z.ZodRecord<z.ZodString, z.ZodUn
  * command, so merged commands can still credit every contributing viewer.
  */
 export declare const GameCommandSchema: z.ZodObject<{
-    schemaVersion: z.ZodLiteral<6>;
+    schemaVersion: z.ZodLiteral<7>;
     id: z.ZodString;
-    type: z.ZodEnum<["JOIN_FACTION", "SPAWN_CHAMPION", "ADD_ENERGY", "ADD_SHIELD", "SPAWN_SQUAD", "CAST_ABILITY", "START_WORLD_EVENT", "DISPLAY_SPOTLIGHT", "PAUSE_EVENTS", "END_ROUND", "GIFT_APPLY", "FOLLOW_GUARDIAN", "SHARE_SHIELD", "STRATEGY_VOTE", "FREE_ENERGY_ABILITY", "ADD_SCORE", "SPAWN_VFX", "SPOTLIGHT_CARD", "SUPPORTER_CALLOUT", "CAMERA_IMPULSE", "PLAY_AUDIO", "SET_WINDOW_MODE", "ACTIVATE_FALLBACK", "DEACTIVATE_FALLBACK", "SET_QUALITY_TIER"]>;
+    type: z.ZodEnum<["JOIN_FACTION", "SPAWN_CHAMPION", "ADD_ENERGY", "ADD_SHIELD", "SPAWN_SQUAD", "CAST_ABILITY", "START_WORLD_EVENT", "DISPLAY_SPOTLIGHT", "PAUSE_EVENTS", "END_ROUND", "GIFT_APPLY", "FOLLOW_GUARDIAN", "SHARE_SHIELD", "STRATEGY_VOTE", "FREE_ENERGY_ABILITY", "ADD_SCORE", "SPAWN_VFX", "SPOTLIGHT_CARD", "SUPPORTER_CALLOUT", "CAMERA_IMPULSE", "PLAY_AUDIO", "SET_WINDOW_MODE", "ACTIVATE_FALLBACK", "DEACTIVATE_FALLBACK", "SET_QUALITY_TIER", "CAST_TECHNIQUE"]>;
     createdAt: z.ZodString;
     factionId: z.ZodOptional<z.ZodString>;
     viewerId: z.ZodOptional<z.ZodString>;
@@ -29,8 +30,8 @@ export declare const GameCommandSchema: z.ZodObject<{
     expiresAt: z.ZodOptional<z.ZodString>;
     metadata: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodString, z.ZodNumber, z.ZodBoolean]>>>;
 }, "strict", z.ZodTypeAny, {
-    type: "JOIN_FACTION" | "SPAWN_CHAMPION" | "ADD_ENERGY" | "ADD_SHIELD" | "SPAWN_SQUAD" | "CAST_ABILITY" | "START_WORLD_EVENT" | "DISPLAY_SPOTLIGHT" | "PAUSE_EVENTS" | "END_ROUND" | "GIFT_APPLY" | "FOLLOW_GUARDIAN" | "SHARE_SHIELD" | "STRATEGY_VOTE" | "FREE_ENERGY_ABILITY" | "ADD_SCORE" | "SPAWN_VFX" | "SPOTLIGHT_CARD" | "SUPPORTER_CALLOUT" | "CAMERA_IMPULSE" | "PLAY_AUDIO" | "SET_WINDOW_MODE" | "ACTIVATE_FALLBACK" | "DEACTIVATE_FALLBACK" | "SET_QUALITY_TIER";
-    schemaVersion: 6;
+    type: "JOIN_FACTION" | "SPAWN_CHAMPION" | "ADD_ENERGY" | "ADD_SHIELD" | "SPAWN_SQUAD" | "CAST_ABILITY" | "START_WORLD_EVENT" | "DISPLAY_SPOTLIGHT" | "PAUSE_EVENTS" | "END_ROUND" | "GIFT_APPLY" | "FOLLOW_GUARDIAN" | "SHARE_SHIELD" | "STRATEGY_VOTE" | "FREE_ENERGY_ABILITY" | "ADD_SCORE" | "SPAWN_VFX" | "SPOTLIGHT_CARD" | "SUPPORTER_CALLOUT" | "CAMERA_IMPULSE" | "PLAY_AUDIO" | "SET_WINDOW_MODE" | "ACTIVATE_FALLBACK" | "DEACTIVATE_FALLBACK" | "SET_QUALITY_TIER" | "CAST_TECHNIQUE";
+    schemaVersion: 7;
     id: string;
     createdAt: string;
     sourceEventIds: string[];
@@ -42,8 +43,8 @@ export declare const GameCommandSchema: z.ZodObject<{
     expiresAt?: string | undefined;
     metadata?: Record<string, string | number | boolean> | undefined;
 }, {
-    type: "JOIN_FACTION" | "SPAWN_CHAMPION" | "ADD_ENERGY" | "ADD_SHIELD" | "SPAWN_SQUAD" | "CAST_ABILITY" | "START_WORLD_EVENT" | "DISPLAY_SPOTLIGHT" | "PAUSE_EVENTS" | "END_ROUND" | "GIFT_APPLY" | "FOLLOW_GUARDIAN" | "SHARE_SHIELD" | "STRATEGY_VOTE" | "FREE_ENERGY_ABILITY" | "ADD_SCORE" | "SPAWN_VFX" | "SPOTLIGHT_CARD" | "SUPPORTER_CALLOUT" | "CAMERA_IMPULSE" | "PLAY_AUDIO" | "SET_WINDOW_MODE" | "ACTIVATE_FALLBACK" | "DEACTIVATE_FALLBACK" | "SET_QUALITY_TIER";
-    schemaVersion: 6;
+    type: "JOIN_FACTION" | "SPAWN_CHAMPION" | "ADD_ENERGY" | "ADD_SHIELD" | "SPAWN_SQUAD" | "CAST_ABILITY" | "START_WORLD_EVENT" | "DISPLAY_SPOTLIGHT" | "PAUSE_EVENTS" | "END_ROUND" | "GIFT_APPLY" | "FOLLOW_GUARDIAN" | "SHARE_SHIELD" | "STRATEGY_VOTE" | "FREE_ENERGY_ABILITY" | "ADD_SCORE" | "SPAWN_VFX" | "SPOTLIGHT_CARD" | "SUPPORTER_CALLOUT" | "CAMERA_IMPULSE" | "PLAY_AUDIO" | "SET_WINDOW_MODE" | "ACTIVATE_FALLBACK" | "DEACTIVATE_FALLBACK" | "SET_QUALITY_TIER" | "CAST_TECHNIQUE";
+    schemaVersion: 7;
     id: string;
     createdAt: string;
     sourceEventIds: string[];
@@ -75,18 +76,18 @@ export declare const FrameReportSchema: z.ZodObject<{
 export type FrameReport = z.infer<typeof FrameReportSchema>;
 /** Quality tier command sent from gateway to Godot when auto-stepping. */
 export declare const SetQualityTierSchema: z.ZodObject<{
-    schemaVersion: z.ZodLiteral<6>;
+    schemaVersion: z.ZodLiteral<7>;
     type: z.ZodLiteral<"SET_QUALITY_TIER">;
     tier: z.ZodEnum<["low", "medium", "high", "ultra"]>;
     reason: z.ZodOptional<z.ZodString>;
 }, "strict", z.ZodTypeAny, {
     type: "SET_QUALITY_TIER";
-    schemaVersion: 6;
+    schemaVersion: 7;
     tier: "low" | "medium" | "high" | "ultra";
     reason?: string | undefined;
 }, {
     type: "SET_QUALITY_TIER";
-    schemaVersion: 6;
+    schemaVersion: 7;
     tier: "low" | "medium" | "high" | "ultra";
     reason?: string | undefined;
 }>;

@@ -25,6 +25,11 @@ func _initialize() -> void:
 	_test_snapshot_shape()
 	_test_boss_spawn()
 	_test_projectile_pool_exhaustion()
+	_test_technique_config()
+	_test_technique_effects()
+	_test_technique_determinism()
+	_test_celebration_config()
+	_test_victory_event_emitted()
 	print("SIMULATION TESTS: %d passed, %d failed" % [_passed, _failed])
 	quit(0 if _failed == 0 else 1)
 
@@ -189,10 +194,11 @@ func _test_state_machine() -> void:
 func _test_combat() -> void:
 	var cfg: Dictionary = _make_config()
 	var w := _create_world(cfg, 13)
-	# Run enough ticks for units to spawn, move, fight, and kill
+	# Run enough ticks for units to spawn, move, fight, and kill. Fortress
+	# sieges start in final_surge (~18s), so the budget covers a full escalation.
 	var death_seen: bool = false
 	var fortress_damaged: bool = false
-	for batch in 40:
+	for batch in 80:
 		w.run_ticks(10)
 		var snap: Dictionary = w.get_snapshot()
 		var events: Array = snap["events"]
@@ -413,9 +419,14 @@ func _test_snapshot_shape() -> void:
 
 func _test_boss_spawn() -> void:
 	# Use a config where opening=9s, crisis=5s so we reach crisis quickly.
+	# A long sudden_death stage keeps the round alive while the boss is killed.
 	var cfg: Dictionary = _make_config()
-	cfg["stages"] = {"opening": 9, "crisis": 5, "finalSurge": 6, "suddenDeath": 6}
+	cfg["stages"] = {"opening": 9, "crisis": 5, "finalSurge": 6, "suddenDeath": 60}
 	cfg["crisis"] = {"bossEnabled": true, "bossCaptureBonus": 0.5, "bossCaptureBonusSeconds": 10}
+	# Keep the round alive long enough for the boss to spawn and die:
+	# fortress wins need real sieges and dominion never accrues (rate 0).
+	cfg["fortressHealth"] = 5000
+	cfg["dominion"] = {"ratePerSecondAtFullAdvantage": 0.0, "smoothing": 0.15}
 	var w := _create_world(cfg, 42)
 	# Run through opening (9s = 180 ticks at 20Hz) plus a few crisis ticks.
 	w.run_ticks(180)
@@ -474,6 +485,184 @@ func _test_projectile_pool_exhaustion() -> void:
 	# reset_all clears active.
 	pool.reset_all()
 	_check(pool.get_active_count() == 0, "proj_pool: reset_all clears active count")
+
+
+# --- (m) Technique config validation ---
+
+func _technique_config() -> Dictionary:
+	return {
+		"tier1": {"damageBuffFraction": 0.5, "buffDurationSeconds": 3.0},
+		"tier2": {"aoeRadius": 10000.0, "aoeDamage": 5.0},
+		"tier3": {
+			"aoeRadius": 10000.0, "aoeDamage": 5.0,
+			"teamDamageBuffFraction": 0.25, "teamSpeedBuffFraction": 0.15,
+			"buffDurationSeconds": 6.0, "cinematic": true,
+		},
+		"performDurationSeconds": 1.6,
+		"staggerStepSeconds": 0.08,
+	}
+
+
+func _test_technique_config() -> void:
+	# Valid technique section accepted.
+	var cfg: Dictionary = _make_config()
+	cfg["technique"] = _technique_config()
+	var r1: Dictionary = GC.parse(cfg)
+	_check(bool(r1["ok"]), "technique_cfg: valid technique section accepted")
+	# Unknown key inside technique rejected.
+	var bad: Dictionary = _make_config()
+	var bad_tech: Dictionary = _technique_config()
+	bad_tech["bogus"] = 1
+	bad["technique"] = bad_tech
+	var r2: Dictionary = GC.parse(bad)
+	_check(not r2["ok"], "technique_cfg: unknown technique key rejected")
+	# Config without technique section still valid (optional).
+	var r3: Dictionary = GC.parse(_make_config())
+	_check(bool(r3["ok"]), "technique_cfg: config without technique section still valid")
+
+
+# --- (n) Technique effects ---
+
+func _test_technique_effects() -> void:
+	var cfg: Dictionary = _make_config()
+	cfg["technique"] = _technique_config()
+	var w := _create_world(cfg, 123)
+	# 3 seconds in: both captains alive (bots spawn at 4s).
+	w.run_ticks(60)
+	w.get_snapshot()
+	# Invalid input rejected.
+	_check(w.trigger_technique(-1, 1) == false, "technique: rejects invalid faction")
+	_check(w.trigger_technique(2, 1) == false, "technique: rejects faction index 2")
+	_check(w.trigger_technique(0, 0) == false, "technique: rejects tier 0")
+	_check(w.trigger_technique(0, 4) == false, "technique: rejects tier 4")
+	# Tier 1: damage buff + sim event.
+	_check(w.trigger_technique(0, 1) == true, "technique: tier 1 accepted")
+	var s1: Dictionary = w.get_snapshot()
+	_check(_events_contain(s1, "technique:0:1"), "technique: tier 1 sim event emitted")
+	var buffed: bool = false
+	for uid: int in w._unit_registry:
+		var u: SimUnit = w._unit_registry[uid]
+		if u.alive and u.faction_index == 0 and u.damage_buff_timer > 0.0:
+			buffed = true
+	_check(buffed, "technique: tier 1 applies damage buff to faction 0 units")
+	# Buff expires after its duration (3s = 60 ticks).
+	w.run_ticks(61)
+	var still_buffed: bool = false
+	for uid: int in w._unit_registry:
+		var u: SimUnit = w._unit_registry[uid]
+		if u.alive and u.faction_index == 0 and u.damage_buff_timer > 0.0:
+			still_buffed = true
+	_check(not still_buffed, "technique: tier 1 buff expires after duration")
+	# Tier 2: arena-wide AoE (radius 10000) damages every enemy.
+	var enemy_hp_before: float = _total_health(w, 1)
+	_check(w.trigger_technique(0, 2) == true, "technique: tier 2 accepted")
+	var s2: Dictionary = w.get_snapshot()
+	_check(_events_contain(s2, "technique:0:2"), "technique: tier 2 sim event emitted")
+	var enemy_hp_after: float = _total_health(w, 1)
+	_check(enemy_hp_after < enemy_hp_before, "technique: tier 2 AoE damages enemy faction")
+	# Tier 3: AoE + team damage/speed buffs + cinematic event.
+	_check(w.trigger_technique(1, 3) == true, "technique: tier 3 accepted")
+	var s3: Dictionary = w.get_snapshot()
+	_check(_events_contain(s3, "technique:1:3"), "technique: tier 3 sim event emitted")
+	var speed_buffed: bool = false
+	var damage_buffed: bool = false
+	for uid: int in w._unit_registry:
+		var u: SimUnit = w._unit_registry[uid]
+		if u.alive and u.faction_index == 1:
+			if u.speed_buff_timer > 0.0:
+				speed_buffed = true
+			if u.damage_buff_timer > 0.0:
+				damage_buffed = true
+	_check(speed_buffed, "technique: tier 3 applies team speed buff")
+	_check(damage_buffed, "technique: tier 3 applies team damage buff")
+	# World without technique config refuses to trigger.
+	var bare := _create_world(_make_config(), 123)
+	bare.run_ticks(60)
+	_check(bare.trigger_technique(0, 1) == false, "technique: rejected when config has no technique section")
+
+
+# --- (o) Technique determinism ---
+
+func _test_technique_determinism() -> void:
+	var cfg: Dictionary = _make_config()
+	cfg["technique"] = _technique_config()
+	var f: Array = _make_factions()
+	var w1 := SimWorld.create(cfg, 777, f[0], f[1])
+	var w2 := SimWorld.create(cfg, 777, f[0], f[1])
+	for i in 80:
+		w1.tick()
+		w2.tick()
+		if i == 59:
+			w1.trigger_technique(0, 3)
+			w2.trigger_technique(0, 3)
+		w1.get_snapshot()
+		w2.get_snapshot()
+	var s1: Dictionary = w1.get_snapshot()
+	var s2: Dictionary = w2.get_snapshot()
+	_check(str(s1) == str(s2), "technique: identical snapshots with same seed + same technique input")
+
+
+# --- (p) Celebration config validation ---
+
+func _test_celebration_config() -> void:
+	# Valid celebration section accepted.
+	var cfg: Dictionary = _make_config()
+	cfg["celebration"] = {"durationSeconds": 2.8, "staggerStepSeconds": 0.06, "cameraPushIn": true}
+	var r1: Dictionary = GC.parse(cfg)
+	_check(bool(r1["ok"]), "celebration_cfg: valid celebration section accepted")
+	# Unknown key inside celebration rejected.
+	var bad: Dictionary = _make_config()
+	bad["celebration"] = {"durationSeconds": 2.8, "bogus": 1}
+	var r2: Dictionary = GC.parse(bad)
+	_check(not r2["ok"], "celebration_cfg: unknown celebration key rejected")
+	# Negative duration rejected.
+	var neg: Dictionary = _make_config()
+	neg["celebration"] = {"durationSeconds": -1.0}
+	var r3: Dictionary = GC.parse(neg)
+	_check(not r3["ok"], "celebration_cfg: negative duration rejected")
+	# Config without celebration section still valid (optional).
+	var r4: Dictionary = GC.parse(_make_config())
+	_check(bool(r4["ok"]), "celebration_cfg: config without celebration section still valid")
+
+
+# --- (q) Victory celebration event ---
+
+func _test_victory_event_emitted() -> void:
+	# Force a fast fortress win; the victory event is what drives the celebration.
+	var cfg: Dictionary = _make_config()
+	cfg["fortressHealth"] = 10
+	var w := _create_world(cfg, 55)
+	var found_victory: bool = false
+	var max_ticks: int = 20 * 30
+	for i in max_ticks:
+		w.tick()
+		var snap: Dictionary = w.get_snapshot()
+		for e: Variant in (snap.get("events", []) as Array):
+			if str(e).begins_with("victory:"):
+				found_victory = true
+		if w.is_round_over():
+			break
+	_check(w.is_round_over(), "victory: round ends within budget")
+	_check(found_victory, "victory: victory:<winner>:<type> event emitted (drives celebration)")
+
+
+func _total_health(w: SimWorld, faction: int) -> float:
+	var total: float = 0.0
+	for uid: int in w._unit_registry:
+		var u: SimUnit = w._unit_registry[uid]
+		if u.alive and u.faction_index == faction:
+			total += u.health
+	return total
+
+
+func _events_contain(snapshot: Dictionary, prefix: String) -> bool:
+	var events: Variant = snapshot.get("events", [])
+	if typeof(events) != TYPE_ARRAY:
+		return false
+	for e: Variant in (events as Array):
+		if str(e) == prefix:
+			return true
+	return false
 
 
 # --- Helpers ---

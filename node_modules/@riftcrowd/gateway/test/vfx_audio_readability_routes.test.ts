@@ -42,8 +42,8 @@ function buildTestApp(): FastifyInstance {
 // ===================================================================
 
 describe('Command Schema v6', () => {
-  it('COMMAND_SCHEMA_VERSION is 6', () => {
-    expect(COMMAND_SCHEMA_VERSION).toBe(6);
+  it('COMMAND_SCHEMA_VERSION is 7', () => {
+    expect(COMMAND_SCHEMA_VERSION).toBe(7);
   });
 
   it('SPAWN_VFX is a valid command type', () => {
@@ -66,15 +66,15 @@ describe('Command Schema v6', () => {
     expect(GameCommandTypeSchema.parse('PLAY_AUDIO')).toBe('PLAY_AUDIO');
   });
 
-  it('full command validates with schemaVersion 6', () => {
+  it('full command validates with schemaVersion 7', () => {
     const cmd = {
-      schemaVersion: 6,
+      schemaVersion: 7,
       id: 'cmd-test',
       type: 'SPAWN_VFX',
       createdAt: new Date().toISOString(),
       sourceEventIds: ['evt-1'],
     };
-    expect(GameCommandSchema.parse(cmd).schemaVersion).toBe(6);
+    expect(GameCommandSchema.parse(cmd).schemaVersion).toBe(7);
   });
 
   it('old schemaVersion 4 is rejected', () => {

@@ -10,23 +10,33 @@ const SIM_H: float = 1180.0
 const ARENA_W: float = 54.0
 const ARENA_H: float = 26.0
 const GROUND_Y: float = 1.0  # units stand on the flat arena ground
-const MODEL_SCALE: float = 3.0  # Blender export scale correction
+const MODEL_SCALE: float = 1.0  # Meshy models are authored at real-world scale
 
-# -- Animation names (from Blender GLB exports) --
-const ANIM_IDLE: String = "RC_ACT_Idle"
-const ANIM_WALK: String = "RC_ACT_Walk"
-const ANIM_RUN: String = "RC_ACT_Run"
-const ANIM_RETREAT: String = "RC_ACT_RetreatRun"
-const ANIM_MELEE: String = "RC_ACT_MeleeAttack"
-const ANIM_CANNON: String = "RC_ACT_CannonFire"
-const ANIM_CROSSBOW: String = "RC_ACT_CrossbowFire"
-const ANIM_SHIELD: String = "RC_ACT_ShieldBlock"
-const ANIM_HIT: String = "RC_ACT_HitReact"
-const ANIM_DEATH: String = "RC_ACT_Death"
-const ANIM_SPAWN: String = "RC_ACT_Spawn"
-const ANIM_CELEBRATE: String = "RC_ACT_Celebrate"
+# -- Logical animation keys (resolved to actual GLB clip names at load) --
+const ANIM_IDLE: String = "idle"
+const ANIM_WALK: String = "walk"
+const ANIM_RUN: String = "run"
+const ANIM_RETREAT: String = "retreat"
+const ANIM_MELEE: String = "melee"
+const ANIM_CANNON: String = "cannon"
+const ANIM_CROSSBOW: String = "ranged"
+const ANIM_SHIELD: String = "block"
+const ANIM_HIT: String = "hit"
+const ANIM_DEATH: String = "death"
+const ANIM_SPAWN: String = "spawn"
+const ANIM_CELEBRATE: String = "celebrate"
+# Gift-tier techniques (minor/average/major) and extra celebration moves.
+const ANIM_TECH1: String = "tech1"
+const ANIM_TECH2: String = "tech2"
+const ANIM_TECH3: String = "tech3"
+const ANIM_CELEBRATE_2: String = "celebrate_2"
+const ANIM_CELEBRATE_3: String = "celebrate_3"
+const ANIM_CELEBRATE_4: String = "celebrate_4"
+const ANIM_CELEBRATE_5: String = "celebrate_5"
 
 # -- GLB paths (set by subclass or exported) --
+# Single model per class; faction is applied via a tint. Legacy blue/red kept as fallback.
+@export var _glb_path: String = ""
 @export var _blue_glb_path: String = ""
 @export var _red_glb_path: String = ""
 
@@ -46,6 +56,7 @@ var _health_bar: Sprite3D = null
 var _dead: bool = false
 var _spawned: bool = false
 var _ground_circle: MeshInstance3D = null
+var _anim_map: Dictionary = {}
 
 
 func _ready() -> void:
@@ -110,11 +121,13 @@ func update_visual(unit_snapshot: Dictionary) -> void:
 # ---------------------------------------------------------------------------
 
 func _swap_model(faction: int) -> void:
-	var path: String = ""
-	if faction == 0:
-		path = _blue_glb_path
-	elif faction == 1:
-		path = _red_glb_path
+	var path: String = _glb_path
+	var use_tint: bool = not _glb_path.is_empty()
+	if path.is_empty():
+		if faction == 0:
+			path = _blue_glb_path
+		elif faction == 1:
+			path = _red_glb_path
 	if path.is_empty():
 		return
 	# Remove old model
@@ -131,12 +144,14 @@ func _swap_model(faction: int) -> void:
 	_model.name = "Model"
 	_model.scale = Vector3(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE)
 	add_child(_model)
+	if use_tint:
+		_apply_faction_tint(faction)
 	# Find the AnimationPlayer inside the GLB scene tree
 	_anim_player = _find_animation_player(_model)
+	_build_anim_map()
 	_current_anim = ""
 	if _anim_player != null:
-		_anim_player.play(ANIM_IDLE)
-		_current_anim = ANIM_IDLE
+		_play_anim(ANIM_IDLE)
 	# Update ground circle color to match faction.
 	if _ground_circle != null and _ground_circle.material_override != null:
 		var mat: StandardMaterial3D = _ground_circle.material_override
@@ -162,12 +177,140 @@ func _find_animation_player(node: Node) -> AnimationPlayer:
 # Animation
 # ---------------------------------------------------------------------------
 
-func _play_anim(anim_name: String) -> void:
-	if _anim_player == null or anim_name == _current_anim:
+func _play_anim(logical: String) -> void:
+	if _anim_player == null or logical == _current_anim:
 		return
-	if _anim_player.has_animation(anim_name):
-		_anim_player.play(anim_name)
-		_current_anim = anim_name
+	var clip: String = str(_anim_map.get(logical, ""))
+	if clip.is_empty():
+		clip = logical  # fallback: treat as a raw clip name (legacy RC_ACT_* models)
+	if _anim_player.has_animation(clip):
+		_anim_player.play(clip)
+		_current_anim = logical
+
+
+## Faction tint applied to a single shared model (keeps base texture readable).
+## Node3D has no `modulate`, so we multiply each mesh surface albedo by the tint.
+func _apply_faction_tint(faction: int) -> void:
+	if _model == null:
+		return
+	var tint: Color
+	if faction == 0:
+		tint = Color(0.75, 0.85, 1.15)
+	elif faction == 1:
+		tint = Color(1.15, 0.8, 0.75)
+	else:
+		tint = Color.WHITE
+	if tint == Color.WHITE:
+		return
+	_tint_meshes(_model, tint)
+
+
+func _tint_meshes(node: Node, tint: Color) -> void:
+	if node is MeshInstance3D:
+		var mi: MeshInstance3D = node as MeshInstance3D
+		var mesh: Mesh = mi.mesh
+		if mesh != null:
+			for surface in mesh.get_surface_count():
+				var mat: Material = mesh.surface_get_material(surface)
+				if mat is BaseMaterial3D:
+					var tinted: BaseMaterial3D = (mat as BaseMaterial3D).duplicate() as BaseMaterial3D
+					tinted.albedo_color = Color(
+						mat.albedo_color.r * tint.r,
+						mat.albedo_color.g * tint.g,
+						mat.albedo_color.b * tint.b,
+						mat.albedo_color.a
+					)
+					mi.set_surface_override_material(surface, tinted)
+	for child in node.get_children():
+		_tint_meshes(child, tint)
+
+
+## Faction index of the model currently shown (0 = left/blue, 1 = right/red, -1 = neutral).
+func get_faction_index() -> int:
+	return _faction_index
+
+
+## Whether this visual is currently dead (celebrations skip fallen units).
+func is_dead() -> bool:
+	return _dead
+
+
+## Plays a gift-tier technique animation (tier 1 = minor, 2 = average, 3 = major).
+## Returns true if a technique clip was found and started.
+func play_technique(tier: int) -> bool:
+	var key: String
+	match tier:
+		1: key = ANIM_TECH1
+		2: key = ANIM_TECH2
+		3: key = ANIM_TECH3
+		_: key = ANIM_TECH1
+	if not _anim_map.has(key):
+		return false
+	_current_anim = ""  # force replay even if the same clip is current
+	_play_anim(key)
+	return true
+
+
+## Plays one of the celebration clips, selected deterministically by seed.
+func play_celebration(seed_index: int) -> void:
+	var options: Array = []
+	for key in [ANIM_CELEBRATE, ANIM_CELEBRATE_2, ANIM_CELEBRATE_3, ANIM_CELEBRATE_4, ANIM_CELEBRATE_5]:
+		if _anim_map.has(key):
+			options.append(key)
+	if options.is_empty():
+		return
+	var key: String = str(options[absi(seed_index) % options.size()])
+	_current_anim = ""
+	_play_anim(key)
+
+
+## Maps logical animation keys to whichever clips the loaded GLB actually contains.
+func _build_anim_map() -> void:
+	_anim_map.clear()
+	if _anim_player == null:
+		return
+	var clips: Array = _anim_player.get_animation_list()
+	var keywords: Dictionary = {
+		ANIM_IDLE: ["idle"],
+		ANIM_WALK: ["walk"],
+		ANIM_RUN: ["run", "charge", "sprint"],
+		ANIM_RETREAT: ["backward", "retreat", "run"],
+		ANIM_MELEE: ["combo", "slash", "swing", "attack"],
+		ANIM_CANNON: ["cast", "shoot", "charge"],
+		ANIM_CROSSBOW: ["archery", "shoot", "bow"],
+		ANIM_SHIELD: ["parry", "block", "guard"],
+		ANIM_HIT: ["hit", "behit", "reaction"],
+		ANIM_DEATH: ["dead", "death", "die", "fall", "knock"],
+		ANIM_SPAWN: ["arise", "stand_up", "spawn", "rise"],
+		ANIM_CELEBRATE: ["victory", "cheer", "celebrate"],
+		# Technique / extra-celebration tracks use exact names from the combined GLB.
+		ANIM_TECH1: ["tech1"],
+		ANIM_TECH2: ["tech2"],
+		ANIM_TECH3: ["tech3"],
+		ANIM_CELEBRATE_2: ["celebrate_2"],
+		ANIM_CELEBRATE_3: ["celebrate_3"],
+		ANIM_CELEBRATE_4: ["celebrate_4"],
+		ANIM_CELEBRATE_5: ["celebrate_5"],
+	}
+	for key in keywords:
+		var kws: Array = keywords[key]
+		var found: String = ""
+		# Prefer an exact logical-name match (Meshy-combined GLBs use these names).
+		for c in clips:
+			if str(c).to_lower() == key:
+				found = str(c)
+				break
+		if found == "":
+			for c in clips:
+				var lower: String = str(c).to_lower()
+				for kw in kws:
+					if lower.find(kw) != -1:
+						found = str(c)
+						break
+				if found != "":
+					break
+		if found != "":
+			_anim_map[key] = found
 
 
 # ---------------------------------------------------------------------------
@@ -248,18 +391,23 @@ func _apply_mesh_flash(node: Node, flash: float) -> void:
 	for child in node.get_children():
 		if child is MeshInstance3D:
 			var mi: MeshInstance3D = child as MeshInstance3D
-			if flash > 0.01:
-				# Create or update material overlay for flash.
-				var mat: StandardMaterial3D = mi.get_surface_override_material(0)
-				if mat == null:
-					mat = StandardMaterial3D.new()
-					mat.albedo_color = Color(1.0 + flash, 1.0 + flash, 1.0 + flash, 1.0)
-					mat.emission_enabled = true
-					mat.emission = Color(1.0, 0.3, 0.2, 1.0)
-					mat.emission_energy_multiplier = flash * 5.0
-					mi.set_surface_override_material(0, mat)
-			else:
-				# Remove the flash overlay.
-				mi.set_surface_override_material(0, null)
+			var mesh: Mesh = mi.mesh
+			if mesh != null:
+				for surface in mesh.get_surface_count():
+					# Reuse the per-instance override (keeps any faction tint).
+					var mat: Material = mi.get_surface_override_material(surface)
+					if mat == null:
+						var base: Material = mesh.surface_get_material(surface)
+						if base is BaseMaterial3D:
+							mat = (base as BaseMaterial3D).duplicate()
+							mi.set_surface_override_material(surface, mat)
+					if mat is BaseMaterial3D:
+						var bm: BaseMaterial3D = mat as BaseMaterial3D
+						if flash > 0.01:
+							bm.emission_enabled = true
+							bm.emission = Color(1.0, 0.3, 0.2, 1.0)
+							bm.emission_energy_multiplier = flash * 5.0
+						else:
+							bm.emission_energy_multiplier = 0.0
 		elif child is Node3D:
 			_apply_mesh_flash(child, flash)

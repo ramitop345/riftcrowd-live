@@ -1,9 +1,13 @@
 ## Fortress 3D visual — loads Blue or Red fortress GLB with health bar.
 extends Node3D
 
-const BLUE_GLB: String = "res://assets/models/environment/RC_Fortress_Blue.glb"
-const RED_GLB: String = "res://assets/models/environment/RC_Fortress_Red.glb"
-const MODEL_SCALE: float = 5.0  # Blender export scale correction
+const MeshyLod := preload("res://scripts/units/meshy_lod.gd")
+
+# Meshy fortresses: blue = castle, red = dungeon keep (versioned _v1; legacy kept).
+const BLUE_GLB: String = "res://assets/models/environment/env_castle_blue_v1.glb"
+const RED_GLB: String = "res://assets/models/environment/env_dungeon_keep_v1.glb"
+const MODEL_SCALE: float = 4.5  # Meshy fortresses authored ~1.9 m tall; scale to landmark size
+const LOD_TIER: int = 1  # heavy meshes: default to ~50% tier (tunable 0..2)
 
 var _model: Node3D = null
 var _health_bar: Sprite3D = null
@@ -34,6 +38,8 @@ func _swap_model(faction: int) -> void:
 	_model.name = "Model"
 	_model.scale = Vector3(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE)
 	add_child(_model)
+	# Show only the chosen LOD tier (Meshy GLBs bake LOD0/1/2 as siblings).
+	MeshyLod.apply(_model, LOD_TIER)
 
 
 func _create_health_bar() -> void:

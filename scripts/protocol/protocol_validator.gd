@@ -18,7 +18,7 @@ class_name ProtocolValidator
 extends RefCounted
 
 const EVENT_SCHEMA_VERSION: int = 1
-const COMMAND_SCHEMA_VERSION: int = 1
+const COMMAND_SCHEMA_VERSION: int = 7
 const PROTOCOL_VERSION: int = 1
 
 ## Mirrors LiveEventTypeSchema in shared/schemas/events.ts.
@@ -45,6 +45,22 @@ const GAME_COMMAND_TYPES: PackedStringArray = [
 	"DISPLAY_SPOTLIGHT",
 	"PAUSE_EVENTS",
 	"END_ROUND",
+	"GIFT_APPLY",
+	"FOLLOW_GUARDIAN",
+	"SHARE_SHIELD",
+	"STRATEGY_VOTE",
+	"FREE_ENERGY_ABILITY",
+	"ADD_SCORE",
+	"SPAWN_VFX",
+	"SPOTLIGHT_CARD",
+	"SUPPORTER_CALLOUT",
+	"CAMERA_IMPULSE",
+	"PLAY_AUDIO",
+	"SET_WINDOW_MODE",
+	"ACTIVATE_FALLBACK",
+	"DEACTIVATE_FALLBACK",
+	"SET_QUALITY_TIER",
+	"CAST_TECHNIQUE",
 ]
 
 ## Mirrors ProtocolErrorCodeSchema in shared/schemas/messages.ts.

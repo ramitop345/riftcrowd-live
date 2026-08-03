@@ -8,6 +8,10 @@
       "impact": {
         "type": "add_energy",
         "magnitude": 10
+      },
+      "technique": {
+        "type": "trigger_technique",
+        "magnitude": 1
       }
     },
     {
@@ -19,6 +23,10 @@
         "type": "spawn_champion",
         "magnitude": 1,
         "cinematic": false
+      },
+      "technique": {
+        "type": "trigger_technique",
+        "magnitude": 2
       }
     },
     {
@@ -30,6 +38,11 @@
         "type": "start_world_event",
         "magnitude": 1,
         "duration": 30000,
+        "cinematic": true
+      },
+      "technique": {
+        "type": "trigger_technique",
+        "magnitude": 3,
         "cinematic": true
       }
     }

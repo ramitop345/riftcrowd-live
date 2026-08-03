@@ -16,6 +16,13 @@ class_name SimWorld
 extends RefCounted
 
 const SPAWN_JITTER: float = 40.0
+const SPAWN_SPREAD: float = 130.0      ## wider radial spawn band around the fortress
+const FLANK_MIN: float = 50.0          ## per-unit marching offset bounds
+const FLANK_MAX: float = 140.0
+const SEPARATION_RADIUS: float = 26.0  ## light push so squads don't stack
+const ARENA_MARGIN: float = 40.0
+const ARENA_SIM_W: float = 1080.0
+const ARENA_SIM_H: float = 1180.0
 const SPAWN_DELAY: float = 0.2
 const RETREAT_DURATION: float = 3.0
 const PROJECTILE_HIT_RADIUS: float = 12.0
@@ -40,6 +47,7 @@ var _tick: int = 0
 var _elapsed: float = 0.0
 var _stage: String = STAGE_OPENING
 var _stage_elapsed: float = 0.0
+var _stage_ticks: int = 0  ## integer accumulator (avoids float drift on stage boundaries)
 
 # Layout
 var _fortress_positions: Array = []  # [Vector2, Vector2]
@@ -139,6 +147,7 @@ func _init_world(config: Dictionary, seed_value: int, faction_a: Dictionary, fac
 	_elapsed = 0.0
 	_stage = STAGE_OPENING
 	_stage_elapsed = 0.0
+	_stage_ticks = 0
 	_boss_spawned = false
 	_boss_bonus_faction = -1
 	_boss_bonus_timer = 0.0
@@ -228,6 +237,7 @@ func reset(seed_value: int) -> void:
 	_elapsed = 0.0
 	_stage = STAGE_OPENING
 	_stage_elapsed = 0.0
+	_stage_ticks = 0
 	_boss_spawned = false
 	_boss_bonus_faction = -1
 	_boss_bonus_timer = 0.0
@@ -246,16 +256,112 @@ func is_round_over() -> bool:
 	return _round_over
 
 
+## Gift technique system. Triggered by CAST_TECHNIQUE commands (gift tiers).
+## All living units of `faction` perform the technique with full gameplay
+## effects: tier 1 = team damage buff, tier 2 = instant AoE damage around
+## each performer, tier 3 = larger AoE + team damage/speed buffs.
+## Emits a "technique:<faction>:<tier>" sim event so the arena can play
+## staggered technique animations for the performing faction.
+func trigger_technique(faction: int, tier: int) -> bool:
+	if _round_over or faction < 0 or faction > 1 or tier < 1 or tier > 3:
+		return false
+	var tech_cfg: Dictionary = _config.get("technique", {})
+	if tech_cfg.is_empty():
+		return false
+	# Collect living performers sorted by id for determinism.
+	var performers: Array = []
+	for pool in [_champion_pool, _guardian_pool, _striker_pool, _captain_pool]:
+		for u: SimUnit in pool.active_units():
+			if u.alive and u.faction_index == faction:
+				performers.append(u)
+	performers.sort_custom(func(a: SimUnit, b: SimUnit) -> bool: return a.id < b.id)
+	if performers.is_empty():
+		return false
+	match tier:
+		1:
+			var t1: Dictionary = tech_cfg.get("tier1", {})
+			var fraction: float = float(t1.get("damageBuffFraction", 0.5))
+			var duration: float = float(t1.get("buffDurationSeconds", 3.0))
+			for u: SimUnit in performers:
+				_apply_buff_max(u, "damage", fraction, duration)
+		2:
+			var t2: Dictionary = tech_cfg.get("tier2", {})
+			_apply_technique_aoe(performers, faction,
+				float(t2.get("aoeRadius", 140.0)), float(t2.get("aoeDamage", 30.0)))
+		3:
+			var t3: Dictionary = tech_cfg.get("tier3", {})
+			_apply_technique_aoe(performers, faction,
+				float(t3.get("aoeRadius", 240.0)), float(t3.get("aoeDamage", 60.0)))
+			var buff_duration: float = float(t3.get("buffDurationSeconds", 6.0))
+			for u: SimUnit in performers:
+				if u.alive:
+					_apply_buff_max(u, "damage", float(t3.get("teamDamageBuffFraction", 0.25)), buff_duration)
+					_apply_buff_max(u, "speed", float(t3.get("teamSpeedBuffFraction", 0.15)), buff_duration)
+	_events.append("technique:%d:%d" % [faction, tier])
+	return true
+
+
+## Instant AoE damage around each performer, applied to all enemies
+## (opposing faction + neutral boss) within radius. Deaths are attributed
+## to the performing faction so boss bonuses and kill events stay correct.
+func _apply_technique_aoe(performers: Array, faction: int, radius: float, damage: float) -> void:
+	if radius <= 0.0 or damage <= 0.0:
+		return
+	var r2: float = radius * radius
+	for pool in [_champion_pool, _guardian_pool, _striker_pool, _captain_pool]:
+		for enemy: SimUnit in pool.active_units():
+			if not enemy.alive or enemy.faction_index == faction:
+				continue
+			for u: SimUnit in performers:
+				if enemy.position.distance_squared_to(u.position) <= r2:
+					enemy.health -= damage
+					enemy.last_hit_faction = faction
+					break
+	# Deterministic death pass (same pattern as the two-pass projectile system).
+	for pool in [_champion_pool, _guardian_pool, _striker_pool, _captain_pool]:
+		for u: SimUnit in pool.active_units():
+			if u.alive and u.health <= 0.0:
+				_kill_unit(u, u.last_hit_faction)
+
+
+## Buffs take the stronger value while any buff is still active, so a tier 1
+## re-cast never downgrades an active tier 3 buff.
+func _apply_buff_max(u: SimUnit, stat: String, fraction: float, duration: float) -> void:
+	if stat == "damage":
+		if u.damage_buff_timer <= 0.0 or fraction >= u.damage_buff_fraction:
+			u.damage_buff_fraction = fraction
+			u.damage_buff_timer = duration
+	else:
+		if u.speed_buff_timer <= 0.0 or fraction >= u.speed_buff_fraction:
+			u.speed_buff_fraction = fraction
+			u.speed_buff_timer = duration
+
+
+## Effective damage/speed including active technique buffs.
+func _effective_damage(u: SimUnit) -> float:
+	if u.damage_buff_timer > 0.0:
+		return u.attack_damage * (1.0 + u.damage_buff_fraction)
+	return u.attack_damage
+
+
+func _effective_speed(u: SimUnit) -> float:
+	if u.speed_buff_timer > 0.0:
+		return u.move_speed * (1.0 + u.speed_buff_fraction)
+	return u.move_speed
+
+
 # === PRIVATE ===
 
 func _advance_stage() -> void:
-	_stage_elapsed += _dt
+	_stage_ticks += 1
+	_stage_elapsed = float(_stage_ticks) * _dt
 	var old := _stage
 	match _stage:
 		STAGE_OPENING:
 			if _stage_elapsed >= _stage_durations[STAGE_OPENING]:
 				_stage = STAGE_CRISIS
 				_stage_elapsed = 0.0
+				_stage_ticks = 0
 				_events.append("stage_changed:crisis")
 		STAGE_CRISIS:
 			if not _boss_spawned:
@@ -266,11 +372,13 @@ func _advance_stage() -> void:
 			if _stage_elapsed >= _stage_durations[STAGE_CRISIS]:
 				_stage = STAGE_FINAL_SURGE
 				_stage_elapsed = 0.0
+				_stage_ticks = 0
 				_events.append("stage_changed:final_surge")
 		STAGE_FINAL_SURGE:
 			if _stage_elapsed >= _stage_durations[STAGE_FINAL_SURGE]:
 				_stage = STAGE_SUDDEN_DEATH
 				_stage_elapsed = 0.0
+				_stage_ticks = 0
 				_events.append("stage_changed:sudden_death")
 		STAGE_SUDDEN_DEATH:
 			if _stage_elapsed >= _stage_durations[STAGE_SUDDEN_DEATH]:
@@ -361,9 +469,15 @@ func _configure_unit(u: SimUnit, utype: String, faction: int) -> void:
 	# Spawn position
 	if faction >= 0:
 		var base: Vector2 = _fortress_positions[faction]
-		u.position = base + Vector2(_rng.randf_range(-SPAWN_JITTER, SPAWN_JITTER), _rng.randf_range(-SPAWN_JITTER, SPAWN_JITTER))
+		var spawn_angle: float = _rng.randf() * TAU
+		var spawn_radius: float = _rng.randf_range(0.0, SPAWN_SPREAD)
+		u.position = _clamp_arena(base + Vector2(cos(spawn_angle), sin(spawn_angle)) * spawn_radius)
 	else:
 		u.position = _crown
+	# Assign a personal flanking lane so the army sweeps the full arena.
+	var flank_angle: float = _rng.randf() * TAU
+	var flank_mag: float = _rng.randf_range(FLANK_MIN, FLANK_MAX)
+	u.flank_offset = Vector2(cos(flank_angle), sin(flank_angle)) * flank_mag
 	_unit_registry[gid] = u
 
 
@@ -424,6 +538,12 @@ func _unit_ai(u: SimUnit) -> void:
 		return
 	u.state_time += _dt
 	u.attack_cooldown = maxf(u.attack_cooldown - _dt, 0.0)
+	# Technique buff timers tick down each frame; expiry keeps the fraction
+	# at 0 influence since _effective_* checks the timer first.
+	if u.damage_buff_timer > 0.0:
+		u.damage_buff_timer = maxf(u.damage_buff_timer - _dt, 0.0)
+	if u.speed_buff_timer > 0.0:
+		u.speed_buff_timer = maxf(u.speed_buff_timer - _dt, 0.0)
 	# Retreat check (not for captain/boss)
 	if u.retreat_health_fraction > 0.0 and u.state != SimUnit.State.RETREAT and u.state != SimUnit.State.DEAD:
 		if u.health <= u.max_health * u.retreat_health_fraction:
@@ -454,9 +574,12 @@ func _advance_ai(u: SimUnit) -> void:
 		u.state = SimUnit.State.ATTACK
 		u.state_time = 0.0
 		return
-	# Move toward objective
-	var objective := _get_objective(u)
-	_move_toward(u, objective)
+	# Move toward objective. Flanked lanes apply only around the crown —
+	# siege objectives must be closed to within fortress attack range.
+	var obj_pos: Vector2 = _get_objective(u)
+	if obj_pos == _crown:
+		obj_pos = _clamp_arena(obj_pos + u.flank_offset)
+	_move_toward(u, obj_pos)
 	# Defend check
 	if u.faction_index >= 0 and _is_fortress_threatened(u.faction_index):
 		if _should_defend(u):
@@ -525,11 +648,35 @@ func _move_toward(u: SimUnit, target_pos: Vector2) -> void:
 	var dist: float = diff.length()
 	if dist < 1.0:
 		return
-	var step: float = u.move_speed * _dt
+	var step: float = _effective_speed(u) * _dt
+	var push := _separation_push(u)
 	if step >= dist:
-		u.position = target_pos
+		u.position = _clamp_arena(target_pos + push)
 	else:
-		u.position += (diff / dist) * step
+		u.position = _clamp_arena(u.position + (diff / dist) * step + push)
+
+
+## Light deterministic push away from nearby living units so squads spread
+## across the arena floor instead of stacking on one point.
+func _separation_push(u: SimUnit) -> Vector2:
+	var push := Vector2.ZERO
+	for pool in [_champion_pool, _guardian_pool, _striker_pool, _captain_pool]:
+		for other: SimUnit in pool.active_units():
+			if not other.alive or other == u:
+				continue
+			var away: Vector2 = u.position - other.position
+			var d: float = away.length()
+			if d > 0.001 and d < SEPARATION_RADIUS:
+				push += (away / d) * (SEPARATION_RADIUS - d) * 0.35
+	return push * _dt
+
+
+## Keeps every unit inside the playable arena bounds.
+func _clamp_arena(pos: Vector2) -> Vector2:
+	return Vector2(
+		clampf(pos.x, ARENA_MARGIN, ARENA_SIM_W - ARENA_MARGIN),
+		clampf(pos.y, ARENA_MARGIN, ARENA_SIM_H - ARENA_MARGIN)
+	)
 
 
 func _find_nearest_enemy(u: SimUnit, max_range: float) -> SimUnit:
@@ -563,7 +710,7 @@ func _apply_melee(attacker: SimUnit, target: SimUnit) -> void:
 	if attacker.attack_cooldown > 0.0:
 		return
 	attacker.attack_cooldown = attacker.attack_interval
-	target.health -= attacker.attack_damage
+	target.health -= _effective_damage(attacker)
 	# Record melee hitter for consistency with the two-pass projectile system.
 	target.last_hit_faction = attacker.faction_index
 	if target.health <= 0.0 and target.alive:
@@ -581,7 +728,7 @@ func _fire_projectile(shooter: SimUnit, target: SimUnit) -> void:
 	_next_unit_id += 1
 	proj.faction_index = shooter.faction_index
 	proj.position = shooter.position
-	proj.damage = shooter.attack_damage
+	proj.damage = _effective_damage(shooter)
 	proj.target_id = target.id
 	var diff: Vector2 = target.position - shooter.position
 	var dist: float = diff.length()
@@ -641,7 +788,7 @@ func _process_fortress_attacks(all_units: Array) -> void:
 		var dist: float = u.position.distance_to(_fortress_positions[enemy_fortress])
 		if dist <= FORTRESS_ATTACK_RANGE and u.attack_cooldown <= 0.0:
 			u.attack_cooldown = u.attack_interval
-			_fortress_health[enemy_fortress] -= u.attack_damage
+			_fortress_health[enemy_fortress] -= _effective_damage(u)
 			_events.append("fortress_damaged:%d" % enemy_fortress)
 
 
@@ -726,8 +873,12 @@ func _get_objective(u: SimUnit) -> Vector2:
 		if nearest != null:
 			return nearest.position
 		return _crown
-	# Striker aggression: target enemy fortress when dominion advantage >= 20
+	# Striker aggression: siege the enemy fortress on a >= 20 dominion lead,
+	# and unconditionally once the round escalates (final surge / sudden death)
+	# so late rounds always pressure both fortresses.
 	if u.unit_type == "striker":
+		if _stage == STAGE_FINAL_SURGE or _stage == STAGE_SUDDEN_DEATH:
+			return _fortress_positions[1 - u.faction_index]
 		var my_dom: float = _dominion_display[u.faction_index]
 		var enemy_dom: float = _dominion_display[1 - u.faction_index]
 		if my_dom - enemy_dom >= DOMINION_AGGRESSION_THRESHOLD:

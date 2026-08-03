@@ -4,6 +4,7 @@ extends BaseUnit3D
 func _ready() -> void:
 	_class_name = "captain"
 	_attack_anim = ANIM_CANNON
+	_glb_path = "res://assets/models/characters/RC_Captain_Meshy_v2.glb"
 	_blue_glb_path = "res://assets/models/characters/RC_Blue_Captain.glb"
 	_red_glb_path = "res://assets/models/characters/RC_Red_Captain.glb"
 	super._ready()

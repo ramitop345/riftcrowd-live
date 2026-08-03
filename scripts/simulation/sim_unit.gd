@@ -50,6 +50,17 @@ var boss_bonus_time_left: float = 0.0
 ## resolution to attribute the kill to the correct striker/captain).
 var last_hit_faction: int = -1
 
+## Per-unit lateral marching offset so squads spread across the arena
+## instead of converging on the center line. Assigned at spawn from SimRng.
+var flank_offset: Vector2 = Vector2.ZERO
+
+## Gift technique buffs. Fractions are multipliers added on top of the base
+## stat (e.g. 0.5 = +50% damage); timers count down in SimWorld._unit_ai().
+var damage_buff_fraction: float = 0.0
+var damage_buff_timer: float = 0.0
+var speed_buff_fraction: float = 0.0
+var speed_buff_timer: float = 0.0
+
 
 ## Clears everything for pool reuse.
 func reset() -> void:
@@ -76,6 +87,11 @@ func reset() -> void:
 	boss_killer_faction = -1
 	boss_bonus_time_left = 0.0
 	last_hit_faction = -1
+	flank_offset = Vector2.ZERO
+	damage_buff_fraction = 0.0
+	damage_buff_timer = 0.0
+	speed_buff_fraction = 0.0
+	speed_buff_timer = 0.0
 
 
 ## Returns the state as a string for snapshot output.

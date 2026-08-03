@@ -5,8 +5,9 @@ import { z } from 'zod';
  *
  * Phase 17/Tier 4: bumped to 6 — added FRAME_REPORT (Godot → gateway) and
  * SET_QUALITY_TIER (gateway → Godot) command types for 4-tier VFX quality ladder.
+ * Gift techniques: bumped to 7 — added CAST_TECHNIQUE (gift tiers trigger faction techniques).
  */
-export const COMMAND_SCHEMA_VERSION = 6;
+export const COMMAND_SCHEMA_VERSION = 7;
 /** The complete command vocabulary the Godot client understands. */
 export const GameCommandTypeSchema = z.enum([
     'JOIN_FACTION',
@@ -37,6 +38,8 @@ export const GameCommandTypeSchema = z.enum([
     'DEACTIVATE_FALLBACK',
     // Phase 17/Tier 4 — VFX quality ladder
     'SET_QUALITY_TIER',
+    // Gift technique system — gift tiers trigger faction-wide techniques
+    'CAST_TECHNIQUE',
 ]);
 /** Flat primitives only: no nested objects, no arrays, no functions. Keys and strings are bounded. */
 export const GameCommandMetadataSchema = z.record(z.string().min(1).max(128), z.union([z.string().max(500), z.number().finite(), z.boolean()]));

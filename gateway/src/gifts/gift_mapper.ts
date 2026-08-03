@@ -25,6 +25,9 @@ export interface GiftImpact {
   duration?: number;
   cinematic?: boolean;
   displayName?: string;
+  /** Technique tier (1-4) triggered alongside the primary impact, if the tier defines one. */
+  techniqueTier?: number;
+  techniqueCinematic?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -90,6 +93,8 @@ export class GiftMapper {
       duration: tier.impact.duration,
       cinematic: tier.impact.cinematic,
       displayName: mapping.displayName,
+      techniqueTier: tier.technique?.magnitude,
+      techniqueCinematic: tier.technique?.cinematic,
     };
   }
 

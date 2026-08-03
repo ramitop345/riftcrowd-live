@@ -43,8 +43,8 @@ function makeFrameReport(avgFrameMs: number, p95FrameMs?: number): FrameReport {
 // ===================================================================
 
 describe('Schema version bump', () => {
-  it('COMMAND_SCHEMA_VERSION is 6', () => {
-    expect(COMMAND_SCHEMA_VERSION).toBe(6);
+  it('COMMAND_SCHEMA_VERSION is 7', () => {
+    expect(COMMAND_SCHEMA_VERSION).toBe(7);
   });
 
   it('SET_QUALITY_TIER is a valid command type', () => {
@@ -82,7 +82,7 @@ describe('FrameReport schema', () => {
 describe('SetQualityTier schema', () => {
   it('validates a valid SET_QUALITY_TIER command', () => {
     const cmd = {
-      schemaVersion: 6 as const,
+      schemaVersion: 7 as const,
       type: 'SET_QUALITY_TIER' as const,
       tier: 'medium' as const,
     };
@@ -92,7 +92,7 @@ describe('SetQualityTier schema', () => {
   it('rejects invalid tier', () => {
     expect(() =>
       SetQualityTierSchema.parse({
-        schemaVersion: 6,
+        schemaVersion: 7,
         type: 'SET_QUALITY_TIER',
         tier: 'extreme',
       }),
@@ -101,7 +101,7 @@ describe('SetQualityTier schema', () => {
 
   it('accepts optional reason field', () => {
     const cmd = {
-      schemaVersion: 6 as const,
+      schemaVersion: 7 as const,
       type: 'SET_QUALITY_TIER' as const,
       tier: 'low' as const,
       reason: 'frame time over budget',
@@ -298,7 +298,7 @@ describe('VFXOrchestrator: SET_QUALITY_TIER command emission', () => {
     const tierCmd = cmds.find((c) => c.type === 'SET_QUALITY_TIER');
     expect(tierCmd).toBeDefined();
     expect(tierCmd!.metadata!.tier).toBe('high');
-    expect(tierCmd!.schemaVersion).toBe(6);
+    expect(tierCmd!.schemaVersion).toBe(7);
   });
 
   it('emits SET_QUALITY_TIER command on manual setQualityTier', () => {

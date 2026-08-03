@@ -3,6 +3,8 @@
 ## snapshot. Same public interface as arena.gd: setup(), apply_snapshot(), clear_round().
 extends Node3D
 
+const MeshyLod := preload("res://scripts/units/meshy_lod.gd")
+
 const UNIT_SCENE_PATHS: Dictionary = {
 	"champion": "res://scenes/units/3d/Champion3D.tscn",
 	"guardian": "res://scenes/units/3d/Guardian3D.tscn",
@@ -14,7 +16,10 @@ const PROJECTILE_SCENE_PATH: String = "res://scenes/units/3d/Projectile3D.tscn"
 const FORTRESS_SCENE_PATH: String = "res://scenes/units/3d/Fortress3D.tscn"
 const CROWN_SCENE_PATH: String = "res://scenes/units/3d/Crown3D.tscn"
 const CAPTURE_ZONE_SCENE_PATH: String = "res://scenes/units/3d/CaptureZone3D.tscn"
-const ARENA_GLB_PATH: String = "res://assets/models/environment/RC_Arena_Master.glb"
+const ARENA_GLB_PATH: String = "res://assets/models/environment/env_arena_v1.glb"
+# Meshy arena authored ~1.9 x 1.4 m; stretch to span the 54 x 26 battle field.
+const ARENA_SCALE: Vector3 = Vector3(24.0, 8.0, 16.0)
+const ARENA_LOD_TIER: int = 1  # heavy mesh: default to ~50% tier (tunable 0..2)
 const GROUND_Y: float = 1.0  # objects sit on the flat arena ground
 
 signal round_ended(victory_type: String, winner: int)
@@ -40,6 +45,17 @@ var _camera_base_pos: Vector3 = Vector3.ZERO
 var _shake_intensity: float = 0.0
 var _shake_duration: float = 0.0
 var _shake_timer: float = 0.0
+
+## Camera director state (wide master shot + drift + technique focus).
+var _drift_time: float = 0.0
+var _drift_amplitude: float = 1.2
+var _drift_speed: float = 0.15
+var _master_pos: Vector3 = Vector3(0, 24, -28)
+var _master_fov: float = 75.0
+var _focus_timer: float = 0.0
+var _focus_duration: float = 0.0
+var _focus_pos: Vector3 = Vector3.ZERO
+var _focus_fov: float = 55.0
 
 var _config: Dictionary = {}
 var _faction_a: Dictionary = {}
@@ -81,12 +97,17 @@ func setup(config: Dictionary, faction_a: Dictionary, faction_b: Dictionary) -> 
 	_faction_b = faction_b
 	_victory_emitted = false
 	_clear_all()
+	_apply_camera_config()
 	# Arena ground mesh
 	var arena_packed: PackedScene = load(ARENA_GLB_PATH) as PackedScene
 	if arena_packed != null:
 		_arena_ground = arena_packed.instantiate()
 		_arena_ground.name = "ArenaGround"
+		_arena_ground.scale = ARENA_SCALE
+		_arena_ground.position = Vector3(0, GROUND_Y, 0)
 		add_child(_arena_ground)
+		# Show only the chosen LOD tier (Meshy GLBs bake LOD0/1/2 as siblings).
+		MeshyLod.apply(_arena_ground, ARENA_LOD_TIER)
 	# Capture zone (renders behind everything).
 	var cz_packed: PackedScene = load(CAPTURE_ZONE_SCENE_PATH) as PackedScene
 	if cz_packed != null:
@@ -122,7 +143,8 @@ func setup(config: Dictionary, faction_a: Dictionary, faction_b: Dictionary) -> 
 
 
 func _process(delta: float) -> void:
-	# Camera shake.
+	_drift_time += delta
+	# Camera shake takes priority over directed framing.
 	if _shake_timer > 0.0:
 		_shake_timer -= delta
 		var t: float = _shake_timer / maxf(_shake_duration, 0.01)
@@ -132,8 +154,27 @@ func _process(delta: float) -> void:
 				randf_range(-1.0, 1.0) * _shake_intensity * t * 0.5,
 				randf_range(-1.0, 1.0) * _shake_intensity * t
 			)
-	elif _camera != null and _camera.position != _camera_base_pos:
-		_camera.position = _camera_base_pos
+		return
+	if _camera == null:
+		return
+	# Technique focus: push in toward the action, then ease back to master.
+	if _focus_timer > 0.0:
+		_focus_timer -= delta
+		var focus_t: float = clampf(_focus_timer / maxf(_focus_duration, 0.01), 0.0, 1.0)
+		var eased: float = focus_t * focus_t
+		var focus_cam_pos: Vector3 = _focus_pos + Vector3(0, 10, -12)
+		_camera.position = _master_pos.lerp(focus_cam_pos, 1.0 - eased)
+		_camera.fov = lerpf(_master_fov, _focus_fov, 1.0 - eased)
+		_camera.look_at(_focus_pos.lerp(Vector3(0, 1, 0), eased), Vector3.UP)
+		_camera_base_pos = _camera.position
+		return
+	# Default: wide master shot with slow lateral drift across the arena.
+	var drift_x: float = sin(_drift_time * _drift_speed * TAU) * _drift_amplitude
+	var drift_y: float = sin(_drift_time * _drift_speed * 0.6 * TAU) * _drift_amplitude * 0.3
+	_camera.position = _master_pos + Vector3(drift_x, drift_y, 0.0)
+	_camera.fov = _master_fov
+	_camera.look_at(Vector3(0, 1, 0), Vector3.UP)
+	_camera_base_pos = _camera.position
 
 
 ## Shake the camera (called from battle.gd on boss ground slam etc).
@@ -160,11 +201,39 @@ func _find_camera() -> Camera3D:
 func _frame_battle_camera() -> void:
 	if _camera == null:
 		return
-	_camera.position = Vector3(0, 24, -28)
+	_camera.position = _master_pos
 	_camera.look_at(Vector3(0, 1, 0), Vector3.UP)
-	_camera.fov = 75.0
+	_camera.fov = _master_fov
 	# Keep the shake-rest position in sync with the framed battle view.
 	_camera_base_pos = _camera.position
+
+
+## Applies the camera section of gameplay.json (drift, master framing, focus fov).
+func _apply_camera_config() -> void:
+	var cam_cfg: Dictionary = {}
+	var cfg_v: Variant = _config.get("camera", {})
+	if typeof(cfg_v) == TYPE_DICTIONARY:
+		cam_cfg = cfg_v
+	_drift_amplitude = float(cam_cfg.get("driftAmplitude", 1.2))
+	_drift_speed = float(cam_cfg.get("driftSpeed", 0.15))
+	_master_fov = float(cam_cfg.get("masterFov", 75.0))
+	_focus_fov = float(cam_cfg.get("focusFov", 55.0))
+	var pos_v: Variant = cam_cfg.get("masterPos", [0.0, 24.0, -28.0])
+	if typeof(pos_v) == TYPE_ARRAY and (pos_v as Array).size() >= 3:
+		var arr: Array = pos_v
+		_master_pos = Vector3(float(arr[0]), float(arr[1]), float(arr[2]))
+	_frame_battle_camera()
+
+
+## Cinematic push-in toward a world position (major technique, boss moments).
+func focus_on(world_pos: Vector3, duration: float = 2.0) -> void:
+	if _camera == null:
+		_camera = _find_camera()
+	if _camera == null:
+		return
+	_focus_pos = world_pos
+	_focus_duration = maxf(duration, 0.1)
+	_focus_timer = _focus_duration
 
 
 ## Syncs every visual node with the latest simulation snapshot.
@@ -237,19 +306,97 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 			proj_remove.append(pid)
 	for pid: int in proj_remove:
 		_release_projectile_visual(pid)
-	# Victory event.
-	if not _victory_emitted:
-		var events: Variant = snapshot.get("events")
-		if typeof(events) == TYPE_ARRAY:
-			for ev: Variant in (events as Array):
-				var ev_str: String = str(ev)
-				if ev_str.begins_with("victory:"):
-					var parts: PackedStringArray = ev_str.split(":")
-					if parts.size() >= 3:
-						var winner: int = int(parts[1])
-						var vtype: String = parts[2]
-						_victory_emitted = true
-						round_ended.emit(vtype, winner)
+	# Sim events (technique performances, victory).
+	var events: Variant = snapshot.get("events")
+	if typeof(events) == TYPE_ARRAY:
+		for ev: Variant in (events as Array):
+			var ev_str: String = str(ev)
+			if ev_str.begins_with("technique:"):
+				var parts: PackedStringArray = ev_str.split(":")
+				if parts.size() >= 3:
+					_perform_technique_visuals(int(parts[1]), int(parts[2]))
+			elif not _victory_emitted and ev_str.begins_with("victory:"):
+				var parts: PackedStringArray = ev_str.split(":")
+				if parts.size() >= 3:
+					var winner: int = int(parts[1])
+					var vtype: String = parts[2]
+					_victory_emitted = true
+					_perform_victory_celebration(winner)
+					round_ended.emit(vtype, winner)
+
+
+## Gift technique visuals: every living unit of the performing faction plays
+## its tier animation, staggered by id order so the squad ripples instead of
+## snapping in unison. Tier 2+ shakes the camera; tier 3 also pushes the
+## camera in on the performers' centroid (cinematic).
+func _perform_technique_visuals(faction: int, tier: int) -> void:
+	var tech_v: Variant = _config.get("technique", {})
+	var tech_cfg: Dictionary = tech_v if typeof(tech_v) == TYPE_DICTIONARY else {}
+	var stagger: float = float(tech_cfg.get("staggerStepSeconds", 0.08))
+	var ids: Array = _unit_visuals.keys()
+	ids.sort()
+	var tw := create_tween()
+	var delay: float = 0.0
+	var centroid := Vector3.ZERO
+	var count: int = 0
+	for uid: int in ids:
+		var node: Node = _unit_visuals[uid]
+		if node == null or not is_instance_valid(node):
+			continue
+		if not node.has_method("get_faction_index") or int(node.call("get_faction_index")) != faction:
+			continue
+		if node is Node3D:
+			centroid += (node as Node3D).global_position
+			count += 1
+		if node.has_method("play_technique"):
+			tw.parallel().tween_callback(Callable(node, "call").bind("play_technique", tier)).set_delay(delay)
+			delay += stagger
+	if count == 0:
+		tw.kill()
+		return
+	centroid /= float(count)
+	if tier >= 2:
+		shake_camera(0.3 + 0.25 * float(tier), 0.5)
+	if tier >= 3:
+		focus_on(centroid, float(tech_cfg.get("performDurationSeconds", 1.6)))
+
+
+## Victory celebration: every surviving unit of the winning faction plays one of
+## its celebration clips (chosen deterministically by unit id), staggered by id so
+## the squad ripples. The camera pushes in on the celebrants' centroid for the
+## celebration duration, framing the win before the round auto-restarts.
+func _perform_victory_celebration(winner: int) -> void:
+	var cel_v: Variant = _config.get("celebration", {})
+	var cel_cfg: Dictionary = cel_v if typeof(cel_v) == TYPE_DICTIONARY else {}
+	var stagger: float = float(cel_cfg.get("staggerStepSeconds", 0.06))
+	var duration: float = float(cel_cfg.get("durationSeconds", 2.8))
+	var ids: Array = _unit_visuals.keys()
+	ids.sort()
+	var tw := create_tween()
+	var delay: float = 0.0
+	var centroid := Vector3.ZERO
+	var count: int = 0
+	for uid: int in ids:
+		var node: Node = _unit_visuals[uid]
+		if node == null or not is_instance_valid(node):
+			continue
+		if not node.has_method("get_faction_index") or int(node.call("get_faction_index")) != winner:
+			continue
+		# Fallen units stay down — only living winners celebrate.
+		if node.has_method("is_dead") and bool(node.call("is_dead")):
+			continue
+		if node is Node3D:
+			centroid += (node as Node3D).global_position
+			count += 1
+		if node.has_method("play_celebration"):
+			tw.parallel().tween_callback(Callable(node, "call").bind("play_celebration", uid)).set_delay(delay)
+			delay += stagger
+	if count == 0:
+		tw.kill()
+		return
+	centroid /= float(count)
+	if bool(cel_cfg.get("cameraPushIn", true)):
+		focus_on(centroid, duration)
 
 
 ## Removes all visual nodes and clears registries.

@@ -64,6 +64,8 @@ function impactToCommandType(impactType: GiftImpactType): GameCommandType {
       return 'START_WORLD_EVENT';
     case 'display_spotlight':
       return 'DISPLAY_SPOTLIGHT';
+    case 'trigger_technique':
+      return 'CAST_TECHNIQUE';
   }
 }
 
@@ -228,6 +230,26 @@ export class GiftRule implements Rule {
         ...(impact.cinematic !== undefined ? { cinematic: impact.cinematic } : {}),
       },
     });
+
+    // Gift tiers with a technique block also produce CAST_TECHNIQUE
+    if (impact.techniqueTier !== undefined) {
+      commands.push({
+        schemaVersion: COMMAND_SCHEMA_VERSION,
+        id: `cmd_${randomUUID()}`,
+        type: 'CAST_TECHNIQUE',
+        createdAt: new Date().toISOString(),
+        factionId,
+        viewerId,
+        displayName: impact.displayName,
+        sourceEventIds: [event.id],
+        metadata: {
+          giftTier: impact.tierId,
+          giftName: impact.displayName ?? giftId,
+          techniqueTier: impact.techniqueTier,
+          ...(impact.techniqueCinematic !== undefined ? { cinematic: impact.techniqueCinematic } : {}),
+        },
+      });
+    }
 
     // Cinematic impacts also produce DISPLAY_SPOTLIGHT
     if (impact.cinematic) {

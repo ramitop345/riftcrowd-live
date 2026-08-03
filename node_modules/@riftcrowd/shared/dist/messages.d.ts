@@ -158,9 +158,9 @@ export declare const CommandMessageSchema: z.ZodObject<{
     protocolVersion: z.ZodLiteral<1>;
     kind: z.ZodLiteral<"command">;
     command: z.ZodObject<{
-        schemaVersion: z.ZodLiteral<6>;
+        schemaVersion: z.ZodLiteral<7>;
         id: z.ZodString;
-        type: z.ZodEnum<["JOIN_FACTION", "SPAWN_CHAMPION", "ADD_ENERGY", "ADD_SHIELD", "SPAWN_SQUAD", "CAST_ABILITY", "START_WORLD_EVENT", "DISPLAY_SPOTLIGHT", "PAUSE_EVENTS", "END_ROUND", "GIFT_APPLY", "FOLLOW_GUARDIAN", "SHARE_SHIELD", "STRATEGY_VOTE", "FREE_ENERGY_ABILITY", "ADD_SCORE", "SPAWN_VFX", "SPOTLIGHT_CARD", "SUPPORTER_CALLOUT", "CAMERA_IMPULSE", "PLAY_AUDIO", "SET_WINDOW_MODE", "ACTIVATE_FALLBACK", "DEACTIVATE_FALLBACK", "SET_QUALITY_TIER"]>;
+        type: z.ZodEnum<["JOIN_FACTION", "SPAWN_CHAMPION", "ADD_ENERGY", "ADD_SHIELD", "SPAWN_SQUAD", "CAST_ABILITY", "START_WORLD_EVENT", "DISPLAY_SPOTLIGHT", "PAUSE_EVENTS", "END_ROUND", "GIFT_APPLY", "FOLLOW_GUARDIAN", "SHARE_SHIELD", "STRATEGY_VOTE", "FREE_ENERGY_ABILITY", "ADD_SCORE", "SPAWN_VFX", "SPOTLIGHT_CARD", "SUPPORTER_CALLOUT", "CAMERA_IMPULSE", "PLAY_AUDIO", "SET_WINDOW_MODE", "ACTIVATE_FALLBACK", "DEACTIVATE_FALLBACK", "SET_QUALITY_TIER", "CAST_TECHNIQUE"]>;
         createdAt: z.ZodString;
         factionId: z.ZodOptional<z.ZodString>;
         viewerId: z.ZodOptional<z.ZodString>;
@@ -171,8 +171,8 @@ export declare const CommandMessageSchema: z.ZodObject<{
         expiresAt: z.ZodOptional<z.ZodString>;
         metadata: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodString, z.ZodNumber, z.ZodBoolean]>>>;
     }, "strict", z.ZodTypeAny, {
-        type: "JOIN_FACTION" | "SPAWN_CHAMPION" | "ADD_ENERGY" | "ADD_SHIELD" | "SPAWN_SQUAD" | "CAST_ABILITY" | "START_WORLD_EVENT" | "DISPLAY_SPOTLIGHT" | "PAUSE_EVENTS" | "END_ROUND" | "GIFT_APPLY" | "FOLLOW_GUARDIAN" | "SHARE_SHIELD" | "STRATEGY_VOTE" | "FREE_ENERGY_ABILITY" | "ADD_SCORE" | "SPAWN_VFX" | "SPOTLIGHT_CARD" | "SUPPORTER_CALLOUT" | "CAMERA_IMPULSE" | "PLAY_AUDIO" | "SET_WINDOW_MODE" | "ACTIVATE_FALLBACK" | "DEACTIVATE_FALLBACK" | "SET_QUALITY_TIER";
-        schemaVersion: 6;
+        type: "JOIN_FACTION" | "SPAWN_CHAMPION" | "ADD_ENERGY" | "ADD_SHIELD" | "SPAWN_SQUAD" | "CAST_ABILITY" | "START_WORLD_EVENT" | "DISPLAY_SPOTLIGHT" | "PAUSE_EVENTS" | "END_ROUND" | "GIFT_APPLY" | "FOLLOW_GUARDIAN" | "SHARE_SHIELD" | "STRATEGY_VOTE" | "FREE_ENERGY_ABILITY" | "ADD_SCORE" | "SPAWN_VFX" | "SPOTLIGHT_CARD" | "SUPPORTER_CALLOUT" | "CAMERA_IMPULSE" | "PLAY_AUDIO" | "SET_WINDOW_MODE" | "ACTIVATE_FALLBACK" | "DEACTIVATE_FALLBACK" | "SET_QUALITY_TIER" | "CAST_TECHNIQUE";
+        schemaVersion: 7;
         id: string;
         createdAt: string;
         sourceEventIds: string[];
@@ -184,8 +184,8 @@ export declare const CommandMessageSchema: z.ZodObject<{
         expiresAt?: string | undefined;
         metadata?: Record<string, string | number | boolean> | undefined;
     }, {
-        type: "JOIN_FACTION" | "SPAWN_CHAMPION" | "ADD_ENERGY" | "ADD_SHIELD" | "SPAWN_SQUAD" | "CAST_ABILITY" | "START_WORLD_EVENT" | "DISPLAY_SPOTLIGHT" | "PAUSE_EVENTS" | "END_ROUND" | "GIFT_APPLY" | "FOLLOW_GUARDIAN" | "SHARE_SHIELD" | "STRATEGY_VOTE" | "FREE_ENERGY_ABILITY" | "ADD_SCORE" | "SPAWN_VFX" | "SPOTLIGHT_CARD" | "SUPPORTER_CALLOUT" | "CAMERA_IMPULSE" | "PLAY_AUDIO" | "SET_WINDOW_MODE" | "ACTIVATE_FALLBACK" | "DEACTIVATE_FALLBACK" | "SET_QUALITY_TIER";
-        schemaVersion: 6;
+        type: "JOIN_FACTION" | "SPAWN_CHAMPION" | "ADD_ENERGY" | "ADD_SHIELD" | "SPAWN_SQUAD" | "CAST_ABILITY" | "START_WORLD_EVENT" | "DISPLAY_SPOTLIGHT" | "PAUSE_EVENTS" | "END_ROUND" | "GIFT_APPLY" | "FOLLOW_GUARDIAN" | "SHARE_SHIELD" | "STRATEGY_VOTE" | "FREE_ENERGY_ABILITY" | "ADD_SCORE" | "SPAWN_VFX" | "SPOTLIGHT_CARD" | "SUPPORTER_CALLOUT" | "CAMERA_IMPULSE" | "PLAY_AUDIO" | "SET_WINDOW_MODE" | "ACTIVATE_FALLBACK" | "DEACTIVATE_FALLBACK" | "SET_QUALITY_TIER" | "CAST_TECHNIQUE";
+        schemaVersion: 7;
         id: string;
         createdAt: string;
         sourceEventIds: string[];
@@ -199,8 +199,8 @@ export declare const CommandMessageSchema: z.ZodObject<{
     }>;
 }, "strict", z.ZodTypeAny, {
     command: {
-        type: "JOIN_FACTION" | "SPAWN_CHAMPION" | "ADD_ENERGY" | "ADD_SHIELD" | "SPAWN_SQUAD" | "CAST_ABILITY" | "START_WORLD_EVENT" | "DISPLAY_SPOTLIGHT" | "PAUSE_EVENTS" | "END_ROUND" | "GIFT_APPLY" | "FOLLOW_GUARDIAN" | "SHARE_SHIELD" | "STRATEGY_VOTE" | "FREE_ENERGY_ABILITY" | "ADD_SCORE" | "SPAWN_VFX" | "SPOTLIGHT_CARD" | "SUPPORTER_CALLOUT" | "CAMERA_IMPULSE" | "PLAY_AUDIO" | "SET_WINDOW_MODE" | "ACTIVATE_FALLBACK" | "DEACTIVATE_FALLBACK" | "SET_QUALITY_TIER";
-        schemaVersion: 6;
+        type: "JOIN_FACTION" | "SPAWN_CHAMPION" | "ADD_ENERGY" | "ADD_SHIELD" | "SPAWN_SQUAD" | "CAST_ABILITY" | "START_WORLD_EVENT" | "DISPLAY_SPOTLIGHT" | "PAUSE_EVENTS" | "END_ROUND" | "GIFT_APPLY" | "FOLLOW_GUARDIAN" | "SHARE_SHIELD" | "STRATEGY_VOTE" | "FREE_ENERGY_ABILITY" | "ADD_SCORE" | "SPAWN_VFX" | "SPOTLIGHT_CARD" | "SUPPORTER_CALLOUT" | "CAMERA_IMPULSE" | "PLAY_AUDIO" | "SET_WINDOW_MODE" | "ACTIVATE_FALLBACK" | "DEACTIVATE_FALLBACK" | "SET_QUALITY_TIER" | "CAST_TECHNIQUE";
+        schemaVersion: 7;
         id: string;
         createdAt: string;
         sourceEventIds: string[];
@@ -216,8 +216,8 @@ export declare const CommandMessageSchema: z.ZodObject<{
     kind: "command";
 }, {
     command: {
-        type: "JOIN_FACTION" | "SPAWN_CHAMPION" | "ADD_ENERGY" | "ADD_SHIELD" | "SPAWN_SQUAD" | "CAST_ABILITY" | "START_WORLD_EVENT" | "DISPLAY_SPOTLIGHT" | "PAUSE_EVENTS" | "END_ROUND" | "GIFT_APPLY" | "FOLLOW_GUARDIAN" | "SHARE_SHIELD" | "STRATEGY_VOTE" | "FREE_ENERGY_ABILITY" | "ADD_SCORE" | "SPAWN_VFX" | "SPOTLIGHT_CARD" | "SUPPORTER_CALLOUT" | "CAMERA_IMPULSE" | "PLAY_AUDIO" | "SET_WINDOW_MODE" | "ACTIVATE_FALLBACK" | "DEACTIVATE_FALLBACK" | "SET_QUALITY_TIER";
-        schemaVersion: 6;
+        type: "JOIN_FACTION" | "SPAWN_CHAMPION" | "ADD_ENERGY" | "ADD_SHIELD" | "SPAWN_SQUAD" | "CAST_ABILITY" | "START_WORLD_EVENT" | "DISPLAY_SPOTLIGHT" | "PAUSE_EVENTS" | "END_ROUND" | "GIFT_APPLY" | "FOLLOW_GUARDIAN" | "SHARE_SHIELD" | "STRATEGY_VOTE" | "FREE_ENERGY_ABILITY" | "ADD_SCORE" | "SPAWN_VFX" | "SPOTLIGHT_CARD" | "SUPPORTER_CALLOUT" | "CAMERA_IMPULSE" | "PLAY_AUDIO" | "SET_WINDOW_MODE" | "ACTIVATE_FALLBACK" | "DEACTIVATE_FALLBACK" | "SET_QUALITY_TIER" | "CAST_TECHNIQUE";
+        schemaVersion: 7;
         id: string;
         createdAt: string;
         sourceEventIds: string[];
@@ -455,9 +455,9 @@ export declare const ProtocolMessageSchema: z.ZodDiscriminatedUnion<"kind", [z.Z
     protocolVersion: z.ZodLiteral<1>;
     kind: z.ZodLiteral<"command">;
     command: z.ZodObject<{
-        schemaVersion: z.ZodLiteral<6>;
+        schemaVersion: z.ZodLiteral<7>;
         id: z.ZodString;
-        type: z.ZodEnum<["JOIN_FACTION", "SPAWN_CHAMPION", "ADD_ENERGY", "ADD_SHIELD", "SPAWN_SQUAD", "CAST_ABILITY", "START_WORLD_EVENT", "DISPLAY_SPOTLIGHT", "PAUSE_EVENTS", "END_ROUND", "GIFT_APPLY", "FOLLOW_GUARDIAN", "SHARE_SHIELD", "STRATEGY_VOTE", "FREE_ENERGY_ABILITY", "ADD_SCORE", "SPAWN_VFX", "SPOTLIGHT_CARD", "SUPPORTER_CALLOUT", "CAMERA_IMPULSE", "PLAY_AUDIO", "SET_WINDOW_MODE", "ACTIVATE_FALLBACK", "DEACTIVATE_FALLBACK", "SET_QUALITY_TIER"]>;
+        type: z.ZodEnum<["JOIN_FACTION", "SPAWN_CHAMPION", "ADD_ENERGY", "ADD_SHIELD", "SPAWN_SQUAD", "CAST_ABILITY", "START_WORLD_EVENT", "DISPLAY_SPOTLIGHT", "PAUSE_EVENTS", "END_ROUND", "GIFT_APPLY", "FOLLOW_GUARDIAN", "SHARE_SHIELD", "STRATEGY_VOTE", "FREE_ENERGY_ABILITY", "ADD_SCORE", "SPAWN_VFX", "SPOTLIGHT_CARD", "SUPPORTER_CALLOUT", "CAMERA_IMPULSE", "PLAY_AUDIO", "SET_WINDOW_MODE", "ACTIVATE_FALLBACK", "DEACTIVATE_FALLBACK", "SET_QUALITY_TIER", "CAST_TECHNIQUE"]>;
         createdAt: z.ZodString;
         factionId: z.ZodOptional<z.ZodString>;
         viewerId: z.ZodOptional<z.ZodString>;
@@ -468,8 +468,8 @@ export declare const ProtocolMessageSchema: z.ZodDiscriminatedUnion<"kind", [z.Z
         expiresAt: z.ZodOptional<z.ZodString>;
         metadata: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodString, z.ZodNumber, z.ZodBoolean]>>>;
     }, "strict", z.ZodTypeAny, {
-        type: "JOIN_FACTION" | "SPAWN_CHAMPION" | "ADD_ENERGY" | "ADD_SHIELD" | "SPAWN_SQUAD" | "CAST_ABILITY" | "START_WORLD_EVENT" | "DISPLAY_SPOTLIGHT" | "PAUSE_EVENTS" | "END_ROUND" | "GIFT_APPLY" | "FOLLOW_GUARDIAN" | "SHARE_SHIELD" | "STRATEGY_VOTE" | "FREE_ENERGY_ABILITY" | "ADD_SCORE" | "SPAWN_VFX" | "SPOTLIGHT_CARD" | "SUPPORTER_CALLOUT" | "CAMERA_IMPULSE" | "PLAY_AUDIO" | "SET_WINDOW_MODE" | "ACTIVATE_FALLBACK" | "DEACTIVATE_FALLBACK" | "SET_QUALITY_TIER";
-        schemaVersion: 6;
+        type: "JOIN_FACTION" | "SPAWN_CHAMPION" | "ADD_ENERGY" | "ADD_SHIELD" | "SPAWN_SQUAD" | "CAST_ABILITY" | "START_WORLD_EVENT" | "DISPLAY_SPOTLIGHT" | "PAUSE_EVENTS" | "END_ROUND" | "GIFT_APPLY" | "FOLLOW_GUARDIAN" | "SHARE_SHIELD" | "STRATEGY_VOTE" | "FREE_ENERGY_ABILITY" | "ADD_SCORE" | "SPAWN_VFX" | "SPOTLIGHT_CARD" | "SUPPORTER_CALLOUT" | "CAMERA_IMPULSE" | "PLAY_AUDIO" | "SET_WINDOW_MODE" | "ACTIVATE_FALLBACK" | "DEACTIVATE_FALLBACK" | "SET_QUALITY_TIER" | "CAST_TECHNIQUE";
+        schemaVersion: 7;
         id: string;
         createdAt: string;
         sourceEventIds: string[];
@@ -481,8 +481,8 @@ export declare const ProtocolMessageSchema: z.ZodDiscriminatedUnion<"kind", [z.Z
         expiresAt?: string | undefined;
         metadata?: Record<string, string | number | boolean> | undefined;
     }, {
-        type: "JOIN_FACTION" | "SPAWN_CHAMPION" | "ADD_ENERGY" | "ADD_SHIELD" | "SPAWN_SQUAD" | "CAST_ABILITY" | "START_WORLD_EVENT" | "DISPLAY_SPOTLIGHT" | "PAUSE_EVENTS" | "END_ROUND" | "GIFT_APPLY" | "FOLLOW_GUARDIAN" | "SHARE_SHIELD" | "STRATEGY_VOTE" | "FREE_ENERGY_ABILITY" | "ADD_SCORE" | "SPAWN_VFX" | "SPOTLIGHT_CARD" | "SUPPORTER_CALLOUT" | "CAMERA_IMPULSE" | "PLAY_AUDIO" | "SET_WINDOW_MODE" | "ACTIVATE_FALLBACK" | "DEACTIVATE_FALLBACK" | "SET_QUALITY_TIER";
-        schemaVersion: 6;
+        type: "JOIN_FACTION" | "SPAWN_CHAMPION" | "ADD_ENERGY" | "ADD_SHIELD" | "SPAWN_SQUAD" | "CAST_ABILITY" | "START_WORLD_EVENT" | "DISPLAY_SPOTLIGHT" | "PAUSE_EVENTS" | "END_ROUND" | "GIFT_APPLY" | "FOLLOW_GUARDIAN" | "SHARE_SHIELD" | "STRATEGY_VOTE" | "FREE_ENERGY_ABILITY" | "ADD_SCORE" | "SPAWN_VFX" | "SPOTLIGHT_CARD" | "SUPPORTER_CALLOUT" | "CAMERA_IMPULSE" | "PLAY_AUDIO" | "SET_WINDOW_MODE" | "ACTIVATE_FALLBACK" | "DEACTIVATE_FALLBACK" | "SET_QUALITY_TIER" | "CAST_TECHNIQUE";
+        schemaVersion: 7;
         id: string;
         createdAt: string;
         sourceEventIds: string[];
@@ -496,8 +496,8 @@ export declare const ProtocolMessageSchema: z.ZodDiscriminatedUnion<"kind", [z.Z
     }>;
 }, "strict", z.ZodTypeAny, {
     command: {
-        type: "JOIN_FACTION" | "SPAWN_CHAMPION" | "ADD_ENERGY" | "ADD_SHIELD" | "SPAWN_SQUAD" | "CAST_ABILITY" | "START_WORLD_EVENT" | "DISPLAY_SPOTLIGHT" | "PAUSE_EVENTS" | "END_ROUND" | "GIFT_APPLY" | "FOLLOW_GUARDIAN" | "SHARE_SHIELD" | "STRATEGY_VOTE" | "FREE_ENERGY_ABILITY" | "ADD_SCORE" | "SPAWN_VFX" | "SPOTLIGHT_CARD" | "SUPPORTER_CALLOUT" | "CAMERA_IMPULSE" | "PLAY_AUDIO" | "SET_WINDOW_MODE" | "ACTIVATE_FALLBACK" | "DEACTIVATE_FALLBACK" | "SET_QUALITY_TIER";
-        schemaVersion: 6;
+        type: "JOIN_FACTION" | "SPAWN_CHAMPION" | "ADD_ENERGY" | "ADD_SHIELD" | "SPAWN_SQUAD" | "CAST_ABILITY" | "START_WORLD_EVENT" | "DISPLAY_SPOTLIGHT" | "PAUSE_EVENTS" | "END_ROUND" | "GIFT_APPLY" | "FOLLOW_GUARDIAN" | "SHARE_SHIELD" | "STRATEGY_VOTE" | "FREE_ENERGY_ABILITY" | "ADD_SCORE" | "SPAWN_VFX" | "SPOTLIGHT_CARD" | "SUPPORTER_CALLOUT" | "CAMERA_IMPULSE" | "PLAY_AUDIO" | "SET_WINDOW_MODE" | "ACTIVATE_FALLBACK" | "DEACTIVATE_FALLBACK" | "SET_QUALITY_TIER" | "CAST_TECHNIQUE";
+        schemaVersion: 7;
         id: string;
         createdAt: string;
         sourceEventIds: string[];
@@ -513,8 +513,8 @@ export declare const ProtocolMessageSchema: z.ZodDiscriminatedUnion<"kind", [z.Z
     kind: "command";
 }, {
     command: {
-        type: "JOIN_FACTION" | "SPAWN_CHAMPION" | "ADD_ENERGY" | "ADD_SHIELD" | "SPAWN_SQUAD" | "CAST_ABILITY" | "START_WORLD_EVENT" | "DISPLAY_SPOTLIGHT" | "PAUSE_EVENTS" | "END_ROUND" | "GIFT_APPLY" | "FOLLOW_GUARDIAN" | "SHARE_SHIELD" | "STRATEGY_VOTE" | "FREE_ENERGY_ABILITY" | "ADD_SCORE" | "SPAWN_VFX" | "SPOTLIGHT_CARD" | "SUPPORTER_CALLOUT" | "CAMERA_IMPULSE" | "PLAY_AUDIO" | "SET_WINDOW_MODE" | "ACTIVATE_FALLBACK" | "DEACTIVATE_FALLBACK" | "SET_QUALITY_TIER";
-        schemaVersion: 6;
+        type: "JOIN_FACTION" | "SPAWN_CHAMPION" | "ADD_ENERGY" | "ADD_SHIELD" | "SPAWN_SQUAD" | "CAST_ABILITY" | "START_WORLD_EVENT" | "DISPLAY_SPOTLIGHT" | "PAUSE_EVENTS" | "END_ROUND" | "GIFT_APPLY" | "FOLLOW_GUARDIAN" | "SHARE_SHIELD" | "STRATEGY_VOTE" | "FREE_ENERGY_ABILITY" | "ADD_SCORE" | "SPAWN_VFX" | "SPOTLIGHT_CARD" | "SUPPORTER_CALLOUT" | "CAMERA_IMPULSE" | "PLAY_AUDIO" | "SET_WINDOW_MODE" | "ACTIVATE_FALLBACK" | "DEACTIVATE_FALLBACK" | "SET_QUALITY_TIER" | "CAST_TECHNIQUE";
+        schemaVersion: 7;
         id: string;
         createdAt: string;
         sourceEventIds: string[];

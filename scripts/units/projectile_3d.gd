@@ -2,8 +2,11 @@
 ## Accepts projectile snapshot {x, y, vx, vy, faction}.
 extends Node3D
 
-const PROJ_GLB: String = "res://assets/models/vfx/RC_VFX_ProjectileGold.glb"
-const MODEL_SCALE: float = 3.0  # Blender export scale correction
+const MeshyLod := preload("res://scripts/units/meshy_lod.gd")
+
+const PROJ_GLB: String = "res://assets/models/vfx/env_projectile_v1.glb"
+const MODEL_SCALE: float = 0.2  # Meshy projectile authored ~1.9 m; shrink to bolt size
+const LOD_TIER: int = 3  # pooled heavily: use the aggressive ~12.5% tier
 
 const SIM_W: float = 1080.0
 const SIM_H: float = 1180.0
@@ -21,6 +24,8 @@ func _ready() -> void:
 		_model.name = "Model"
 		_model.scale = Vector3(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE)
 		add_child(_model)
+		# Show only the chosen LOD tier (Meshy GLBs bake LOD0..3 as siblings).
+		MeshyLod.apply(_model, LOD_TIER)
 
 
 ## Update projectile position from simulation snapshot.

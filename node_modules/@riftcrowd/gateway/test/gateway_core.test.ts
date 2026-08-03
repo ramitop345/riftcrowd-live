@@ -373,7 +373,7 @@ describe('CommandRulesEngine', () => {
   it('produced commands have correct schemaVersion and sourceEventIds', () => {
     const event = makeEvent({ comment: '!end_round' });
     const cmds = engine.evaluate(event);
-    expect(cmds[0]!.schemaVersion).toBe(6);
+    expect(cmds[0]!.schemaVersion).toBe(7);
     expect(cmds[0]!.sourceEventIds).toEqual([event.id]);
   });
 

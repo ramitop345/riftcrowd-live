@@ -32,6 +32,7 @@
 ##   activate_fallback(payload: Dictionary)  ## Phase 16
 ##   deactivate_fallback(payload: Dictionary) ## Phase 16
 ##   set_quality_tier(payload: Dictionary)   ## Phase 17/Tier 4
+##   cast_technique(payload: Dictionary)     ## Gift technique system
 class_name CommandDispatcher
 extends Node
 
@@ -61,6 +62,7 @@ signal set_window_mode(payload: Dictionary)       ## Phase 16: window mode chang
 signal activate_fallback(payload: Dictionary)     ## Phase 16: fallback overlay on
 signal deactivate_fallback(payload: Dictionary)   ## Phase 16: fallback overlay off
 signal set_quality_tier(payload: Dictionary)      ## Phase 17/Tier 4: quality tier change
+signal cast_technique(payload: Dictionary)        ## Gift technique system: gift tier triggers faction technique
 
 ## Routes a command dictionary to the appropriate signal based on command type.
 ## Expected shape: { "type": "JOIN_FACTION" | "SPAWN_CHAMPION" | ..., ... }
@@ -118,6 +120,8 @@ func dispatch(command: Dictionary) -> void:
 			deactivate_fallback.emit(command)
 		"SET_QUALITY_TIER":
 			set_quality_tier.emit(command)
+		"CAST_TECHNIQUE":
+			cast_technique.emit(command)
 		_:
 			push_warning("CommandDispatcher: unknown command type '%s'" % cmd_type)
 
