@@ -15,7 +15,7 @@ const FORTRESS_SCENE_PATH: String = "res://scenes/units/3d/Fortress3D.tscn"
 const CROWN_SCENE_PATH: String = "res://scenes/units/3d/Crown3D.tscn"
 const CAPTURE_ZONE_SCENE_PATH: String = "res://scenes/units/3d/CaptureZone3D.tscn"
 const ARENA_GLB_PATH: String = "res://assets/models/environment/RC_Arena_Master.glb"
-const GROUND_Y: float = 5.0  # objects sit above the terrain mesh surface
+const GROUND_Y: float = 1.0  # objects sit on the flat arena ground
 
 signal round_ended(victory_type: String, winner: int)
 
@@ -71,6 +71,7 @@ func _ready() -> void:
 	_camera = _find_camera()
 	if _camera != null:
 		_camera_base_pos = _camera.position
+		_frame_battle_camera()
 
 
 ## Instantiates fortress/crown/capture-zone nodes with correct 3D positions.
@@ -151,6 +152,19 @@ func _find_camera() -> Camera3D:
 		if child is Camera3D:
 			return child
 	return null
+
+
+## Positions the camera for a low, side-on battle view. The camera sits on the
+## field behind the near rock line and looks across the battle line (z ~ 0),
+## so players see the units' bodies fighting rather than a flat top-down map.
+func _frame_battle_camera() -> void:
+	if _camera == null:
+		return
+	_camera.position = Vector3(0, 24, -28)
+	_camera.look_at(Vector3(0, 1, 0), Vector3.UP)
+	_camera.fov = 75.0
+	# Keep the shake-rest position in sync with the framed battle view.
+	_camera_base_pos = _camera.position
 
 
 ## Syncs every visual node with the latest simulation snapshot.

@@ -9,7 +9,7 @@ const SIM_W: float = 1080.0
 const SIM_H: float = 1180.0
 const ARENA_W: float = 54.0
 const ARENA_H: float = 26.0
-const GROUND_Y: float = 5.0  # height above terrain mesh surface
+const GROUND_Y: float = 1.0  # units stand on the flat arena ground
 const MODEL_SCALE: float = 3.0  # Blender export scale correction
 
 # -- Animation names (from Blender GLB exports) --

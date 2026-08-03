@@ -9,7 +9,7 @@ const SIM_W: float = 1080.0
 const SIM_H: float = 1180.0
 const ARENA_W: float = 54.0
 const ARENA_H: float = 26.0
-const GROUND_Y: float = 7.0  # projectiles fly above terrain and units
+const GROUND_Y: float = 2.5  # projectiles fly just above the units
 
 var _model: Node3D = null
 
