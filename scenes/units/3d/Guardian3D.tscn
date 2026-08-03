@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://du77gyydaqbwv"]
+
+[ext_resource type="Script" path="res://scripts/units/guardian_3d.gd" id="1_script"]
+
+[node name="Guardian3D" type="Node3D" unique_id=908310795]
+script = ExtResource("1_script")

@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://keaoc6q44ou5"]
+
+[ext_resource type="Script" path="res://scripts/units/capture_zone_3d.gd" id="1_script"]
+
+[node name="CaptureZone3D" type="Node3D" unique_id=568504683]
+script = ExtResource("1_script")

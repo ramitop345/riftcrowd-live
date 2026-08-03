@@ -5,7 +5,7 @@ extends Control
 
 const Ui := preload("res://scripts/ui/ui_config.gd")
 const GC := preload("res://scripts/simulation/gameplay_config.gd")
-const ARENA_SCENE_PATH: String = "res://scenes/Arena.tscn"
+const ARENA_SCENE_PATH: String = "res://scenes/Arena3D.tscn"
 const INITIAL_PRE_TICKS: int = 100
 const RESULTS_DELAY: float = 3.0
 
@@ -63,6 +63,9 @@ var _shake_timer: float = 0.0
 
 
 func _ready() -> void:
+	# Ensure AppState allows transition to Results when loaded directly.
+	if AppState.current != AppState.Screen.BATTLE:
+		AppState.current = AppState.Screen.BATTLE
 	Ui.apply_safe_margins(_safe_area)
 	# Connect buttons.
 	_pause_btn.pressed.connect(_on_pause_pressed)
@@ -83,12 +86,30 @@ func _ready() -> void:
 	var factions: Array = _resolve_factions()
 	_faction_a = factions[0]
 	_faction_b = factions[1]
-	# Instantiate arena and add to the panel.
+	# Instantiate 3D arena inside a SubViewportContainer in ArenaPanel.
 	var arena_packed: PackedScene = load(ARENA_SCENE_PATH) as PackedScene
 	if arena_packed != null:
+		# SubViewportContainer manages its own SubViewport and composites automatically.
+		var svc := SubViewportContainer.new()
+		svc.name = "ArenaSVContainer"
+		svc.stretch = true
+		svc.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_arena_panel.add_child(svc)
+		# Create SubViewport inside the container.
+		var sv := SubViewport.new()
+		sv.name = "ArenaViewport"
+		sv.transparent_bg = false
+		sv.handle_input_locally = false
+		sv.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		# Set an initial size; SubViewportContainer.stretch will resize it.
+		var panel_size: Vector2 = _arena_panel.size
+		if panel_size.x < 10 or panel_size.y < 10:
+			panel_size = Vector2(990, 1354)
+		sv.size = Vector2i(int(panel_size.x), int(panel_size.y))
+		svc.add_child(sv)
+		# Instantiate Arena3D inside the SubViewport.
 		_arena_node = arena_packed.instantiate()
-		_arena_panel.add_child(_arena_node)
-		_shake_node = _arena_node  # shake the arena directly
+		sv.add_child(_arena_node)
 	# Set up presenter.
 	_presenter = BattlePresenter.new()
 	_presenter.setup(_config, randi(), _faction_a, _faction_b, _arena_node)
@@ -128,7 +149,8 @@ func _process(delta: float) -> void:
 	if _results_timer > 0.0:
 		_results_timer -= delta
 		if _results_timer <= 0.0:
-			AppState.goto(AppState.Screen.RESULTS)
+			# Auto-restart the round for continuous viewing.
+			_on_restart_pressed()
 		return
 	var snapshot: Dictionary = _presenter.present(delta)
 	if not snapshot.is_empty():
@@ -244,7 +266,8 @@ func _on_round_completed(snapshot: Dictionary) -> void:
 		winner_name = str(_faction_a.get("displayName", "A"))
 	elif winner == 1:
 		winner_name = str(_faction_b.get("displayName", "B"))
-	_spotlight_label.text = "Victory: %s (%s)" % [winner_name, vtype]
+	_spotlight_label.text = "Victory: %s (%s) — restarting..." % [winner_name, vtype]
+	# Auto-restart after a brief delay so the battle loops continuously.
 	_results_timer = RESULTS_DELAY
 
 
@@ -409,9 +432,14 @@ func _on_camera_impulse(cmd: Dictionary) -> void:
 	# Clamp to reasonable values
 	intensity = clampf(intensity, 0.1, 2.0)
 	duration = clampf(duration, 0.1, 2.0)
-	_shake_intensity = intensity * 15.0  # scale to pixels
-	_shake_duration = duration
-	_shake_timer = duration
+	# Delegate to 3D arena camera shake (world-space units).
+	if _arena_node != null and _arena_node.has_method("shake_camera"):
+		_arena_node.call("shake_camera", intensity, duration)
+	else:
+		# Fallback: 2D shake for non-3D arena.
+		_shake_intensity = intensity * 15.0
+		_shake_duration = duration
+		_shake_timer = duration
 
 
 func _on_gift_apply(cmd: Dictionary) -> void:

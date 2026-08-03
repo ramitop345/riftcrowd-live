@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://drgef6fpcpit1"]
+
+[ext_resource type="Script" path="res://scripts/units/fortress_3d.gd" id="1_script"]
+
+[node name="Fortress3D" type="Node3D" unique_id=411618628]
+script = ExtResource("1_script")

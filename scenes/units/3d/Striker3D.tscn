@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://d0tdnmxv0ny1e"]
+
+[ext_resource type="Script" path="res://scripts/units/striker_3d.gd" id="1_script"]
+
+[node name="Striker3D" type="Node3D" unique_id=1281551763]
+script = ExtResource("1_script")

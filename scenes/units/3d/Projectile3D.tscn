@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://bboy2v1o5m33o"]
+
+[ext_resource type="Script" path="res://scripts/units/projectile_3d.gd" id="1_script"]
+
+[node name="Projectile3D" type="Node3D" unique_id=731884650]
+script = ExtResource("1_script")

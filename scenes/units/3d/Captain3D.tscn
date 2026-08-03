@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://cje556dx7g6jt"]
+
+[ext_resource type="Script" uid="uid://bcqwkdclfqqms" path="res://scripts/units/captain_3d.gd" id="1_script"]
+
+[node name="Captain3D" type="Node3D" unique_id=860617819]
+script = ExtResource("1_script")
