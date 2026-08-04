@@ -103,9 +103,10 @@ func _build_starfield(env: Environment) -> void:
 	sky.radiance_size = 4
 	env.sky = sky
 	env.background_mode = Environment.BG_SKY
-	# Keep the battlefield readable: dim ambient sky contribution slightly.
+	# Keep the battlefield readable while keeping units bright enough to
+	# identify: full-strength ambient sky contribution.
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_energy = 0.6
+	env.ambient_light_energy = 1.0
 
 
 func _paint_blob(img: Image, cx: int, cy: int, radius: int, col: Color) -> void:

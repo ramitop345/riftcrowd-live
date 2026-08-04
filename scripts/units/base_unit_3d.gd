@@ -8,7 +8,7 @@ extends Node3D
 const SIM_W: float = 1080.0
 const SIM_H: float = 1180.0
 const ARENA_W: float = 54.0
-const ARENA_H: float = 26.0
+const ARENA_H: float = 40.0  # depth stretched so troops fill top/bottom of the arena
 const GROUND_Y: float = 1.0  # units stand on the flat arena ground
 const MODEL_SCALE: float = 1.0  # Meshy models are authored at real-world scale
 
@@ -17,6 +17,9 @@ const MODEL_SCALE: float = 1.0  # Meshy models are authored at real-world scale
 # entrance, siege march to the castle, retreat). The deck sits exactly at foot
 # level so characters stand on it instead of floating above it.
 const CROWN_SIM: Vector2 = Vector2(540.0, 590.0)
+## Troops dismount this many sim units BEFORE the capture zone border so they
+## are already walking on foot when they cross the zone edge.
+const DESCENT_LEAD_SIM: float = 50.0
 
 # -- Gait calibration (anti foot-slide) --
 # Ground speed is measured from snapshot position deltas in world units/s.
@@ -37,13 +40,15 @@ const GAIT_SMOOTHING: float = 0.35  # per-snapshot lerp factor for speed_scale
 const MODEL_FACING_OFFSET: float = 0.0
 const FACING_TURN_RATE: float = 10.0  # radians/s toward target bearing
 const FACING_MIN_MOVE: float = 0.01   # world units per snapshot to count as moving
-const GLIDE_FIX_MIN: float = 0.25     # ground speed above which a moving unit must play a leg clip
+const GLIDE_FIX_MIN: float = 0.12     # ground speed above which a moving unit must play a leg clip
 const GAIT_ATTACK_MOVE_MIN: float = 0.5  # attacking units above this speed keep stepping instead of planting
 
 # -- Faction identity (strongly colorize armor/clothes so sides read at a glance) --
-const FACTION_BLUE: Color = Color(0.3, 0.52, 1.0)
-const FACTION_RED: Color = Color(1.0, 0.36, 0.28)
-const FACTION_NEUTRAL: Color = Color(0.42, 0.38, 0.5)  # boss: dark neutral so it never reads white
+# Saturated hues chosen so blue can never read reddish and vice versa, even
+# under warm/cool lighting. The boss gets a dark neutral so it never reads white.
+const FACTION_BLUE: Color = Color(0.12, 0.38, 1.0)
+const FACTION_RED: Color = Color(1.0, 0.2, 0.12)
+const FACTION_NEUTRAL: Color = Color(0.28, 0.24, 0.36)
 const FACTION_TINT_STRENGTH: float = 0.9  # blend toward faction hue (0 = original, 1 = full recolor)
 
 # -- Logical animation keys (resolved to actual GLB clip names at load) --
@@ -95,10 +100,20 @@ var _prev_world_pos: Vector3 = Vector3.ZERO
 var _has_prev_pos: bool = false
 var _prev_snapshot_usec: int = 0
 var _ground_speed: float = 0.0
+var _last_move_usec: int = 0
 var _target_yaw: float = 0.0
 var _transport: Node3D = null
 var _transport_engine_mat: StandardMaterial3D = null
+var _transport_state: int = 0  # 0 = hidden, 1 = hovering/rising, 2 = sinking
+var _transport_tween: Tween = null
 var _center_radius_sim: float = 170.0  # arena capture zone radius in sim units
+
+## Grayscale versions of baked albedo textures (shared across all units).
+## Meshy GLBs bake armor hues into the TEXTURE while albedo_color stays
+## white, so multiplying a tint over the original texture let baked blue/red
+## hues bleed through. Converting the texture to grayscale first guarantees
+## the final color is exactly the faction hue (texture only adds shading).
+static var _gray_tex_cache: Dictionary = {}
 
 
 func _ready() -> void:
@@ -147,8 +162,15 @@ func update_visual(unit_snapshot: Dictionary) -> void:
 	if _has_prev_pos:
 		var dt_snapshot: float = clampf(float(now_usec - _prev_snapshot_usec) / 1000000.0, 0.001, 0.25)
 		var move_delta := Vector2(new_pos.x, new_pos.z) - Vector2(_prev_world_pos.x, _prev_world_pos.z)
-		var raw_speed: float = move_delta.length() / dt_snapshot
-		_ground_speed = lerpf(_ground_speed, raw_speed, 0.5)
+		if move_delta.length() > 0.0005:
+			var raw_speed: float = move_delta.length() / dt_snapshot
+			_ground_speed = lerpf(_ground_speed, raw_speed, 0.5)
+			_last_move_usec = now_usec
+		elif float(now_usec - _last_move_usec) / 1000000.0 > 0.18:
+			# Sim ticks (20 Hz) are coarser than render frames, so positions
+			# repeat across several frames; hold the measured speed briefly
+			# instead of reading those repeats as "stopped" (levitation fix).
+			_ground_speed = lerpf(_ground_speed, 0.0, 0.3)
 		# Re-aim only while actually travelling so idle/attacking units keep
 		# their last bearing instead of snapping to a stale direction.
 		if move_delta.length() > FACING_MIN_MOVE:
@@ -185,27 +207,35 @@ func update_visual(unit_snapshot: Dictionary) -> void:
 			_spawned = true
 			_play_anim(ANIM_SPAWN)
 	elif state == "advance":
-		# Long-distance travel (march on the castle, repositioning): run.
-		_play_gait(ANIM_RUN)
+		# Walk while travelling; stand at ease when parked (the sim gives
+		# parked units casual wander targets, so parking is brief).
+		if _ground_speed > GLIDE_FIX_MIN:
+			_play_gait(ANIM_WALK)
+		else:
+			_play_anim(ANIM_IDLE)
 	elif state == "attack":
-		# Closing on an opponent = keep stepping (walk/run by speed); only
-		# plant and swing when actually standing in range.
+		# Closing on an opponent = keep stepping (walk); only plant and swing
+		# when actually standing in range.
 		if _ground_speed > GAIT_ATTACK_MOVE_MIN:
-			_play_gait(ANIM_RUN if _ground_speed > GAIT_WALK_MAX else ANIM_WALK)
+			_play_gait(ANIM_WALK)
 		else:
 			_play_anim(_attack_anim)
 	elif state == "retreat":
 		_play_gait(ANIM_RETREAT)
 	elif state == "defend":
-		_play_anim(ANIM_SHIELD if _class_name == "guardian" else ANIM_IDLE)
+		if _ground_speed > GLIDE_FIX_MIN:
+			_play_gait(ANIM_WALK)
+		else:
+			_play_anim(ANIM_SHIELD if _class_name == "guardian" else ANIM_IDLE)
 	else:
 		_play_anim(ANIM_IDLE)
 	# Anti-levitation: whatever the sim state, a unit that is clearly travelling
 	# must play a locomotion track so its legs move instead of gliding.
 	_ensure_locomotion()
 	# Flying engine: ridden whenever the unit is outside the center arena.
-	if _transport != null:
-		_transport.visible = _wants_transport(sx, sy)
+	# Dismount begins DESCENT_LEAD_SIM before the border so characters are
+	# already walking on foot the moment they reach the capture zone edge.
+	_update_transport(_wants_transport(sx, sy))
 
 
 ## If a unit is moving but currently playing a stationary clip (idle/spawn/etc.),
@@ -218,7 +248,7 @@ func _ensure_locomotion() -> void:
 		return
 	if _current_anim == ANIM_RUN or _current_anim == ANIM_WALK or _current_anim == ANIM_RETREAT:
 		return
-	_play_gait(ANIM_RUN if _ground_speed > GAIT_WALK_MAX else ANIM_WALK)
+	_play_gait(ANIM_WALK)
 
 
 # ---------------------------------------------------------------------------
@@ -289,10 +319,46 @@ func _paint_transport_engine(faction: int) -> void:
 
 ## True while the unit stands outside the center capture zone — i.e. arriving
 ## from the spawn, marching on the enemy castle, or falling back to defend.
+## The + DESCENT_LEAD_SIM margin drops the engine before the border so the
+## troop walks across the zone edge instead of gliding in on the deck.
 func _wants_transport(sx: float, sy: float) -> bool:
 	if _dead:
 		return false
-	return Vector2(sx, sy).distance_to(CROWN_SIM) > _center_radius_sim
+	return Vector2(sx, sy).distance_to(CROWN_SIM) > _center_radius_sim + DESCENT_LEAD_SIM
+
+
+## Board/dismount state machine: the engine rises when the unit heads out of
+## the zone and sinks away just before the border so troops walk across it.
+func _update_transport(wants: bool) -> void:
+	if _transport == null:
+		return
+	if wants:
+		if _transport_state == 2 and _transport_tween != null and _transport_tween.is_valid():
+			_transport_tween.kill()
+			_transport_tween = null
+		if _transport_state == 0:
+			_transport.visible = true
+			_transport.position.y = -0.8
+		_transport_state = 1
+		if _transport.position.y < -0.01 and (_transport_tween == null or not _transport_tween.is_valid()):
+			_transport_tween = create_tween()
+			_transport_tween.tween_property(_transport, "position:y", 0.0, 0.25).set_ease(Tween.EASE_OUT)
+		return
+	if _transport_state == 1:
+		_transport_state = 2
+		if _transport_tween != null and _transport_tween.is_valid():
+			_transport_tween.kill()
+		_transport_tween = create_tween()
+		_transport_tween.tween_property(_transport, "position:y", -1.2, 0.3).set_ease(Tween.EASE_IN)
+		_transport_tween.tween_callback(_finish_descent)
+
+
+func _finish_descent() -> void:
+	_transport_state = 0
+	_transport_tween = null
+	if _transport != null and is_instance_valid(_transport):
+		_transport.visible = false
+		_transport.position.y = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -369,15 +435,16 @@ func _play_anim(logical: String) -> void:
 		_current_anim = logical
 
 
-## Gait playback: pick the requested locomotion clip, falling back run → walk
-## → idle for models missing a track, then calibrate playback speed to the
-## measured ground speed so feet never slide.
+## Gait playback: walk-only locomotion (the run clip is retired — it read as
+## sliding at broadcast speed). Falls back walk → run → idle only for models
+## missing a walk track, then calibrates playback speed to the measured ground
+## speed so feet never slide.
 func _play_gait(logical: String) -> void:
 	var want: String = logical
+	if want == ANIM_RUN:
+		want = ANIM_WALK
 	if not _anim_map.has(want):
-		if want == ANIM_RUN and _anim_map.has(ANIM_WALK):
-			want = ANIM_WALK
-		elif want == ANIM_WALK and _anim_map.has(ANIM_RUN):
+		if want == ANIM_WALK and _anim_map.has(ANIM_RUN):
 			want = ANIM_RUN
 	_play_anim(want)
 	_apply_gait_speed(want)
@@ -395,11 +462,10 @@ func _apply_gait_speed(logical: String) -> void:
 	_anim_player.speed_scale = lerpf(_anim_player.speed_scale, target, GAIT_SMOOTHING)
 
 
-## Strongly colorize a unit's meshes toward its faction hue so blue vs red is
-## unmistakable on the battlefield. Preserves texture shading by scaling the
-## faction color by each surface's original luminance, then blends with the
-## original albedo to keep skin/detail readable. Surfaces without a usable
-## material get a solid faction-color override so nothing renders white.
+## Forces a unit fully into its faction hue — armor, cape and cloth alike.
+## Baked albedo textures are converted to grayscale (cached) and the faction
+## color is applied as the albedo, so shading survives but NO surface can
+## ever render white or another camp's color again.
 func _apply_faction_tint(faction: int) -> void:
 	if _model == null:
 		return
@@ -414,6 +480,28 @@ func _apply_faction_tint(faction: int) -> void:
 	_colorize_meshes(_model, faction_color)
 
 
+## Converts a texture to grayscale, cached per source texture instance.
+## Returns null when the texture cannot be grayscaled — callers must then drop
+## the texture entirely so the faction color owns the surface.
+static func _grayscale_texture(tex: Texture2D) -> Texture2D:
+	if _gray_tex_cache.has(tex):
+		return _gray_tex_cache[tex]
+	var gray_tex: Texture2D = null
+	var img: Image = tex.get_image()
+	if img != null:
+		img = img.duplicate()
+		# Meshy albedo maps import VRAM-compressed (DXT/ETC); convert() is a
+		# silent no-op on compressed images, which let baked red hues survive
+		# on the blue side. Decompress first so the conversion actually runs.
+		if img.is_compressed():
+			img.decompress()
+		if not img.is_compressed():
+			img.convert(Image.FORMAT_L8)
+			gray_tex = ImageTexture.create_from_image(img)
+	_gray_tex_cache[tex] = gray_tex
+	return gray_tex
+
+
 func _colorize_meshes(node: Node, faction_color: Color) -> void:
 	if node is MeshInstance3D:
 		var mi: MeshInstance3D = node as MeshInstance3D
@@ -422,22 +510,34 @@ func _colorize_meshes(node: Node, faction_color: Color) -> void:
 			for surface in mesh.get_surface_count():
 				var mat: Material = mesh.surface_get_material(surface)
 				var base_mat: BaseMaterial3D = mat if mat is BaseMaterial3D else null
-				var base: Color = base_mat.albedo_color if base_mat != null else Color.WHITE
-				var lum: float = clampf(0.299 * base.r + 0.587 * base.g + 0.114 * base.b, 0.12, 1.0)
-				var recolored := Color(
-					faction_color.r * lum * 1.7,
-					faction_color.g * lum * 1.7,
-					faction_color.b * lum * 1.7,
-					base.a
-				)
 				if base_mat != null:
 					var tinted: BaseMaterial3D = base_mat.duplicate() as BaseMaterial3D
-					tinted.albedo_color = base.lerp(recolored, FACTION_TINT_STRENGTH)
+					if tinted.albedo_texture != null:
+						# Grayscale the baked texture; the faction color now owns
+						# the hue entirely and the texture only supplies shading.
+						var gray: Texture2D = _grayscale_texture(tinted.albedo_texture)
+						if gray != null:
+							tinted.albedo_texture = gray
+						else:
+							# Un-grayscalable texture: drop it so no baked hue can leak through.
+							tinted.albedo_texture = null
+						tinted.albedo_color = Color(faction_color.r, faction_color.g, faction_color.b, base_mat.albedo_color.a)
+					else:
+						# No texture: keep the surface's own luminance as a shade
+						# factor so dark straps stay darker than bright armor.
+						var base: Color = base_mat.albedo_color
+						var lum: float = clampf(0.299 * base.r + 0.587 * base.g + 0.114 * base.b, 0.25, 1.0)
+						tinted.albedo_color = Color(
+							faction_color.r * lum,
+							faction_color.g * lum,
+							faction_color.b * lum,
+							base.a
+						)
 					mi.set_surface_override_material(surface, tinted)
 				else:
 					# No material (or a non-standard one): solid faction color.
 					var solid := StandardMaterial3D.new()
-					solid.albedo_color = recolored
+					solid.albedo_color = faction_color
 					mi.set_surface_override_material(surface, solid)
 	for child in node.get_children():
 		_colorize_meshes(child, faction_color)
@@ -499,6 +599,28 @@ func play_celebration(seed_index: int) -> void:
 	_play_anim(key)
 
 
+## Victory return march: plays the walk clip at a fixed calibrated pace and
+## hides the fly engine — the arena tweens the node back to the center.
+func play_return_march() -> void:
+	if _dead:
+		return
+	_ground_speed = CALIBRATED_WALK_UPS  # gait speed_scale settles at ~1.0
+	_play_gait(ANIM_WALK)
+	if _transport != null:
+		_transport.visible = false
+
+
+## Instantly face a world position (used by the victory return march, since
+## update_visual is no longer driving this node once the battle is over).
+func face_toward(target: Vector3) -> void:
+	var delta_v := target - global_position
+	if delta_v.length() < 0.05:
+		return
+	_target_yaw = atan2(delta_v.x, delta_v.z) + MODEL_FACING_OFFSET
+	if _model != null and is_instance_valid(_model):
+		_model.rotation.y = _target_yaw
+
+
 ## Maps logical animation keys to whichever clips the loaded GLB actually contains.
 func _build_anim_map() -> void:
 	_anim_map.clear()
@@ -509,7 +631,7 @@ func _build_anim_map() -> void:
 		ANIM_IDLE: ["idle"],
 		ANIM_WALK: ["walk"],
 		ANIM_RUN: ["run", "charge", "sprint"],
-		ANIM_RETREAT: ["backward", "retreat", "run"],
+		ANIM_RETREAT: ["backward", "retreat"],
 		ANIM_MELEE: ["combo", "slash", "swing", "attack"],
 		ANIM_CANNON: ["cast", "shoot", "charge"],
 		ANIM_CROSSBOW: ["archery", "shoot", "bow"],

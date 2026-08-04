@@ -18,16 +18,22 @@ const FORTRESS_SCENE_PATH: String = "res://scenes/units/3d/Fortress3D.tscn"
 const CROWN_SCENE_PATH: String = "res://scenes/units/3d/Crown3D.tscn"
 const CAPTURE_ZONE_SCENE_PATH: String = "res://scenes/units/3d/CaptureZone3D.tscn"
 const ARENA_GLB_PATH: String = "res://assets/models/environment/env_arena_v1.glb"
-# Meshy arena authored ~1.9 x 1.4 m; stretch to span the 54 x 26 battle field.
-const ARENA_SCALE: Vector3 = Vector3(24.0, 8.0, 16.0)
+# Meshy arena authored ~1.9 x 1.4 m; stretch to span the 54 x 40 battle field
+# (fortresses at x = ±21 stay on solid ground).
+const ARENA_SCALE: Vector3 = Vector3(26.0, 8.0, 24.0)
 const ARENA_LOD_TIER: int = 1  # heavy mesh: default to ~50% tier (tunable 0..2)
 const GROUND_Y: float = 1.0  # objects sit on the flat arena ground
 
 signal round_ended(victory_type: String, winner: int)
+## New characters walked out of a castle gate (drives the 5s PIP cameras).
+signal arrivals_at_gate(faction: int)
 
 ## Fallen units stay on the battlefield as corpses for this long before the
 ## arena sweeps them, so kills are visible instead of units vanishing instantly.
 const CORPSE_TTL_SECONDS: float = 15.0
+## How long the director holds on a falling castle before the winners' march
+## and celebration take over the presentation.
+const FALL_PRESENT_SECONDS: float = 3.6
 
 ## Visual registries keyed by simulation id.
 var _unit_visuals: Dictionary = {}
@@ -52,6 +58,8 @@ var _camera_base_pos: Vector3 = Vector3.ZERO
 var _shake_intensity: float = 0.0
 var _shake_duration: float = 0.0
 var _shake_timer: float = 0.0
+## While > 0 the director may not switch shots (holds the falling castle).
+var _shot_lock_timer: float = 0.0
 
 ## Camera director v3: a wide, mostly-static master shot that always frames the
 ## whole center arena, with a slow lateral drift + breathing so it never feels
@@ -74,9 +82,6 @@ var _wing_distance: float = 24.0
 var _wing_height: float = 12.0
 var _wing_fov: float = 52.0
 var _wing_attack_z: float = -10.0
-var _arrival_zoom_interval: float = 7.0
-var _arrival_zoom_duration: float = 1.8
-var _arrival_cooldown: float = 0.0
 var _known_unit_ids: Dictionary = {}
 var _cam_time: float = 0.0
 var _heat: Array = [0.0, 0.0, 0.0]  ## [center, left wing (castle A), right wing (castle B)]
@@ -105,6 +110,8 @@ func _ready() -> void:
 			break
 	if we != null and we.environment != null:
 		var env: Environment = we.environment
+		# Brighten ambient fill so faction colors stay readable in every shot.
+		env.ambient_light_energy = 1.0
 		if env.sky == null:
 			var sky_mat := ProceduralSkyMaterial.new()
 			sky_mat.sky_top_color = Color(0.15, 0.18, 0.3)
@@ -116,6 +123,11 @@ func _ready() -> void:
 			sky_res.radiance_size = 3
 			env.sky = sky_res
 			env.background_mode = Environment.BG_SKY
+	# Camera-side fill light: the key light shines from behind the battlefield,
+	# so character fronts facing the camera were left in shadow and faction
+	# colors were hard to read. A soft shadowless fill from the camera direction
+	# keeps every unit clearly identifiable.
+	_add_fill_light()
 	# Cache camera reference.
 	_camera = _find_camera()
 	if _camera != null:
@@ -123,6 +135,21 @@ func _ready() -> void:
 		_camera.position = _cam_pos
 		_camera.look_at(_cam_look, Vector3.UP)
 		_camera.fov = _master_fov
+
+
+## Shadowless directional fill shining from the camera side onto the fronts of
+## the characters. Half the key light's strength; no shadows (the key light
+## still owns shadow direction).
+func _add_fill_light() -> void:
+	var fill := DirectionalLight3D.new()
+	fill.name = "FillLight"
+	fill.light_energy = 0.9
+	fill.light_color = Color(0.92, 0.95, 1.0)
+	fill.shadow_enabled = false
+	# Aim down-and-forward from the camera side (-Z) toward the arena center.
+	fill.rotation_degrees = Vector3(-35.0, 180.0, 0.0)
+	fill.position = Vector3(0.0, 30.0, -24.0)
+	add_child(fill)
 
 
 ## Instantiates fortress/crown/capture-zone nodes with correct 3D positions.
@@ -180,7 +207,6 @@ func setup(config: Dictionary, faction_a: Dictionary, faction_b: Dictionary) -> 
 
 func _process(delta: float) -> void:
 	_cam_time += delta
-	_arrival_cooldown = maxf(_arrival_cooldown - delta, 0.0)
 	_sweep_corpses()
 	_update_shot_selection(delta)
 	# Shot targets: wide master framing the whole center arena, or wing shots.
@@ -240,11 +266,14 @@ func _process(delta: float) -> void:
 	_camera_base_pos = _cam_pos
 
 
-## Zone heat: ATTACK-state units per zone plus siege events build heat that
-## decays over time; the director cuts to whichever zone is hottest, with
-## hysteresis + minimum hold so the edit never ping-pongs.
+## Zone heat: wing shots are driven ONLY by siege/castle-under-attack events
+## (no per-snapshot activity feed), decaying over time so the director drifts
+## back to the arena once the castle stops being attacked.
 func _update_shot_selection(delta: float) -> void:
 	_shot_age += delta
+	if _shot_lock_timer > 0.0:
+		_shot_lock_timer -= delta
+		return
 	for i in 3:
 		_heat[i] = maxf(float(_heat[i]) - _heat_decay_per_second * delta, 0.0)
 	var challenger: int = 0
@@ -270,30 +299,6 @@ func _wing_position(faction_being_sieged: int) -> Vector3:
 	var cam_x: float = castle_x + inward.x * _wing_distance
 	var cam_z: float = _wing_attack_z - side * 2.0
 	return Vector3(cam_x, _wing_height, cam_z)
-
-
-## Feeds the director with battlefield activity from the latest snapshot.
-## Any activity near a castle (attacking, marching, defending) builds that
-## wing's heat so the director stays on sieges instead of snapping back to
-## the center the moment the last ATTACK state flickers off.
-func _director_feed(snapshot: Dictionary) -> void:
-	var units: Variant = snapshot.get("units")
-	if typeof(units) == TYPE_ARRAY:
-		for entry: Variant in (units as Array):
-			if typeof(entry) != TYPE_DICTIONARY:
-				continue
-			var u: Dictionary = entry
-			var state: String = str(u.get("state", ""))
-			if state == "dead" or state == "spawning":
-				continue
-			var wx: float = (float(u.get("x", 540.0)) / 1080.0) * 54.0 - 27.0
-			var weight: float = 0.4 if state == "attack" else 0.12
-			if wx < -12.0:
-				_heat[1] = float(_heat[1]) + weight
-			elif wx > 12.0:
-				_heat[2] = float(_heat[2]) + weight
-			elif state == "attack":
-				_heat[0] = float(_heat[0]) + 0.15
 
 
 ## Hard cut to a shot (bypasses hysteresis + hold). Used when a castle is
@@ -375,8 +380,6 @@ func _apply_camera_config() -> void:
 	_wing_height = float(cam_cfg.get("wingHeight", 12.0))
 	_wing_fov = float(cam_cfg.get("wingFov", 52.0))
 	_wing_attack_z = float(cam_cfg.get("wingAttackZ", -10.0))
-	_arrival_zoom_interval = float(cam_cfg.get("arrivalZoomInterval", 7.0))
-	_arrival_zoom_duration = float(cam_cfg.get("arrivalZoomDuration", 1.8))
 	_reset_director_state()
 
 
@@ -384,12 +387,12 @@ func _reset_director_state() -> void:
 	_heat = [0.0, 0.0, 0.0]
 	_active_shot = 0
 	_shot_age = 0.0
+	_shot_lock_timer = 0.0
 	_cam_time = 0.0
 	_cam_pos = Vector3(0, _master_height, -_master_distance)
 	_cam_look = Vector3(0, _look_height, 0)
 	_cam_fov = _master_fov
 	_focus_timer = 0.0
-	_arrival_cooldown = 0.0
 	_known_unit_ids.clear()
 
 
@@ -406,7 +409,6 @@ func focus_on(world_pos: Vector3, duration: float = 2.0) -> void:
 
 ## Syncs every visual node with the latest simulation snapshot.
 func apply_snapshot(snapshot: Dictionary) -> void:
-	_director_feed(snapshot)
 	# Fortress health.
 	var fh: Variant = snapshot.get("fortress_health")
 	if typeof(fh) == TYPE_ARRAY and (fh as Array).size() >= 2:
@@ -424,8 +426,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		_capture_zone.call("update_visual", snapshot.get("capture_pressure", [0.0, 0.0]))
 	# Units.
 	var active_ids: Dictionary = {}
-	var new_arrival_pos := Vector3.ZERO
-	var new_arrival_count: int = 0
+	var gate_arrivals: Array = [false, false]
 	var units: Variant = snapshot.get("units")
 	if typeof(units) == TYPE_ARRAY:
 		for entry: Variant in (units as Array):
@@ -446,17 +447,14 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 					_unit_visuals[uid] = node
 			if not _known_unit_ids.has(uid):
 				_known_unit_ids[uid] = true
-				new_arrival_pos += Vector3(
-					(float(u.get("x", 540.0)) / 1080.0) * 54.0 - 27.0,
-					1.0,
-					-((float(u.get("y", 590.0)) / 1180.0) * 26.0 - 13.0)
-				)
-				new_arrival_count += 1
-	# Every few seconds, punch the camera in on fresh fighters dropping in so
-	# their entrance reads as an event instead of background noise.
-	if new_arrival_count > 0 and _arrival_cooldown <= 0.0:
-		_arrival_cooldown = _arrival_zoom_interval
-		focus_on(new_arrival_pos / float(new_arrival_count), _arrival_zoom_duration)
+				var fac: int = int(u.get("faction", -1))
+				if fac >= 0 and fac <= 1:
+					gate_arrivals[fac] = true
+	# Fresh fighters walked out of a castle gate — battle.gd pops the matching
+	# picture-in-picture camera for 5 seconds to show the entry.
+	for fac in 2:
+		if bool(gate_arrivals[fac]):
+			arrivals_at_gate.emit(fac)
 	# Remove dead/gone unit visuals — they become corpses, not instant removals.
 	var to_remove: Array = []
 	for uid: int in _unit_visuals.keys():
@@ -526,7 +524,12 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 					var winner: int = int(parts[1])
 					var vtype: String = parts[2]
 					_victory_emitted = true
-					_perform_victory_celebration(winner)
+					if vtype == "fortress":
+						# Hold the camera on the collapsing castle first; the
+						# march/celebration starts once the fall has been shown.
+						_present_fortress_fall(winner)
+					else:
+						_perform_victory_celebration(winner)
 					round_ended.emit(vtype, winner)
 
 
@@ -566,42 +569,84 @@ func _perform_technique_visuals(faction: int, tier: int) -> void:
 		focus_on(centroid, float(tech_cfg.get("performDurationSeconds", 1.6)))
 
 
-## Victory celebration: every surviving unit of the winning faction plays one of
-## its celebration clips (chosen deterministically by unit id), staggered by id so
-## the squad ripples. The camera pushes in on the celebrants' centroid for the
-## celebration duration, framing the win before the round auto-restarts.
+## Fortress victory beat: hard-cut to the loser's gate, run the collapse
+## (tilt + sink + char + explosion + rubble + smoke), shake the camera and
+## push in on the ruins. Only after FALL_PRESENT_SECONDS does the winners'
+## march/celebration begin, so the destruction is actually witnessed.
+func _present_fortress_fall(winner: int) -> void:
+	var loser: int = 1 - winner
+	var fort: Node = _fortress_a if loser == 0 else _fortress_b
+	if fort != null and fort.has_method("play_destruction"):
+		fort.call("play_destruction")
+	# Lock the director on the falling castle (wing 1 = left/A, 2 = right/B).
+	_shot_lock_timer = FALL_PRESENT_SECONDS
+	_force_shot(1 + loser)
+	shake_camera(0.6, 1.4)
+	if fort != null and is_instance_valid(fort):
+		focus_on(fort.global_position + Vector3(0.0, 3.0, 0.0), FALL_PRESENT_SECONDS)
+	# Hand over to the march/celebration once the collapse has been shown.
+	var tw := create_tween()
+	tw.tween_interval(FALL_PRESENT_SECONDS)
+	tw.tween_callback(_perform_victory_celebration.bind(winner))
+
+
+## Victory presentation: the surviving winners march back to the arena center
+## (visual-side tween — the simulation is already frozen), take up a ring of
+## slots around the crown, then ripple into their celebration clips while the
+## camera returns to the master arena framing and pushes in on the party.
 func _perform_victory_celebration(winner: int) -> void:
 	var cel_v: Variant = _config.get("celebration", {})
 	var cel_cfg: Dictionary = cel_v if typeof(cel_v) == TYPE_DICTIONARY else {}
 	var stagger: float = float(cel_cfg.get("staggerStepSeconds", 0.06))
 	var duration: float = float(cel_cfg.get("durationSeconds", 2.8))
+	var march_speed: float = float(cel_cfg.get("returnMarchSpeed", 2.6))
+	# Camera back to the arena — the celebration happens in the middle.
+	_heat = [0.0, 0.0, 0.0]
+	_force_shot(0)
 	var ids: Array = _unit_visuals.keys()
 	ids.sort()
-	var tw := create_tween()
-	var delay: float = 0.0
-	var centroid := Vector3.ZERO
-	var count: int = 0
+	var winners: Array = []  # [{"uid": int, "node": Node}]
 	for uid: int in ids:
 		var node: Node = _unit_visuals[uid]
 		if node == null or not is_instance_valid(node):
 			continue
 		if not node.has_method("get_faction_index") or int(node.call("get_faction_index")) != winner:
 			continue
-		# Fallen units stay down — only living winners celebrate.
+		# Fallen units stay down — only living winners march and celebrate.
 		if node.has_method("is_dead") and bool(node.call("is_dead")):
 			continue
-		if node is Node3D:
-			centroid += (node as Node3D).global_position
-			count += 1
-		if node.has_method("play_celebration"):
-			tw.parallel().tween_callback(Callable(node, "call").bind("play_celebration", uid)).set_delay(delay)
-			delay += stagger
-	if count == 0:
-		tw.kill()
+		winners.append({"uid": uid, "node": node})
+	if winners.is_empty():
 		return
-	centroid /= float(count)
+	# Phase 1 — return march: tween every winner to a slot on a ring around
+	# the crown, playing the run clip with a fixed calibrated pace.
+	var tw := create_tween()
+	var march_time: float = 0.0
+	var count: int = winners.size()
+	for i in count:
+		var entry: Dictionary = winners[i]
+		var node3: Node3D = entry["node"]
+		var angle: float = float(i) * TAU / float(count)
+		var radius: float = 2.4 + float(i % 3) * 1.3
+		var target := Vector3(cos(angle) * radius, GROUND_Y, sin(angle) * radius)
+		if node3.has_method("face_toward"):
+			node3.call("face_toward", target)
+		if node3.has_method("play_return_march"):
+			node3.call("play_return_march")
+		var dist: float = node3.position.distance_to(target)
+		var t: float = clampf(dist / maxf(march_speed, 0.1), 0.6, 2.4)
+		march_time = maxf(march_time, t)
+		tw.parallel().tween_property(node3, "position", target, t).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	# Phase 2 — celebration ripples in once the march arrives.
+	var delay: float = march_time
+	for i in count:
+		var entry: Dictionary = winners[i]
+		var node: Node = entry["node"]
+		if node.has_method("play_celebration"):
+			tw.parallel().tween_callback(Callable(node, "call").bind("play_celebration", int(entry["uid"]))).set_delay(delay)
+			delay += stagger
 	if bool(cel_cfg.get("cameraPushIn", true)):
-		focus_on(centroid, duration)
+		focus_on(Vector3(0.0, 1.5, 0.0), march_time + duration)
 
 
 ## Removes all visual nodes and clears registries.

@@ -19,6 +19,8 @@ const SPAWN_JITTER: float = 40.0
 const SPAWN_SPREAD: float = 130.0      ## wider radial spawn band around the fortress
 const SEPARATION_RADIUS: float = 26.0  ## light push so squads don't stack
 const ARENA_MARGIN: float = 40.0
+## Casual stroll speed as a fraction of move_speed (idle wandering in the zone).
+const WANDER_SPEED_FRACTION: float = 0.35
 const ARENA_SIM_W: float = 1080.0
 const ARENA_SIM_H: float = 1180.0
 const SPAWN_DELAY: float = 0.2
@@ -35,9 +37,6 @@ const DEFAULT_FLANK_MAX_FRACTION: float = 0.8
 const DEFAULT_FORTRESS_SHIELD_RADIUS: float = 160.0
 ## Max characters per side on the battlefield (bots + viewer joins combined).
 const DEFAULT_MAX_UNITS_PER_SIDE: int = 30
-## A side that has deployed all its characters and has none left on the field
-## loses after this grace period (gives viewers a moment to type red/blue).
-const ELIMINATION_GRACE_SECONDS: float = 3.0
 
 ## Stage names used in snapshots and events.
 const STAGE_OPENING: String = "opening"
@@ -91,14 +90,12 @@ var _projectile_speed: float = 420.0
 var _unit_registry: Dictionary = {}  # global_id -> SimUnit
 var _dead_pending: Array = []        # SimUnit refs awaiting pool release
 
-# Center-dominion doctrine state.
-var _enemy_in_center: Array = [false, false]  ## per faction: enemy present in center zone
+# Annihilation doctrine state.
 var _sieging: Array = [false, false]          ## per faction: objective is the enemy fortress
 
-# Roster bookkeeping (max per side + viewer joins + elimination tracking).
+# Roster bookkeeping (max per side + viewer joins).
 var _max_units_per_side: int = DEFAULT_MAX_UNITS_PER_SIDE
 var _deployment_done: Array = [false, false]  ## per faction: full roster deployed
-var _wipe_elapsed: Array = [0.0, 0.0]         ## per faction: time spent at zero living units
 
 # Cached config values
 var _tick_rate: int = 20
@@ -186,10 +183,8 @@ func _init_world(config: Dictionary, seed_value: int, faction_a: Dictionary, fac
 	_events.clear()
 	_dead_pending.clear()
 	_unit_registry.clear()
-	_enemy_in_center = [false, false]
 	_sieging = [false, false]
 	_deployment_done = [false, false]
-	_wipe_elapsed = [0.0, 0.0]
 	# Spawn captains
 	_spawn_captain(0)
 	_spawn_captain(1)
@@ -208,7 +203,6 @@ func tick() -> void:
 	_tick_units()
 	_tick_projectiles()
 	_resolve_cleanup()
-	_track_elimination()
 	_calculate_dominion()
 	_check_victory()
 
@@ -288,10 +282,8 @@ func reset(seed_value: int) -> void:
 	_events.clear()
 	_dead_pending.clear()
 	_unit_registry.clear()
-	_enemy_in_center = [false, false]
 	_sieging = [false, false]
 	_deployment_done = [false, false]
-	_wipe_elapsed = [0.0, 0.0]
 	_spawn_captain(0)
 	_spawn_captain(1)
 
@@ -443,6 +435,13 @@ func _spawn_bots() -> void:
 		var fs: Dictionary = _config.get("finalSurge", {})
 		interval *= float(fs.get("spawnIntervalMultiplier", 0.5))
 	for faction in 2:
+		# Annihilation doctrine: while the enemy marches on a wiped side's
+		# castle that side stays wiped — no bot respawns mid-siege, otherwise
+		# fresh bots recall the siege every few seconds and troops appear to
+		# march on the castle while the zone battle is still ongoing.
+		# Viewer joins still recall the siege via add_viewer_unit.
+		if bool(_sieging[1 - faction]):
+			continue
 		_spawn_timers[faction] += _dt
 		if _spawn_timers[faction] >= interval:
 			_spawn_timers[faction] -= interval
@@ -502,9 +501,6 @@ func add_viewer_unit(faction: int, viewer_name: String = "") -> bool:
 		clean_name = u.display_name
 	else:
 		u.display_name = clean_name
-	# A fresh join revives a wiped side — reset the elimination timer. (The
-	# deployment stays done: no bot respawns, only chat joins add characters.)
-	_wipe_elapsed[faction] = 0.0
 	_events.append("unit_joined:%d:%s" % [faction, clean_name])
 	return true
 
@@ -606,31 +602,14 @@ func _find_unit(uid: int) -> SimUnit:
 
 # --- Tick sub-systems ---
 
-## Center-dominion doctrine. Recomputed once per tick (before unit AI):
-## a faction may only START a siege while it holds the center zone and the
-## enemy has NO living unit inside it (at round start nobody holds the
-## center yet, so armies always converge on the middle first). Once a siege
-## is underway it stays active while the center remains enemy-free — even
-## while the attackers themselves march away toward the fortress. The moment
-## an enemy is alive in the center again (fresh spawns included) every
-## attacker's objective flips back to the center — the siege force turns
-## around and returns to fight.
+## Annihilation doctrine. Recomputed once per tick (before unit AI):
+## every troop converges on the arena center and fights there. A faction
+## may only march on the enemy castle after the LAST enemy character has
+## fallen. If the wiped side receives fresh characters (chat joins) the
+## siege force is recalled and returns to the arena to fight.
 func _update_doctrine_state() -> void:
-	var in_center: Array = [false, false]
-	for pool in [_champion_pool, _guardian_pool, _striker_pool, _captain_pool]:
-		for u: SimUnit in pool.active_units():
-			if u.alive and u.faction_index >= 0:
-				if u.position.distance_to(_crown) <= _capture_radius:
-					in_center[u.faction_index] = true
 	for faction in 2:
-		_enemy_in_center[faction] = in_center[1 - faction]
-		var enemy_clear: bool = not bool(_enemy_in_center[faction])
-		var holds_center: bool = bool(in_center[faction])
-		var center_uncontested: bool = not bool(in_center[0]) and not bool(in_center[1])
-		# Uncontested center (e.g. mutual wipe) lets squads push forward; units
-		# already sieging keep pressure on the gate, and the moment a defender
-		# respawns inside the zone the recall fires and pulls them back.
-		var wants_siege: bool = enemy_clear and (holds_center or center_uncontested or bool(_sieging[faction]))
+		var wants_siege: bool = _count_alive(faction) > 0 and _count_alive(1 - faction) == 0
 		if wants_siege and not bool(_sieging[faction]):
 			_events.append("siege_started:%d" % faction)
 		elif not wants_siege and bool(_sieging[faction]):
@@ -705,8 +684,27 @@ func _advance_ai(u: SimUnit) -> void:
 	# Move toward objective. Flanked lanes apply only around the crown —
 	# siege objectives must be closed to within fortress attack range.
 	var obj_pos: Vector2 = _get_objective(u)
-	if obj_pos == _crown:
-		obj_pos = _clamp_arena(obj_pos + u.flank_offset)
+	if obj_pos == _crown and u.faction_index >= 0:
+		var slot: Vector2 = _clamp_arena(obj_pos + u.flank_offset)
+		# Casual wander: a unit parked at its slot with nobody to fight
+		# strolls slowly to random nearby points inside the capture zone
+		# instead of standing like a statue (SimRng keeps it deterministic).
+		u.wander_timer = maxf(u.wander_timer - _dt, 0.0)
+		var parked: bool = u.position.distance_to(slot) < 10.0
+		var arrived: bool = u.wander_target != Vector2.ZERO and u.position.distance_to(u.wander_target) < 6.0
+		if parked and (u.wander_timer <= 0.0 or arrived):
+			var ang: float = _rng.randf() * TAU
+			var mag: float = _rng.randf_range(20.0, 70.0)
+			var wt: Vector2 = u.position + Vector2(cos(ang), sin(ang)) * mag
+			if wt.distance_to(_crown) > _capture_radius * 0.95:
+				wt = _crown + (wt - _crown).normalized() * _capture_radius * 0.95
+			u.wander_target = _clamp_arena(wt)
+			u.wander_timer = _rng.randf_range(2.5, 5.0)
+		if parked and u.wander_target != Vector2.ZERO:
+			_move_toward(u, u.wander_target, WANDER_SPEED_FRACTION)
+			return
+		u.wander_target = Vector2.ZERO
+		obj_pos = slot
 	_move_toward(u, obj_pos)
 	# Defend check
 	if u.faction_index >= 0 and _is_fortress_threatened(u.faction_index):
@@ -771,12 +769,12 @@ func _defend_ai(u: SimUnit) -> void:
 		u.state_time = 0.0
 
 
-func _move_toward(u: SimUnit, target_pos: Vector2) -> void:
+func _move_toward(u: SimUnit, target_pos: Vector2, speed_fraction: float = 1.0) -> void:
 	var diff: Vector2 = target_pos - u.position
 	var dist: float = diff.length()
 	if dist < 1.0:
 		return
-	var step: float = _effective_speed(u) * _dt
+	var step: float = _effective_speed(u) * speed_fraction * _dt
 	var push := _separation_push(u)
 	if step >= dist:
 		u.position = _clamp_arena(target_pos + push)
@@ -912,6 +910,10 @@ func _process_fortress_attacks(all_units: Array) -> void:
 	for u: SimUnit in all_units:
 		if not u.alive or u.faction_index < 0:
 			continue
+		# Annihilation doctrine: a castle can only take damage while its owner
+		# has no living character left on the battlefield (siege underway).
+		if not bool(_sieging[u.faction_index]):
+			continue
 		var enemy_fortress: int = 1 - u.faction_index
 		var dist: float = u.position.distance_to(_fortress_positions[enemy_fortress])
 		if dist <= FORTRESS_ATTACK_RANGE and u.attack_cooldown <= 0.0:
@@ -1019,8 +1021,8 @@ func _get_objective(u: SimUnit) -> Vector2:
 		if nearest != null:
 			return nearest.position
 		return _crown
-	# Center-dominion doctrine: fight for the middle scene; only march on the
-	# enemy fortress while no enemy remains alive in the center zone.
+	# Annihilation doctrine: fight in the middle scene; only march on the
+	# enemy fortress once no enemy character remains alive.
 	if bool(_sieging[u.faction_index]):
 		return _fortress_positions[1 - u.faction_index]
 	return _crown
@@ -1059,16 +1061,6 @@ func _should_defend(u: SimUnit) -> bool:
 	return true
 
 
-## Tracks sides that have deployed their full roster and lost every character.
-## A wipe only becomes a defeat after ELIMINATION_GRACE_SECONDS so viewers can
-## still rescue their side by typing red/blue.
-func _track_elimination() -> void:
-	for faction in 2:
-		if bool(_deployment_done[faction]) and _count_alive(faction) == 0:
-			_wipe_elapsed[faction] = float(_wipe_elapsed[faction]) + _dt
-		else:
-			_wipe_elapsed[faction] = 0.0
-
 
 func _check_victory() -> void:
 	# A battle can only be won by destroying the enemy castle. When a castle
@@ -1081,13 +1073,6 @@ func _check_victory() -> void:
 	if _fortress_health[1] <= 0.0:
 		_wipe_faction(1, 0)
 		_end_round(0, "fortress")
-		return
-	# Full elimination (roster deployed, no one left after the grace period).
-	if float(_wipe_elapsed[0]) >= ELIMINATION_GRACE_SECONDS:
-		_end_round(1, "elimination")
-		return
-	if float(_wipe_elapsed[1]) >= ELIMINATION_GRACE_SECONDS:
-		_end_round(0, "elimination")
 		return
 
 
@@ -1126,4 +1111,5 @@ func _end_round(winner: int, vtype: String) -> void:
 	_victory_type = vtype
 	_round_over = true
 	_stage = STAGE_ENDED
+	_sieging = [false, false]
 	_events.append("victory:%d:%s" % [winner, vtype])

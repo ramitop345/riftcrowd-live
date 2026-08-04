@@ -54,6 +54,11 @@ var last_hit_faction: int = -1
 ## instead of converging on the center line. Assigned at spawn from SimRng.
 var flank_offset: Vector2 = Vector2.ZERO
 
+## Casual wander target + countdown used when the unit is parked inside the
+## capture zone with nothing to fight, so troops never stand like statues.
+var wander_target: Vector2 = Vector2.ZERO
+var wander_timer: float = 0.0
+
 ## Gift technique buffs. Fractions are multipliers added on top of the base
 ## stat (e.g. 0.5 = +50% damage); timers count down in SimWorld._unit_ai().
 var damage_buff_fraction: float = 0.0
@@ -88,6 +93,8 @@ func reset() -> void:
 	boss_bonus_time_left = 0.0
 	last_hit_faction = -1
 	flank_offset = Vector2.ZERO
+	wander_target = Vector2.ZERO
+	wander_timer = 0.0
 	damage_buff_fraction = 0.0
 	damage_buff_timer = 0.0
 	speed_buff_fraction = 0.0

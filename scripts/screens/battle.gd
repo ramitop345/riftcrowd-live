@@ -7,8 +7,15 @@ const Ui := preload("res://scripts/ui/ui_config.gd")
 const GC := preload("res://scripts/simulation/gameplay_config.gd")
 const ARENA_SCENE_PATH: String = "res://scenes/Arena3D.tscn"
 const INITIAL_PRE_TICKS: int = 100
-## After a battle ends: winner banner + stars, then this long before the next battle.
+## End-of-battle presentation phases: winners march back to the arena, then a
+## stylish celebration message, then the countdown to the next battle.
+const RETURN_MARCH_SECONDS: float = 2.6
+## Camera holds on the collapsing castle (arena-side) before the march starts.
+const DESTRUCTION_SECONDS: float = 3.6
+const CELEBRATION_SECONDS: float = 5.0
 const NEXT_BATTLE_COUNTDOWN: float = 10.0
+## Gate picture-in-picture cameras stay up this long after fresh entries.
+const PIP_SHOW_SECONDS: float = 5.0
 const MAX_STARS: int = 26
 
 @onready var _safe_area: MarginContainer = $SafeArea
@@ -46,9 +53,23 @@ var _max_fortress_health: float = 500.0
 ## Top banner announcing every new character added by viewers (red/blue chat).
 var _banner_label: Label = null
 var _banner_tween: Tween = null
-## End-of-battle presentation: winner banner + countdown to the next battle.
-var _victory_label: Label = null
+## End-of-battle presentation phase machine ("", destruction, march,
+## celebration, countdown).
+var _victory_phase: String = ""
+var _winner_index: int = -1
+var _winner_name: String = ""
 var _victory_color: Color = Color(1.0, 0.84, 0.0)
+var _victory_overlay: Control = null
+var _countdown_overlay: Control = null
+var _countdown_digit: Label = null
+var _countdown_fill: ColorRect = null
+var _countdown_bar_bg: ColorRect = null
+var _last_countdown_int: int = -1
+var _rays_tween: Tween = null
+var _pulse_tween: Tween = null
+## Picture-in-picture gate cameras (top corners, share the arena 3D world).
+var _pip_cams: Array = [null, null]
+var _pip_timers: Array = [0.0, 0.0]
 
 ## Alternates technique factions for commands with an unknown factionId (mock mode).
 var _next_technique_faction: int = 0
@@ -122,6 +143,10 @@ func _ready() -> void:
 		# Instantiate Arena3D inside the SubViewport.
 		_arena_node = arena_packed.instantiate()
 		sv.add_child(_arena_node)
+		# Picture-in-picture gate cameras share the arena's 3D world.
+		_create_pip_cameras(sv)
+		if _arena_node.has_signal("arrivals_at_gate"):
+			_arena_node.connect("arrivals_at_gate", _on_arrivals_at_gate)
 	# Set up presenter.
 	_presenter = BattlePresenter.new()
 	_presenter.setup(_config, randi(), _faction_a, _faction_b, _arena_node)
@@ -159,16 +184,26 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if _presenter == null:
 		return
-	if _results_timer > 0.0:
+	_tick_pip_cameras(delta)
+	# End-of-battle presentation: return march → celebration → countdown.
+	if _victory_phase != "":
 		_results_timer -= delta
-		if _victory_label != null:
-			var secs_left: int = maxi(ceili(_results_timer), 0)
-			_victory_label.text = _victory_label.get_meta("headline", "Victory!") + "\nNext battle in %d..." % secs_left
-		if _results_timer <= 0.0:
-			# Countdown done — start the next battle.
-			if _victory_label != null:
-				_victory_label.modulate.a = 0.0
-			_on_restart_pressed()
+		match _victory_phase:
+			"destruction":
+				if _results_timer <= 0.0:
+					_victory_phase = "march"
+					_results_timer = RETURN_MARCH_SECONDS
+			"march":
+				if _results_timer <= 0.0:
+					_begin_celebration()
+			"celebration":
+				if _results_timer <= 0.0:
+					_begin_countdown()
+			"countdown":
+				_update_countdown_display()
+				if _results_timer <= 0.0:
+					_teardown_victory_overlays()
+					_on_restart_pressed()
 		return
 	var snapshot: Dictionary = _presenter.present(delta)
 	if not snapshot.is_empty():
@@ -238,6 +273,8 @@ func _update_hud(snapshot: Dictionary) -> void:
 				var parts: PackedStringArray = ev_str.split(":", true, 2)
 				if parts.size() >= 3:
 					_show_join_banner(parts[2], int(parts[1]))
+			if ev_str.begins_with("siege_started:"):
+				_show_wipe_banner(int(ev_str.split(":")[1]))
 		_spotlight_label.text = str((events as Array).back())
 
 
@@ -271,8 +308,15 @@ func _on_speed(speed: float) -> void:
 
 
 func _on_restart_pressed() -> void:
-	_presenter.restart(randi())
+	_teardown_victory_overlays()
+	_victory_phase = ""
 	_results_timer = -1.0
+	_pip_timers = [0.0, 0.0]
+	for fac in 2:
+		var pip: SubViewportContainer = _pip_cams[fac]
+		if pip != null:
+			pip.visible = false
+	_presenter.restart(randi())
 	_spotlight_label.text = "Round restarted..."
 
 
@@ -283,49 +327,34 @@ func _on_end_battle_pressed() -> void:
 
 
 func _on_round_completed(snapshot: Dictionary) -> void:
-	var winner: int = int(snapshot.get("winner", -1))
+	_winner_index = int(snapshot.get("winner", -1))
 	var vtype: String = str(snapshot.get("victory_type", ""))
-	var winner_name: String = "Draw"
-	if winner == 0:
-		winner_name = str(_faction_a.get("displayName", "A"))
-	elif winner == 1:
-		winner_name = str(_faction_b.get("displayName", "B"))
-	_spotlight_label.text = "Victory: %s (%s) — next battle soon..." % [winner_name, vtype]
-	# Winner banner + a rain of stars in the winning faction's color.
-	if winner == 0:
+	_winner_name = "Draw"
+	if _winner_index == 0:
+		_winner_name = str(_faction_a.get("displayName", "A"))
+	elif _winner_index == 1:
+		_winner_name = str(_faction_b.get("displayName", "B"))
+	_spotlight_label.text = "Victory: %s (%s)" % [_winner_name, vtype]
+	if _winner_index == 0:
 		_victory_color = Color(0.35, 0.6, 1.0)
-	elif winner == 1:
+	elif _winner_index == 1:
 		_victory_color = Color(1.0, 0.4, 0.3)
 	else:
 		_victory_color = Color(1.0, 0.84, 0.0)
-	if _victory_label != null:
-		var headline: String = "DRAW!" if winner < 0 else "%s WINS THE BATTLE!" % winner_name.to_upper()
-		_victory_label.set_meta("headline", headline)
-		_victory_label.text = headline + "\nNext battle in %d..." % int(NEXT_BATTLE_COUNTDOWN)
-		_victory_label.add_theme_color_override("font_color", _victory_color)
-		_victory_label.modulate.a = 1.0
-	_spawn_victory_stars(_victory_color)
-	# Celebratory bursts across the arena to punctuate the win.
-	if _vfx_pool != null:
-		var burst_color: String = "#ffd700"
-		if winner == 0:
-			burst_color = "#66aaff"
-		elif winner == 1:
-			burst_color = "#ff6655"
-		for i in 4:
-			var params: Dictionary = {
-				"x": randf_range(200.0, 880.0),
-				"y": randf_range(300.0, 900.0),
-				"color": burst_color,
-				"duration": 2.0,
-			}
-			_vfx_pool.acquire("particle", params)
-	# Winner presentation runs for NEXT_BATTLE_COUNTDOWN seconds, then the
-	# next battle starts automatically.
-	_results_timer = NEXT_BATTLE_COUNTDOWN
+	if vtype == "fortress" and _winner_index >= 0:
+		# Phase 0 — the arena holds the camera on the collapsing castle;
+		# the banner announces the fall while the destruction plays out.
+		_victory_phase = "destruction"
+		_results_timer = DESTRUCTION_SECONDS
+		_show_fall_banner()
+	else:
+		# Phase 1 — the winners march back to the arena to celebrate (arena-side
+		# tweens); no overlay yet so the march stays fully visible.
+		_victory_phase = "march"
+		_results_timer = RETURN_MARCH_SECONDS
 
 
-## Creates the top banner (viewer joins) and center victory label once.
+## Creates the top banner (viewer joins) once.
 func _create_banner_labels() -> void:
 	_banner_label = Label.new()
 	_banner_label.name = "JoinBanner"
@@ -340,18 +369,6 @@ func _create_banner_labels() -> void:
 	_banner_label.modulate.a = 0.0
 	_banner_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_banner_label)
-	_victory_label = Label.new()
-	_victory_label.name = "VictoryBanner"
-	_victory_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_victory_label.add_theme_font_size_override("font_size", 56)
-	_victory_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
-	_victory_label.add_theme_constant_override("shadow_offset_y", 3)
-	_victory_label.set_anchors_preset(Control.PRESET_CENTER)
-	_victory_label.position = Vector2(-500, -80)
-	_victory_label.size = Vector2(1000, 160)
-	_victory_label.modulate.a = 0.0
-	_victory_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_victory_label)
 
 
 ## Slides the join banner in from the top for ~2.5 s. Called for every new
@@ -372,6 +389,145 @@ func _show_join_banner(viewer_name: String, faction: int) -> void:
 	_banner_tween.parallel().tween_property(_banner_label, "modulate:a", 1.0, 0.25)
 	_banner_tween.tween_interval(2.0)
 	_banner_tween.tween_property(_banner_label, "modulate:a", 0.0, 0.4)
+
+
+## Stylish announcement when one team has no opponents left: a dark strip
+## pops open with the winner's accent bars, the headline scales in with a
+## back-ease overshoot, holds, then fades away.
+func _show_wipe_banner(winner_faction: int) -> void:
+	var winner_name: String
+	var loser_name: String
+	if winner_faction == 0:
+		winner_name = str(_faction_a.get("displayName", "A"))
+		loser_name = str(_faction_b.get("displayName", "B"))
+	else:
+		winner_name = str(_faction_b.get("displayName", "B"))
+		loser_name = str(_faction_a.get("displayName", "A"))
+	var col: Color = Color(0.35, 0.6, 1.0) if winner_faction == 0 else Color(1.0, 0.4, 0.3)
+	var view_w: float = size.x if size.x > 10.0 else 1080.0
+	var strip := ColorRect.new()
+	strip.name = "WipeBanner"
+	strip.color = Color(0.02, 0.02, 0.05, 0.78)
+	strip.size = Vector2(view_w, 170.0)
+	strip.position = Vector2(0.0, 470.0)
+	strip.pivot_offset = Vector2(view_w * 0.5, 85.0)
+	strip.scale = Vector2(1.0, 0.0)
+	strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var top_accent := ColorRect.new()
+	top_accent.color = Color(col.r, col.g, col.b, 0.95)
+	top_accent.size = Vector2(view_w, 5.0)
+	top_accent.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	strip.add_child(top_accent)
+	var bottom_accent := ColorRect.new()
+	bottom_accent.color = Color(col.r, col.g, col.b, 0.95)
+	bottom_accent.size = Vector2(view_w, 5.0)
+	bottom_accent.position = Vector2(0.0, 165.0)
+	bottom_accent.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	strip.add_child(bottom_accent)
+	var title := Label.new()
+	title.text = "%s WIPED OUT!" % loser_name.to_upper()
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 54)
+	title.add_theme_color_override("font_color", col)
+	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
+	title.add_theme_constant_override("shadow_offset_y", 3)
+	title.position = Vector2(0.0, 22.0)
+	title.size = Vector2(view_w, 70.0)
+	title.pivot_offset = Vector2(view_w * 0.5, 35.0)
+	title.scale = Vector2(0.6, 0.6)
+	title.modulate.a = 0.0
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	strip.add_child(title)
+	var sub := Label.new()
+	sub.text = "THE %s MARCH ON THE CASTLE" % winner_name.to_upper()
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sub.add_theme_font_size_override("font_size", 30)
+	sub.add_theme_color_override("font_color", Color(0.92, 0.94, 1.0))
+	sub.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
+	sub.add_theme_constant_override("shadow_offset_y", 2)
+	sub.position = Vector2(0.0, 102.0)
+	sub.size = Vector2(view_w, 44.0)
+	sub.modulate.a = 0.0
+	sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	strip.add_child(sub)
+	add_child(strip)
+	var tw := create_tween()
+	tw.tween_property(strip, "scale", Vector2.ONE, 0.28).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(title, "scale", Vector2.ONE, 0.45).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(title, "modulate:a", 1.0, 0.2)
+	tw.tween_property(sub, "modulate:a", 1.0, 0.25)
+	tw.tween_interval(2.6)
+	tw.tween_property(strip, "modulate:a", 0.0, 0.45)
+	tw.tween_callback(strip.queue_free)
+
+
+## Companion banner shown while the castle collapse plays: same stylish strip
+## as the wipe banner, announcing the fallen castle and the victors.
+func _show_fall_banner() -> void:
+	var winner_name: String
+	var loser_name: String
+	if _winner_index == 0:
+		winner_name = str(_faction_a.get("displayName", "A"))
+		loser_name = str(_faction_b.get("displayName", "B"))
+	else:
+		winner_name = str(_faction_b.get("displayName", "B"))
+		loser_name = str(_faction_a.get("displayName", "A"))
+	var col: Color = _victory_color
+	var view_w: float = size.x if size.x > 10.0 else 1080.0
+	var strip := ColorRect.new()
+	strip.name = "FallBanner"
+	strip.color = Color(0.03, 0.02, 0.02, 0.8)
+	strip.size = Vector2(view_w, 170.0)
+	strip.position = Vector2(0.0, 470.0)
+	strip.pivot_offset = Vector2(view_w * 0.5, 85.0)
+	strip.scale = Vector2(1.0, 0.0)
+	strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var top_accent := ColorRect.new()
+	top_accent.color = Color(col.r, col.g, col.b, 0.95)
+	top_accent.size = Vector2(view_w, 5.0)
+	top_accent.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	strip.add_child(top_accent)
+	var bottom_accent := ColorRect.new()
+	bottom_accent.color = Color(col.r, col.g, col.b, 0.95)
+	bottom_accent.size = Vector2(view_w, 5.0)
+	bottom_accent.position = Vector2(0.0, 165.0)
+	bottom_accent.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	strip.add_child(bottom_accent)
+	var title := Label.new()
+	title.text = "%s CASTLE DESTROYED!" % loser_name.to_upper()
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 54)
+	title.add_theme_color_override("font_color", col)
+	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
+	title.add_theme_constant_override("shadow_offset_y", 3)
+	title.position = Vector2(0.0, 22.0)
+	title.size = Vector2(view_w, 70.0)
+	title.pivot_offset = Vector2(view_w * 0.5, 35.0)
+	title.scale = Vector2(0.6, 0.6)
+	title.modulate.a = 0.0
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	strip.add_child(title)
+	var sub := Label.new()
+	sub.text = "THE %s CLAIM VICTORY" % winner_name.to_upper()
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sub.add_theme_font_size_override("font_size", 30)
+	sub.add_theme_color_override("font_color", Color(0.92, 0.94, 1.0))
+	sub.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
+	sub.add_theme_constant_override("shadow_offset_y", 2)
+	sub.position = Vector2(0.0, 102.0)
+	sub.size = Vector2(view_w, 44.0)
+	sub.modulate.a = 0.0
+	sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	strip.add_child(sub)
+	add_child(strip)
+	var tw := create_tween()
+	tw.tween_property(strip, "scale", Vector2.ONE, 0.28).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(title, "scale", Vector2.ONE, 0.45).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(title, "modulate:a", 1.0, 0.2)
+	tw.tween_property(sub, "modulate:a", 1.0, 0.25)
+	tw.tween_interval(3.0)
+	tw.tween_property(strip, "modulate:a", 0.0, 0.45)
+	tw.tween_callback(strip.queue_free)
 
 
 ## Raining stars in the winner's color across the whole screen.
@@ -399,6 +555,297 @@ func _star_points(radius: float) -> PackedVector2Array:
 	for i in 10:
 		var angle: float = float(i) * TAU / 10.0 - PI / 2.0
 		var r: float = radius if i % 2 == 0 else radius * 0.45
+		pts.append(Vector2(cos(angle), sin(angle)) * r)
+	return pts
+
+
+# ===========================================================================
+# Picture-in-picture gate cameras (new character entries from the castles)
+# ===========================================================================
+
+## Two small cameras over the left/right castle gates. They share the arena's
+## 3D world and stay hidden until new characters walk out of a castle — then
+## the matching camera pops up for PIP_SHOW_SECONDS.
+func _create_pip_cameras(main_viewport: SubViewport) -> void:
+	_pip_cams[0] = _create_pip_camera(main_viewport.world_3d, true)
+	_pip_cams[1] = _create_pip_camera(main_viewport.world_3d, false)
+
+
+func _create_pip_camera(world: World3D, left_side: bool) -> SubViewportContainer:
+	var pip_w := 300.0
+	var pip_h := 190.0
+	var svc := SubViewportContainer.new()
+	svc.name = "PipCamLeft" if left_side else "PipCamRight"
+	svc.stretch = true
+	svc.visible = false
+	svc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if left_side:
+		svc.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		svc.position = Vector2(18, 18)
+	else:
+		svc.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		svc.position = Vector2(-pip_w - 18, 18)
+	svc.size = Vector2(pip_w, pip_h)
+	var svp := SubViewport.new()
+	svp.world_3d = world
+	svp.transparent_bg = false
+	# UPDATE_WHEN_VISIBLE: a hidden PIP cam must not keep rendering the whole
+	# 3D world every frame (that tripled GPU cost while the PIP was invisible).
+	svp.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE
+	svp.size = Vector2i(int(pip_w), int(pip_h))
+	# Camera sits between the arena and its castle, framing the gate so
+	# fresh characters walking out are front and center.
+	var cam := Camera3D.new()
+	var side: float = -1.0 if left_side else 1.0
+	cam.position = Vector3(side * 13.5, 6.0, -8.5)
+	cam.look_at_from_position(cam.position, Vector3(side * 21.0, 2.5, 0.0), Vector3.UP)
+	cam.fov = 50.0
+	cam.current = true  # current inside the PIP viewport only
+	svp.add_child(cam)
+	svc.add_child(svp)
+	var tag := Label.new()
+	tag.text = "BLUE GATE" if left_side else "RED GATE"
+	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tag.add_theme_font_size_override("font_size", 15)
+	tag.add_theme_color_override("font_color", Color(0.85, 0.9, 1.0))
+	tag.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
+	tag.add_theme_constant_override("shadow_offset_y", 1)
+	tag.anchor_left = 0.0
+	tag.anchor_right = 1.0
+	tag.anchor_top = 1.0
+	tag.anchor_bottom = 1.0
+	tag.offset_top = -22.0
+	tag.offset_bottom = 0.0
+	tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	svc.add_child(tag)
+	_arena_panel.add_child(svc)
+	return svc
+
+
+## The arena spotted fresh fighters at a castle gate — show that side's PIP
+## camera for PIP_SHOW_SECONDS (further arrivals refresh the window).
+func _on_arrivals_at_gate(faction: int) -> void:
+	if faction < 0 or faction > 1:
+		return
+	_pip_timers[faction] = PIP_SHOW_SECONDS
+	var pip: SubViewportContainer = _pip_cams[faction]
+	if pip != null:
+		pip.visible = true
+
+
+## Counts down the PIP windows and hides cameras whose time is up.
+func _tick_pip_cameras(delta: float) -> void:
+	for fac in 2:
+		if float(_pip_timers[fac]) > 0.0:
+			_pip_timers[fac] = float(_pip_timers[fac]) - delta
+			if float(_pip_timers[fac]) <= 0.0:
+				var pip: SubViewportContainer = _pip_cams[fac]
+				if pip != null:
+					pip.visible = false
+
+
+# ===========================================================================
+# Victory presentation: celebration overlay + stylish countdown
+# ===========================================================================
+
+## Phase 2 — stylish celebration message for CELEBRATION_SECONDS: dimmed
+## arena, rotating starburst rays in the winner's color, a punch-scaling
+## headline and a rain of stars.
+func _begin_celebration() -> void:
+	_victory_phase = "celebration"
+	_results_timer = CELEBRATION_SECONDS
+	_build_celebration_overlay()
+	_spawn_victory_stars(_victory_color)
+	# Celebratory bursts across the arena to punctuate the win.
+	if _vfx_pool != null:
+		var burst_color: String = "#ffd700"
+		if _winner_index == 0:
+			burst_color = "#66aaff"
+		elif _winner_index == 1:
+			burst_color = "#ff6655"
+		for i in 4:
+			var params: Dictionary = {
+				"x": randf_range(200.0, 880.0),
+				"y": randf_range(300.0, 900.0),
+				"color": burst_color,
+				"duration": 2.0,
+			}
+			_vfx_pool.acquire("particle", params)
+
+
+func _build_celebration_overlay() -> void:
+	_teardown_victory_overlays()
+	var root := Control.new()
+	root.name = "VictoryOverlay"
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(root)
+	_victory_overlay = root
+	# Dim veil so the presentation reads over the 3D arena.
+	var veil := ColorRect.new()
+	veil.color = Color(0.0, 0.0, 0.05, 0.55)
+	veil.set_anchors_preset(Control.PRESET_FULL_RECT)
+	veil.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(veil)
+	# Slowly rotating starburst rays behind the headline.
+	var rays := Polygon2D.new()
+	rays.name = "Rays"
+	rays.polygon = _ray_burst_points(520.0)
+	rays.color = Color(_victory_color.r, _victory_color.g, _victory_color.b, 0.22)
+	rays.position = size * 0.5
+	root.add_child(rays)
+	_rays_tween = create_tween().set_loops()
+	_rays_tween.tween_property(rays, "rotation", TAU, 24.0)
+	# Winner headline with a punch-scale entrance + gentle pulse.
+	var headline := Label.new()
+	headline.name = "VictoryHeadline"
+	var headline_text: String = "DRAW!" if _winner_index < 0 else "%s WINS THE BATTLE!" % _winner_name.to_upper()
+	headline.text = headline_text
+	headline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	headline.add_theme_font_size_override("font_size", 64)
+	headline.add_theme_color_override("font_color", _victory_color)
+	headline.add_theme_constant_override("outline_size", 14)
+	headline.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.1, 1.0))
+	headline.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
+	headline.add_theme_constant_override("shadow_offset_y", 4)
+	headline.set_anchors_preset(Control.PRESET_CENTER)
+	headline.position = Vector2(-540, -140)
+	headline.size = Vector2(1080, 100)
+	headline.pivot_offset = Vector2(540, 50)
+	headline.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(headline)
+	_pulse_tween = create_tween().set_loops()
+	_pulse_tween.tween_property(headline, "scale", Vector2(1.25, 1.25), 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_pulse_tween.tween_property(headline, "scale", Vector2.ONE, 0.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
+	_pulse_tween.tween_property(headline, "scale", Vector2(1.06, 1.06), 0.6).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_pulse_tween.tween_property(headline, "scale", Vector2.ONE, 0.6).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	# Sub line under the headline.
+	var sub := Label.new()
+	sub.name = "VictorySub"
+	var sub_text: String = "No side could claim the arena" if _winner_index < 0 else "The arena belongs to the %s!" % _winner_name.to_upper()
+	sub.text = sub_text
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sub.add_theme_font_size_override("font_size", 30)
+	sub.add_theme_color_override("font_color", Color(0.95, 0.95, 1.0))
+	sub.add_theme_constant_override("outline_size", 8)
+	sub.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.1, 1.0))
+	sub.set_anchors_preset(Control.PRESET_CENTER)
+	sub.position = Vector2(-540, -25)
+	sub.size = Vector2(1080, 50)
+	sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(sub)
+	# Fade the whole overlay in.
+	root.modulate.a = 0.0
+	var fade := create_tween()
+	fade.tween_property(root, "modulate:a", 1.0, 0.35)
+
+
+## Phase 3 — stylish countdown to the next battle: huge pop-in digits above a
+## progress bar that drains in the winner's color.
+func _begin_countdown() -> void:
+	_victory_phase = "countdown"
+	_results_timer = NEXT_BATTLE_COUNTDOWN
+	_last_countdown_int = -1
+	_teardown_victory_overlays()
+	var root := Control.new()
+	root.name = "CountdownOverlay"
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(root)
+	_countdown_overlay = root
+	var veil := ColorRect.new()
+	veil.color = Color(0.0, 0.0, 0.05, 0.5)
+	veil.set_anchors_preset(Control.PRESET_FULL_RECT)
+	veil.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(veil)
+	var caption := Label.new()
+	caption.text = "NEXT BATTLE IN"
+	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	caption.add_theme_font_size_override("font_size", 34)
+	caption.add_theme_color_override("font_color", Color(0.9, 0.9, 1.0))
+	caption.add_theme_constant_override("outline_size", 8)
+	caption.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.1, 1.0))
+	caption.set_anchors_preset(Control.PRESET_CENTER)
+	caption.position = Vector2(-300, -230)
+	caption.size = Vector2(600, 50)
+	caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(caption)
+	_countdown_digit = Label.new()
+	_countdown_digit.text = str(int(NEXT_BATTLE_COUNTDOWN))
+	_countdown_digit.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_countdown_digit.add_theme_font_size_override("font_size", 160)
+	_countdown_digit.add_theme_color_override("font_color", _victory_color)
+	_countdown_digit.add_theme_constant_override("outline_size", 18)
+	_countdown_digit.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.1, 1.0))
+	_countdown_digit.set_anchors_preset(Control.PRESET_CENTER)
+	_countdown_digit.position = Vector2(-200, -160)
+	_countdown_digit.size = Vector2(400, 220)
+	_countdown_digit.pivot_offset = Vector2(200, 110)
+	_countdown_digit.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(_countdown_digit)
+	# Progress bar draining toward the next battle.
+	var bar_w := 620.0
+	_countdown_bar_bg = ColorRect.new()
+	_countdown_bar_bg.color = Color(1.0, 1.0, 1.0, 0.16)
+	_countdown_bar_bg.set_anchors_preset(Control.PRESET_CENTER)
+	_countdown_bar_bg.position = Vector2(-bar_w / 2.0, 110)
+	_countdown_bar_bg.size = Vector2(bar_w, 18)
+	_countdown_bar_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(_countdown_bar_bg)
+	_countdown_fill = ColorRect.new()
+	_countdown_fill.color = _victory_color
+	_countdown_fill.position = Vector2.ZERO
+	_countdown_fill.size = Vector2(bar_w, 18)
+	_countdown_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_countdown_bar_bg.add_child(_countdown_fill)
+	root.modulate.a = 0.0
+	var fade := create_tween()
+	fade.tween_property(root, "modulate:a", 1.0, 0.3)
+
+
+## Updates the countdown digit (pop animation on every new second) and the
+## draining progress bar.
+func _update_countdown_display() -> void:
+	if _countdown_digit == null:
+		return
+	var secs_left: int = maxi(ceili(_results_timer), 0)
+	if secs_left != _last_countdown_int:
+		_last_countdown_int = secs_left
+		_countdown_digit.text = str(secs_left)
+		_countdown_digit.scale = Vector2(1.5, 1.5)
+		var tw := create_tween()
+		tw.tween_property(_countdown_digit, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	if _countdown_fill != null and _countdown_bar_bg != null:
+		var frac: float = clampf(_results_timer / NEXT_BATTLE_COUNTDOWN, 0.0, 1.0)
+		_countdown_fill.size.x = _countdown_bar_bg.size.x * frac
+
+
+## Frees both overlays and their looping animations.
+func _teardown_victory_overlays() -> void:
+	if _rays_tween != null and _rays_tween.is_valid():
+		_rays_tween.kill()
+	_rays_tween = null
+	if _pulse_tween != null and _pulse_tween.is_valid():
+		_pulse_tween.kill()
+	_pulse_tween = null
+	if _victory_overlay != null and is_instance_valid(_victory_overlay):
+		_victory_overlay.queue_free()
+	_victory_overlay = null
+	if _countdown_overlay != null and is_instance_valid(_countdown_overlay):
+		_countdown_overlay.queue_free()
+	_countdown_overlay = null
+	_countdown_digit = null
+	_countdown_fill = null
+	_countdown_bar_bg = null
+
+
+## Starburst polygon (alternating long/short spikes) for the celebration backdrop.
+func _ray_burst_points(radius: float) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	var spikes: int = 14
+	for i in spikes * 2:
+		var angle: float = float(i) * TAU / float(spikes * 2)
+		var r: float = radius if i % 2 == 0 else radius * 0.18
 		pts.append(Vector2(cos(angle), sin(angle)) * r)
 	return pts
 

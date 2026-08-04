@@ -1,11 +1,17 @@
-## Fortress 3D visual — loads Blue or Red fortress GLB with health bar.
+## Fortress 3D visual — both camps use the SAME big-door keep model, tinted
+## and glow-lit in the owning faction's color, with a health bar.
 extends Node3D
 
 const MeshyLod := preload("res://scripts/units/meshy_lod.gd")
 
-# Meshy fortresses: blue = castle, red = dungeon keep (versioned _v1; legacy kept).
-const BLUE_GLB: String = "res://assets/models/environment/env_castle_blue_v1.glb"
-const RED_GLB: String = "res://assets/models/environment/env_dungeon_keep_v1.glb"
+# Both sides share the keep with the big door in the middle of the wall
+# (the model characters march through). Legacy per-side GLBs kept for reference.
+const FORT_GLB: String = "res://assets/models/environment/env_dungeon_keep_v1.glb"
+const LEGACY_BLUE_GLB: String = "res://assets/models/environment/env_castle_blue_v1.glb"
+# Faction dress colors (must match BaseUnit3D faction identity).
+const FACTION_BLUE: Color = Color(0.3, 0.52, 1.0)
+const FACTION_RED: Color = Color(1.0, 0.36, 0.28)
+const FACTION_TINT_STRENGTH: float = 0.45
 # Fortresses authored ~1.9 m tall; scaled up and widened along the arena axis so
 # they read as imposing strongholds that could garrison a whole squad.
 const FORT_SCALE: Vector3 = Vector3(8.5, 7.0, 7.5)
@@ -35,6 +41,11 @@ func update_visual(health_fraction: float, faction: int) -> void:
 ## chunks burst outward and a smoke plume rises from the ruins.
 func _play_destruction() -> void:
 	_destroyed = true
+	if _health_bar != null:
+		_health_bar.visible = false
+	var bar_bg: Node = get_node_or_null("HealthBarBg")
+	if bar_bg != null:
+		bar_bg.visible = false
 	if _model != null and is_instance_valid(_model):
 		var tw := create_tween()
 		var tilt_dir: float = -1.0 if _faction_index == 0 else 1.0
@@ -42,8 +53,66 @@ func _play_destruction() -> void:
 		tw.tween_property(_model, "rotation_degrees:z", tilt_dir * 9.0, 1.6).set_ease(Tween.EASE_IN)
 		tw.tween_property(_model, "position:y", -2.6, 2.0).set_ease(Tween.EASE_IN)
 		tw.tween_callback(_char_model).set_delay(0.4)
+	_spawn_explosion()
 	_spawn_rubble()
 	_spawn_smoke()
+
+
+## Public entry for the end-of-round presentation (arena_3d holds the camera
+## on the gate while the castle visibly falls). Safe to call more than once.
+func play_destruction() -> void:
+	if _destroyed:
+		return
+	_play_destruction()
+
+
+## Fireball flash at the gate: a fast-fading omni flash plus a one-shot burst
+## of flame puffs so the moment of destruction reads from any camera angle.
+func _spawn_explosion() -> void:
+	var flash := OmniLight3D.new()
+	flash.name = "DestructionFlash"
+	flash.light_color = Color(1.0, 0.55, 0.2)
+	flash.light_energy = 40.0
+	flash.omni_range = 16.0
+	flash.position = Vector3(0.0, 4.0, 0.0)
+	add_child(flash)
+	var flash_tw := create_tween()
+	flash_tw.tween_property(flash, "light_energy", 0.0, 1.2).set_ease(Tween.EASE_OUT)
+	flash_tw.tween_callback(flash.queue_free)
+	var burst := GPUParticles3D.new()
+	burst.name = "FireBurst"
+	burst.position = Vector3(0.0, 3.0, 0.0)
+	burst.amount = 48
+	burst.lifetime = 1.4
+	burst.one_shot = true
+	burst.explosiveness = 0.9
+	var mat := ParticleProcessMaterial.new()
+	mat.direction = Vector3(0, 1, 0)
+	mat.spread = 180.0
+	mat.initial_velocity_min = 4.0
+	mat.initial_velocity_max = 9.0
+	mat.gravity = Vector3(0, -6.0, 0)
+	mat.scale_min = 0.6
+	mat.scale_max = 1.6
+	var grad := Gradient.new()
+	grad.set_color(0, Color(1.0, 0.8, 0.3))
+	grad.set_color(1, Color(0.9, 0.2, 0.05, 0.0))
+	var ramp := GradientTexture1D.new()
+	ramp.gradient = grad
+	mat.color_ramp = ramp
+	burst.process_material = mat
+	# Spheres need no billboarding (ParticleProcessMaterial has no
+	# billboard_mode property in Godot 4.7 — assigning one script-errors).
+	var puff := SphereMesh.new()
+	puff.radius = 0.35
+	puff.radial_segments = 8
+	puff.rings = 4
+	burst.draw_pass_1 = puff
+	add_child(burst)
+	burst.emitting = true
+	var burst_tw := create_tween()
+	burst_tw.tween_interval(3.0)
+	burst_tw.tween_callback(burst.queue_free)
 
 
 ## Darken every mesh surface so the keep reads as burnt-out.
@@ -122,9 +191,11 @@ func _spawn_smoke() -> void:
 	mat.scale_max = 3.5
 	mat.color = Color(0.25, 0.23, 0.22, 0.55)
 	gpul.process_material = mat
-	var quad := QuadMesh.new()
-	quad.size = Vector2(1.2, 1.2)
-	gpul.draw_pass_1 = quad
+	var puff := SphereMesh.new()
+	puff.radius = 0.6
+	puff.radial_segments = 8
+	puff.rings = 4
+	gpul.draw_pass_1 = puff
 	add_child(gpul)
 	gpul.emitting = true
 	# Clean up after the plume dissipates.
@@ -134,19 +205,63 @@ func _spawn_smoke() -> void:
 
 
 func _swap_model(faction: int) -> void:
-	var path: String = BLUE_GLB if faction == 0 else RED_GLB
 	if _model != null and is_instance_valid(_model):
 		_model.queue_free()
-	var packed: PackedScene = load(path) as PackedScene
+	var packed: PackedScene = load(FORT_GLB) as PackedScene
 	if packed == null:
-		push_warning("Fortress3D: failed to load " + path)
+		push_warning("Fortress3D: failed to load " + FORT_GLB)
 		return
 	_model = packed.instantiate()
 	_model.name = "Model"
 	_model.scale = FORT_SCALE
+	# Faction 0 sits on the left — flip the keep 180° so its big door faces
+	# the arena center, mirroring the right-side castle exactly.
+	if faction == 0:
+		_model.rotation.y = PI
 	add_child(_model)
 	# Show only the chosen LOD tier (Meshy GLBs bake LOD0/1/2 as siblings).
 	MeshyLod.apply(_model, LOD_TIER)
+	_apply_faction_dress(faction)
+
+
+## Faction identity: soft tint over every mesh surface + a faction-colored
+## glow light at the gate, so each camp is unmistakable at a glance.
+func _apply_faction_dress(faction: int) -> void:
+	var col: Color = FACTION_BLUE if faction == 0 else FACTION_RED
+	if _model != null and is_instance_valid(_model):
+		_tint_meshes(_model, col)
+	var glow := OmniLight3D.new()
+	glow.name = "DoorGlow"
+	glow.light_color = col
+	glow.light_energy = 1.6
+	glow.omni_range = 9.0
+	glow.position = Vector3(0.0, 4.0, 0.0)
+	add_child(glow)
+
+
+func _tint_meshes(node: Node, faction_color: Color) -> void:
+	if node is MeshInstance3D:
+		var mi: MeshInstance3D = node as MeshInstance3D
+		var mesh: Mesh = mi.mesh
+		if mesh != null:
+			for surface in mesh.get_surface_count():
+				var mat: Material = mesh.surface_get_material(surface)
+				if not mat is BaseMaterial3D:
+					continue
+				var base_mat: BaseMaterial3D = mat
+				var base: Color = base_mat.albedo_color
+				var lum: float = clampf(0.299 * base.r + 0.587 * base.g + 0.114 * base.b, 0.15, 1.0)
+				var recolored := Color(
+					faction_color.r * lum * 1.6,
+					faction_color.g * lum * 1.6,
+					faction_color.b * lum * 1.6,
+					base.a
+				)
+				var tinted: BaseMaterial3D = base_mat.duplicate() as BaseMaterial3D
+				tinted.albedo_color = base.lerp(recolored, FACTION_TINT_STRENGTH)
+				mi.set_surface_override_material(surface, tinted)
+	for child in node.get_children():
+		_tint_meshes(child, faction_color)
 
 
 func _create_health_bar() -> void:

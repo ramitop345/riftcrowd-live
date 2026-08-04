@@ -11,7 +11,7 @@ const LOD_TIER: int = 3  # pooled heavily: use the aggressive ~12.5% tier
 const SIM_W: float = 1080.0
 const SIM_H: float = 1180.0
 const ARENA_W: float = 54.0
-const ARENA_H: float = 26.0
+const ARENA_H: float = 40.0
 const GROUND_Y: float = 2.5  # projectiles fly just above the units
 
 var _model: Node3D = null

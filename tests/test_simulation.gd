@@ -17,7 +17,7 @@ func _initialize() -> void:
 	_test_determinism()
 	_test_state_machine()
 	_test_combat()
-	_test_center_doctrine()
+	_test_annihilation_doctrine()
 	_test_doctrine_config()
 	_test_pooling()
 	_test_capture_dominion()
@@ -33,7 +33,7 @@ func _initialize() -> void:
 	_test_celebration_config()
 	_test_victory_event_emitted()
 	_test_roster_cap_and_viewer_join()
-	_test_elimination_victory()
+	_test_no_elimination_victory()
 	_test_timer_victory()
 	_test_battle_duration()
 	print("SIMULATION TESTS: %d passed, %d failed" % [_passed, _failed])
@@ -221,69 +221,56 @@ func _test_combat() -> void:
 	_check(int(champ_stats["active"]) <= int(champ_stats["capacity"]), "combat: active <= capacity")
 
 
-# --- (d2) Center-dominion doctrine ---
+# --- (d2) Annihilation doctrine ---
 
-func _test_center_doctrine() -> void:
-	# Siege is gated on center control: while the center is contested no
-	# fortress may take damage, no matter how weak it is.
+func _test_annihilation_doctrine() -> void:
+	# While both sides still send troops, nobody may march on a castle: no
+	# siege events and no fortress damage, no matter how weak the castles are.
 	var cfg: Dictionary = _make_config()
 	cfg["stages"] = {"opening": 60, "crisis": 60, "finalSurge": 60, "suddenDeath": 60}
-	cfg["fortressHealth"] = 30
-	cfg["dominion"] = {"ratePerSecondAtFullAdvantage": 0.0, "smoothing": 0.15}
+	cfg["fortressHealth"] = 1000
 	var w := _create_world(cfg, 21)
-	var siege_started: bool = false
-	var fortress_damaged_while_contested: bool = false
-	for batch in 120:  # 60 seconds
+	var siege_or_damage_seen: bool = false
+	for batch in 30:  # 15 seconds of two-sided battle
 		w.run_ticks(10)
 		var snap: Dictionary = w.get_snapshot()
-		var contested: bool = _both_factions_in_center(w)
 		for e: Variant in snap["events"]:
 			var ev: String = str(e)
-			if ev.begins_with("siege_started:"):
-				siege_started = true
-			if ev.begins_with("fortress_damaged:") and contested:
-				fortress_damaged_while_contested = true
-		if w.is_round_over():
-			break
-	_check(siege_started, "doctrine: siege_started emitted once a faction secures the center")
-	_check(not fortress_damaged_while_contested, "doctrine: fortress untouchable while center contested")
-	# Recall loop: with fragile fortresses the round must end by fortress
-	# destruction, and attackers get pulled back while defenders re-contest.
-	var cfg2: Dictionary = _make_config()
-	cfg2["stages"] = {"opening": 60, "crisis": 60, "finalSurge": 60, "suddenDeath": 60}
-	cfg2["fortressHealth"] = 40
-	cfg2["dominion"] = {"ratePerSecondAtFullAdvantage": 0.0, "smoothing": 0.15}
-	var w2 := _create_world(cfg2, 21)
-	var recall_seen: bool = false
+			if ev.begins_with("siege_started:") or ev.begins_with("fortress_damaged:"):
+				siege_or_damage_seen = true
+	_check(not siege_or_damage_seen, "doctrine: no siege and no fortress damage while both sides field troops")
+	_check(not bool(w._sieging[0]) and not bool(w._sieging[1]), "doctrine: both squads hold the arena")
+	# Wipe faction 0: the survivors must immediately march on the blue castle.
+	w._deployment_done[0] = true
+	w._wipe_faction(0, 1)
+	var siege_started: bool = false
 	var fortress_damaged: bool = false
-	for batch in 240:  # 120 seconds
-		w2.run_ticks(10)
-		var snap: Dictionary = w2.get_snapshot()
+	for batch in 40:  # up to 20 seconds
+		w.run_ticks(10)
+		var snap: Dictionary = w.get_snapshot()
 		for e: Variant in snap["events"]:
 			var ev: String = str(e)
-			if ev.begins_with("siege_recalled:"):
-				recall_seen = true
-			if ev.begins_with("fortress_damaged:"):
+			if ev == "siege_started:1":
+				siege_started = true
+			if ev.begins_with("fortress_damaged:0"):
 				fortress_damaged = true
-		if w2.is_round_over():
+		if fortress_damaged:
 			break
-	_check(fortress_damaged, "doctrine: fortress damaged once attackers clear the gate")
-	_check(recall_seen, "doctrine: siege_recalled emitted when new enemies contest the center")
-	_check(w2.is_round_over(), "doctrine: round ends within budget")
-	var snap_end: Dictionary = w2.get_snapshot()
-	_check(str(snap_end["victory_type"]) == "fortress", "doctrine: victory via fortress destruction")
-
-
-## True while both factions have at least one living unit inside the crown
-## capture zone (mirrors SimWorld's doctrine notion of a contested center).
-func _both_factions_in_center(w: SimWorld) -> bool:
-	var present: Array = [false, false]
-	for uid: int in w._unit_registry:
-		var u: SimUnit = w._unit_registry[uid]
-		if u.alive and u.faction_index >= 0:
-			if u.position.distance_to(w._crown) <= w._capture_radius:
-				present[u.faction_index] = true
-	return bool(present[0]) and bool(present[1])
+	_check(siege_started, "doctrine: siege_started once the last enemy character falls")
+	_check(fortress_damaged, "doctrine: fortress damaged only after the enemy side is wiped")
+	# Recall: a fresh enemy join pulls the siege force back to the arena.
+	w.run_ticks(10)  # drain in-flight events
+	_check(w.add_viewer_unit(0, "Rescue"), "doctrine: wiped side can rejoin via chat")
+	var recall_seen: bool = false
+	for batch in 10:
+		w.run_ticks(10)
+		var snap: Dictionary = w.get_snapshot()
+		for e: Variant in snap["events"]:
+			if str(e) == "siege_recalled:1":
+				recall_seen = true
+		if recall_seen:
+			break
+	_check(recall_seen, "doctrine: siege_recalled when the enemy side receives fresh troops")
 
 
 func _test_doctrine_config() -> void:
@@ -384,27 +371,28 @@ func _test_capture_dominion() -> void:
 
 func _test_fortress_victory() -> void:
 	var cfg: Dictionary = _make_config()
-	# Use very low fortress health for quick destruction. Under the
-	# center-dominion doctrine sieges are gated on center control, so the
-	# sudden_death stage is extended; fortress destruction is the ONLY victory
-	# condition, and that is exactly what this test asserts.
+	# Under the annihilation doctrine a siege only starts after the enemy side
+	# is fully wiped — whitebox the wipe, then the survivors must take the
+	# castle; fortress destruction is the ONLY victory condition asserted here.
 	cfg["fortressHealth"] = 10
+	cfg["bots"] = {"spawnIntervalSeconds": 1.0, "unitCycle": ["champion"]}
 	cfg["stages"] = {"opening": 12, "crisis": 6, "finalSurge": 6, "suddenDeath": 90}
 	var w := _create_world(cfg, 55)
-	var max_ticks: int = 20 * 115  # full stage budget + buffer
+	w.run_ticks(20 * 8)  # let both sides field several units
+	# Faction 0 loses every character and can no longer deploy.
+	w._deployment_done[0] = true
+	w._wipe_faction(0, 1)
+	var max_ticks: int = 20 * 100
 	w.run_ticks(max_ticks)
 	_check(w.is_round_over(), "fortress: round ends within budget")
 	var snap: Dictionary = w.get_snapshot()
 	var vtype: String = str(snap["victory_type"])
 	var fh: Array = snap["fortress_health"]
 	_check(vtype == "fortress", "fortress: only castle destruction wins")
-	_check(float(fh[0]) <= 0.0 or float(fh[1]) <= 0.0, "fortress: destroyed fortress has 0 health")
-	var winner: int = int(snap["winner"])
-	_check(winner >= 0 and winner <= 1, "fortress: winner is 0 or 1")
-	# A win requires the losing side fully eliminated: when a castle falls,
-	# every remaining character of that side falls with it.
+	_check(int(snap["winner"]) == 1, "fortress: the surviving side wins")
+	_check(float(fh[0]) <= 0.0, "fortress: destroyed fortress has 0 health")
 	var alive: Array = snap["alive_counts"]
-	_check(int(alive[1 - winner]) == 0, "fortress: losing side has zero characters left")
+	_check(int(alive[0]) == 0, "fortress: losing side has zero characters left")
 
 
 # --- (h) Sudden death ---
@@ -737,12 +725,17 @@ func _test_celebration_config() -> void:
 # --- (q) Victory celebration event ---
 
 func _test_victory_event_emitted() -> void:
-	# Force a fast fortress win; the victory event is what drives the celebration.
+	# Force a fast fortress win (annihilation doctrine: wipe one side, the
+	# survivors take the castle); the victory event is what drives the
+	# arena-side celebration.
 	var cfg: Dictionary = _make_config()
 	cfg["fortressHealth"] = 10
 	var w := _create_world(cfg, 55)
+	w.run_ticks(20 * 5)
+	w._deployment_done[0] = true
+	w._wipe_faction(0, 1)
 	var found_victory: bool = false
-	var max_ticks: int = 20 * 30
+	var max_ticks: int = 20 * 60
 	for i in max_ticks:
 		w.tick()
 		var snap: Dictionary = w.get_snapshot()
@@ -783,13 +776,12 @@ func _test_roster_cap_and_viewer_join() -> void:
 	_check(not w.add_viewer_unit(2, "Bad"), "roster: invalid faction rejected")
 
 
-# --- (s) Elimination victory ---
+# --- (s) No elimination victory (the battle continues after a wipe) ---
 
-func _test_elimination_victory() -> void:
-	# Deploy a normal army, then wipe faction 0 after its roster is fully
-	# deployed. After ELIMINATION_GRACE_SECONDS with zero characters left the
-	# battle must end by elimination. Fortress health is huge so castle
-	# destruction can't interfere.
+func _test_no_elimination_victory() -> void:
+	# Wiping one side does NOT end the battle — the survivors must take the
+	# castle to win. With a huge fortress the round keeps running long after
+	# the wipe instead of declaring an elimination victory.
 	var cfg: Dictionary = _make_config()
 	cfg["fortressHealth"] = 100000
 	cfg["bots"] = {"spawnIntervalSeconds": 1.0, "unitCycle": ["champion"]}
@@ -797,20 +789,16 @@ func _test_elimination_victory() -> void:
 	var w := _create_world(cfg, 31)
 	w.run_ticks(20 * 5)  # let both sides field several units
 	var snap_mid: Dictionary = w.get_snapshot()
-	_check(int((snap_mid["alive_counts"] as Array)[0]) > 1, "elimination: faction 0 has a deployed army")
+	_check(int((snap_mid["alive_counts"] as Array)[0]) > 1, "no_elimination: faction 0 has a deployed army")
 	# Full roster deployed, then every character of faction 0 falls.
 	w._deployment_done[0] = true
 	w._wipe_faction(0, 1)
-	w.run_ticks(20 * 10)  # grace period (3s) + buffer
-	_check(w.is_round_over(), "elimination: round ends within budget")
+	w.run_ticks(20 * 10)  # well beyond the old elimination grace period
+	_check(not w.is_round_over(), "no_elimination: battle continues after one side is wiped")
 	var snap: Dictionary = w.get_snapshot()
-	var vtype: String = str(snap["victory_type"])
-	var winner: int = int(snap["winner"])
-	_check(vtype == "elimination", "elimination: last-character-down wins (got '%s')" % vtype)
-	_check(winner == 1, "elimination: surviving side wins")
-	if winner == 0 or winner == 1:
-		var alive: Array = snap["alive_counts"]
-		_check(int(alive[1 - winner]) == 0, "elimination: losing side fully wiped")
+	_check(str(snap["victory_type"]) != "elimination", "no_elimination: no elimination victory type")
+	_check(bool(w._sieging[1]), "no_elimination: surviving side marches on the empty castle")
+	_check(int((snap["alive_counts"] as Array)[1]) > 0, "no_elimination: survivors still on the field")
 
 
 # --- (t) Timer victory (fewer characters left loses at time-out) ---

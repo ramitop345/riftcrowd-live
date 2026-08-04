@@ -16,8 +16,8 @@
   },
   "fortressHealth": 500,
   "centerZone": {
-    "flankMinRadius": 30.0,
-    "flankRadiusFraction": 0.8,
+    "flankMinRadius": 50.0,
+    "flankRadiusFraction": 0.95,
     "fortressShieldRadius": 160.0
   },
   "capturePressureWeights": {
@@ -35,7 +35,7 @@
       "maxHealth": 100,
       "attackDamage": 12,
       "attackIntervalSeconds": 1.0,
-      "moveSpeed": 65,
+      "moveSpeed": 46,
       "attackRange": 60,
       "retreatHealthFraction": 0.25
     },
@@ -43,7 +43,7 @@
       "maxHealth": 160,
       "attackDamage": 8,
       "attackIntervalSeconds": 1.2,
-      "moveSpeed": 50,
+      "moveSpeed": 36,
       "attackRange": 50,
       "retreatHealthFraction": 0.25
     },
@@ -51,7 +51,7 @@
       "maxHealth": 70,
       "attackDamage": 16,
       "attackIntervalSeconds": 0.8,
-      "moveSpeed": 85,
+      "moveSpeed": 55,
       "attackRange": 55,
       "retreatHealthFraction": 0.25
     },
@@ -59,7 +59,7 @@
       "maxHealth": 400,
       "attackDamage": 25,
       "attackIntervalSeconds": 1.4,
-      "moveSpeed": 55,
+      "moveSpeed": 40,
       "attackRange": 80,
       "retreatHealthFraction": 0
     },
@@ -67,7 +67,7 @@
       "maxHealth": 1200,
       "attackDamage": 30,
       "attackIntervalSeconds": 1.6,
-      "moveSpeed": 40,
+      "moveSpeed": 30,
       "attackRange": 90,
       "retreatHealthFraction": 0
     }
@@ -98,8 +98,8 @@
     "speed": 420
   },
   "camera": {
-    "masterDistance": 22.0,
-    "masterHeight": 16.0,
+    "masterDistance": 30.0,
+    "masterHeight": 20.0,
     "masterFov": 50.0,
     "focusFov": 45.0,
     "lookHeight": 1.5,
