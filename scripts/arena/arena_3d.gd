@@ -74,6 +74,10 @@ var _wing_distance: float = 24.0
 var _wing_height: float = 12.0
 var _wing_fov: float = 52.0
 var _wing_attack_z: float = -10.0
+var _arrival_zoom_interval: float = 7.0
+var _arrival_zoom_duration: float = 1.8
+var _arrival_cooldown: float = 0.0
+var _known_unit_ids: Dictionary = {}
 var _cam_time: float = 0.0
 var _heat: Array = [0.0, 0.0, 0.0]  ## [center, left wing (castle A), right wing (castle B)]
 var _active_shot: int = 0
@@ -176,6 +180,7 @@ func setup(config: Dictionary, faction_a: Dictionary, faction_b: Dictionary) -> 
 
 func _process(delta: float) -> void:
 	_cam_time += delta
+	_arrival_cooldown = maxf(_arrival_cooldown - delta, 0.0)
 	_sweep_corpses()
 	_update_shot_selection(delta)
 	# Shot targets: wide master framing the whole center arena, or wing shots.
@@ -268,6 +273,9 @@ func _wing_position(faction_being_sieged: int) -> Vector3:
 
 
 ## Feeds the director with battlefield activity from the latest snapshot.
+## Any activity near a castle (attacking, marching, defending) builds that
+## wing's heat so the director stays on sieges instead of snapping back to
+## the center the moment the last ATTACK state flickers off.
 func _director_feed(snapshot: Dictionary) -> void:
 	var units: Variant = snapshot.get("units")
 	if typeof(units) == TYPE_ARRAY:
@@ -275,15 +283,26 @@ func _director_feed(snapshot: Dictionary) -> void:
 			if typeof(entry) != TYPE_DICTIONARY:
 				continue
 			var u: Dictionary = entry
-			if str(u.get("state", "")) != "attack":
+			var state: String = str(u.get("state", ""))
+			if state == "dead" or state == "spawning":
 				continue
 			var wx: float = (float(u.get("x", 540.0)) / 1080.0) * 54.0 - 27.0
+			var weight: float = 0.4 if state == "attack" else 0.12
 			if wx < -12.0:
-				_heat[1] = float(_heat[1]) + 0.4
+				_heat[1] = float(_heat[1]) + weight
 			elif wx > 12.0:
-				_heat[2] = float(_heat[2]) + 0.4
-			else:
+				_heat[2] = float(_heat[2]) + weight
+			elif state == "attack":
 				_heat[0] = float(_heat[0]) + 0.15
+
+
+## Hard cut to a shot (bypasses hysteresis + hold). Used when a castle is
+## actively being attacked — the director must show the castle, period.
+func _force_shot(wing: int) -> void:
+	if wing < 0 or wing > 2:
+		return
+	_active_shot = wing
+	_shot_age = 0.0
 
 
 ## Shake the camera (called from battle.gd on boss ground slam etc).
@@ -356,6 +375,8 @@ func _apply_camera_config() -> void:
 	_wing_height = float(cam_cfg.get("wingHeight", 12.0))
 	_wing_fov = float(cam_cfg.get("wingFov", 52.0))
 	_wing_attack_z = float(cam_cfg.get("wingAttackZ", -10.0))
+	_arrival_zoom_interval = float(cam_cfg.get("arrivalZoomInterval", 7.0))
+	_arrival_zoom_duration = float(cam_cfg.get("arrivalZoomDuration", 1.8))
 	_reset_director_state()
 
 
@@ -368,6 +389,8 @@ func _reset_director_state() -> void:
 	_cam_look = Vector3(0, _look_height, 0)
 	_cam_fov = _master_fov
 	_focus_timer = 0.0
+	_arrival_cooldown = 0.0
+	_known_unit_ids.clear()
 
 
 ## Cinematic push-in toward a world position (major technique, boss moments).
@@ -401,6 +424,8 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		_capture_zone.call("update_visual", snapshot.get("capture_pressure", [0.0, 0.0]))
 	# Units.
 	var active_ids: Dictionary = {}
+	var new_arrival_pos := Vector3.ZERO
+	var new_arrival_count: int = 0
 	var units: Variant = snapshot.get("units")
 	if typeof(units) == TYPE_ARRAY:
 		for entry: Variant in (units as Array):
@@ -419,6 +444,19 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 				var node: Node = _acquire_unit_visual(u)
 				if node != null:
 					_unit_visuals[uid] = node
+			if not _known_unit_ids.has(uid):
+				_known_unit_ids[uid] = true
+				new_arrival_pos += Vector3(
+					(float(u.get("x", 540.0)) / 1080.0) * 54.0 - 27.0,
+					1.0,
+					-((float(u.get("y", 590.0)) / 1180.0) * 26.0 - 13.0)
+				)
+				new_arrival_count += 1
+	# Every few seconds, punch the camera in on fresh fighters dropping in so
+	# their entrance reads as an event instead of background noise.
+	if new_arrival_count > 0 and _arrival_cooldown <= 0.0:
+		_arrival_cooldown = _arrival_zoom_interval
+		focus_on(new_arrival_pos / float(new_arrival_count), _arrival_zoom_duration)
 	# Remove dead/gone unit visuals — they become corpses, not instant removals.
 	var to_remove: Array = []
 	for uid: int in _unit_visuals.keys():
@@ -462,12 +500,13 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 				if parts.size() >= 3:
 					_perform_technique_visuals(int(parts[1]), int(parts[2]))
 			elif ev_str.begins_with("siege_started:"):
-				# Attackers march on castle <1 - faction>: spike that wing's heat
-				# so the director cuts to the siege as it begins.
+				# Attackers march on castle <1 - faction>: cut to that wing
+				# immediately so the march on the castle is always shown.
 				var parts: PackedStringArray = ev_str.split(":")
 				if parts.size() >= 2:
 					var target_wing: int = 1 if int(parts[1]) == 0 else 2
 					_heat[target_wing] = float(_heat[target_wing]) + 6.0
+					_force_shot(target_wing)
 			elif ev_str.begins_with("siege_recalled:"):
 				# Attackers pulled back to the middle: let the wing cool fast.
 				var parts: PackedStringArray = ev_str.split(":")
@@ -475,10 +514,12 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 					var target_wing: int = 1 if int(parts[1]) == 0 else 2
 					_heat[target_wing] = maxf(float(_heat[target_wing]) - 4.0, 0.0)
 			elif ev_str.begins_with("fortress_damaged:"):
+				# Castle under attack: show it, no questions asked.
 				var parts: PackedStringArray = ev_str.split(":")
 				if parts.size() >= 2:
 					var wing: int = 1 + int(parts[1])
 					_heat[wing] = float(_heat[wing]) + 1.5
+					_force_shot(wing)
 			elif not _victory_emitted and ev_str.begins_with("victory:"):
 				var parts: PackedStringArray = ev_str.split(":")
 				if parts.size() >= 3:

@@ -1,11 +1,13 @@
 {
   "schemaVersion": 1,
   "tickRate": 20,
+  "battleDurationSeconds": 600,
+  "maxUnitsPerSide": 30,
   "stages": {
     "opening": 120,
-    "crisis": 60,
-    "finalSurge": 60,
-    "suddenDeath": 45
+    "crisis": 120,
+    "finalSurge": 120,
+    "suddenDeath": 240
   },
   "arena": {
     "width": 1080,
@@ -112,7 +114,9 @@
     "wingDistance": 24.0,
     "wingHeight": 12.0,
     "wingFov": 52.0,
-    "wingAttackZ": -10.0
+    "wingAttackZ": -10.0,
+    "arrivalZoomInterval": 7.0,
+    "arrivalZoomDuration": 1.8
   },
   "spaceBackdrop": {
     "enabled": true,

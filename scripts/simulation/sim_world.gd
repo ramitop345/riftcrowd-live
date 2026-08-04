@@ -33,6 +33,11 @@ const MAX_DEFENDERS: int = 3
 const DEFAULT_FLANK_MIN: float = 30.0
 const DEFAULT_FLANK_MAX_FRACTION: float = 0.8
 const DEFAULT_FORTRESS_SHIELD_RADIUS: float = 160.0
+## Max characters per side on the battlefield (bots + viewer joins combined).
+const DEFAULT_MAX_UNITS_PER_SIDE: int = 30
+## A side that has deployed all its characters and has none left on the field
+## loses after this grace period (gives viewers a moment to type red/blue).
+const ELIMINATION_GRACE_SECONDS: float = 3.0
 
 ## Stage names used in snapshots and events.
 const STAGE_OPENING: String = "opening"
@@ -90,6 +95,11 @@ var _dead_pending: Array = []        # SimUnit refs awaiting pool release
 var _enemy_in_center: Array = [false, false]  ## per faction: enemy present in center zone
 var _sieging: Array = [false, false]          ## per faction: objective is the enemy fortress
 
+# Roster bookkeeping (max per side + viewer joins + elimination tracking).
+var _max_units_per_side: int = DEFAULT_MAX_UNITS_PER_SIDE
+var _deployment_done: Array = [false, false]  ## per faction: full roster deployed
+var _wipe_elapsed: Array = [0.0, 0.0]         ## per faction: time spent at zero living units
+
 # Cached config values
 var _tick_rate: int = 20
 var _stage_durations: Dictionary = {}
@@ -125,9 +135,16 @@ func _init_world(config: Dictionary, seed_value: int, faction_a: Dictionary, fac
 		STAGE_FINAL_SURGE: float(stages.get("finalSurge", 60)),
 		STAGE_SUDDEN_DEATH: float(stages.get("suddenDeath", 45)),
 	}
+	# General battle timer: when configured, sudden death is stretched so the
+	# whole battle lasts exactly battleDurationSeconds (e.g. 600 = 10 minutes).
+	var battle_duration: float = float(config.get("battleDurationSeconds", 0.0))
+	if battle_duration > 0.0:
+		var pre_sudden: float = _stage_durations[STAGE_OPENING] + _stage_durations[STAGE_CRISIS] + _stage_durations[STAGE_FINAL_SURGE]
+		_stage_durations[STAGE_SUDDEN_DEATH] = maxf(battle_duration - pre_sudden, 15.0)
 	_total_time = 0.0
 	for key in _stage_durations:
 		_total_time += _stage_durations[key]
+	_max_units_per_side = maxi(int(config.get("maxUnitsPerSide", DEFAULT_MAX_UNITS_PER_SIDE)), 1)
 	var arena: Dictionary = config.get("arena", {})
 	_capture_radius = float(arena.get("captureZoneRadius", 170))
 	_fortress_positions = [Vector2(120, 590), Vector2(960, 590)]
@@ -171,6 +188,8 @@ func _init_world(config: Dictionary, seed_value: int, faction_a: Dictionary, fac
 	_unit_registry.clear()
 	_enemy_in_center = [false, false]
 	_sieging = [false, false]
+	_deployment_done = [false, false]
+	_wipe_elapsed = [0.0, 0.0]
 	# Spawn captains
 	_spawn_captain(0)
 	_spawn_captain(1)
@@ -189,6 +208,7 @@ func tick() -> void:
 	_tick_units()
 	_tick_projectiles()
 	_resolve_cleanup()
+	_track_elimination()
 	_calculate_dominion()
 	_check_victory()
 
@@ -223,6 +243,9 @@ func get_snapshot() -> Dictionary:
 	return {
 		"tick": _tick, "elapsed": _elapsed, "stage": _stage,
 		"stage_time_left": stage_tl,
+		"battle_time_left": maxf(_total_time - _elapsed, 0.0),
+		"alive_counts": [_count_alive(0), _count_alive(1)],
+		"max_units_per_side": _max_units_per_side,
 		"dominion": [_dominion_display[0], _dominion_display[1]],
 		"fortress_health": [_fortress_health[0], _fortress_health[1]],
 		"capture_pressure": _compute_pressure(),
@@ -267,6 +290,8 @@ func reset(seed_value: int) -> void:
 	_unit_registry.clear()
 	_enemy_in_center = [false, false]
 	_sieging = [false, false]
+	_deployment_done = [false, false]
+	_wipe_elapsed = [0.0, 0.0]
 	_spawn_captain(0)
 	_spawn_captain(1)
 
@@ -421,26 +446,77 @@ func _spawn_bots() -> void:
 		_spawn_timers[faction] += _dt
 		if _spawn_timers[faction] >= interval:
 			_spawn_timers[faction] -= interval
+			# Roster cap: once a side has fielded maxUnitsPerSide characters
+			# its deployment is done — no respawns, further characters only
+			# arrive via viewer joins (red/blue in chat).
+			if bool(_deployment_done[faction]):
+				continue
+			if _count_alive(faction) >= _max_units_per_side:
+				_deployment_done[faction] = true
+				continue
 			var cycle: Array = bots_cfg.get("unitCycle", ["champion", "guardian", "striker"])
 			if cycle.is_empty():
 				continue
 			var idx: int = _spawn_cycles[faction] % cycle.size()
 			var utype: String = cycle[idx]
 			_spawn_cycles[faction] += 1
-			_spawn_bot(faction, utype)
+			var spawned: SimUnit = _spawn_bot(faction, utype)
+			if spawned != null and _count_alive(faction) >= _max_units_per_side:
+				_deployment_done[faction] = true
 
 
-func _spawn_bot(faction: int, utype: String) -> void:
+func _spawn_bot(faction: int, utype: String) -> SimUnit:
 	var pool := _get_pool(utype)
 	if pool == null:
-		return
+		return null
 	var u: SimUnit = pool.acquire()
 	if u == null:
-		return  # Pool exhausted, skip spawn
+		return null  # Pool exhausted, skip spawn
 	_configure_unit(u, utype, faction)
 	var letters: Array = ["A", "B"]
 	_spawn_counts[faction] += 1
 	u.display_name = "Bot_%s_%d" % [letters[faction], _spawn_counts[faction]]
+	return u
+
+
+## Viewer join: a chat user typed red/blue mid-battle to add one character to
+## that side. Respects the maxUnitsPerSide cap. Emits a unit_joined event so
+## the arena/HUD can show the "X joined the BLUE army" banner.
+func add_viewer_unit(faction: int, viewer_name: String = "") -> bool:
+	if _round_over or faction < 0 or faction > 1:
+		return false
+	if _count_alive(faction) >= _max_units_per_side:
+		return false
+	var bots_cfg: Dictionary = _config.get("bots", {})
+	var cycle: Array = bots_cfg.get("unitCycle", ["champion", "guardian", "striker"])
+	if cycle.is_empty():
+		return false
+	var idx: int = _spawn_cycles[faction] % cycle.size()
+	var utype: String = str(cycle[idx])
+	_spawn_cycles[faction] += 1
+	var u: SimUnit = _spawn_bot(faction, utype)
+	if u == null:
+		return false
+	var clean_name: String = viewer_name.replace(":", " ").strip_edges().left(24)
+	if clean_name.is_empty():
+		clean_name = u.display_name
+	else:
+		u.display_name = clean_name
+	# A fresh join revives a wiped side — reset the elimination timer. (The
+	# deployment stays done: no bot respawns, only chat joins add characters.)
+	_wipe_elapsed[faction] = 0.0
+	_events.append("unit_joined:%d:%s" % [faction, clean_name])
+	return true
+
+
+## Living units of one faction (captains included, boss excluded).
+func _count_alive(faction: int) -> int:
+	var count: int = 0
+	for pool in [_champion_pool, _guardian_pool, _striker_pool, _captain_pool]:
+		for u: SimUnit in pool.active_units():
+			if u.alive and u.faction_index == faction:
+				count += 1
+	return count
 
 
 func _spawn_captain(faction: int) -> void:
@@ -983,24 +1059,64 @@ func _should_defend(u: SimUnit) -> bool:
 	return true
 
 
+## Tracks sides that have deployed their full roster and lost every character.
+## A wipe only becomes a defeat after ELIMINATION_GRACE_SECONDS so viewers can
+## still rescue their side by typing red/blue.
+func _track_elimination() -> void:
+	for faction in 2:
+		if bool(_deployment_done[faction]) and _count_alive(faction) == 0:
+			_wipe_elapsed[faction] = float(_wipe_elapsed[faction]) + _dt
+		else:
+			_wipe_elapsed[faction] = 0.0
+
+
 func _check_victory() -> void:
-	# A battle can only be won by destroying the enemy castle. Dominion is a
-	# measure of center control (it gates the siege) but never wins on its own.
+	# A battle can only be won by destroying the enemy castle. When a castle
+	# falls, every remaining character of that side falls with it — a win
+	# always leaves the losing side with zero characters on the field.
 	if _fortress_health[0] <= 0.0:
+		_wipe_faction(0, 1)
 		_end_round(1, "fortress")
 		return
 	if _fortress_health[1] <= 0.0:
+		_wipe_faction(1, 0)
 		_end_round(0, "fortress")
+		return
+	# Full elimination (roster deployed, no one left after the grace period).
+	if float(_wipe_elapsed[0]) >= ELIMINATION_GRACE_SECONDS:
+		_end_round(1, "elimination")
+		return
+	if float(_wipe_elapsed[1]) >= ELIMINATION_GRACE_SECONDS:
+		_end_round(0, "elimination")
 		return
 
 
+## Every living unit of `faction` dies with its castle. Killer attribution
+## goes to the attacking side so kill bookkeeping stays consistent.
+func _wipe_faction(faction: int, killer: int) -> void:
+	for pool in [_champion_pool, _guardian_pool, _striker_pool, _captain_pool]:
+		for u: SimUnit in pool.active_units():
+			if u.alive and u.faction_index == faction:
+				_kill_unit(u, killer)
+
+
 func _resolve_sudden_death() -> void:
-	# Only castle destruction wins; reaching the end of sudden death with both
-	# keeps standing means neither side broke through the enemy defenses.
+	# Battle timer expired. Castle destruction still wins outright; otherwise
+	# the side with FEWER characters left on the battlefield loses.
 	if _fortress_health[0] <= 0.0:
+		_wipe_faction(0, 1)
 		_end_round(1, "fortress")
-	elif _fortress_health[1] <= 0.0:
+		return
+	if _fortress_health[1] <= 0.0:
+		_wipe_faction(1, 0)
 		_end_round(0, "fortress")
+		return
+	var alive_a: int = _count_alive(0)
+	var alive_b: int = _count_alive(1)
+	if alive_a > alive_b:
+		_end_round(0, "timer")
+	elif alive_b > alive_a:
+		_end_round(1, "timer")
 	else:
 		_end_round(2, "draw")
 

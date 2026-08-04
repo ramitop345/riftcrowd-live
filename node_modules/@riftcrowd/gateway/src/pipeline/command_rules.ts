@@ -72,6 +72,9 @@ const MODE_VOTE_KEYWORDS = new Set([
 const SYNTHETIC_FACTION_KEYWORDS = new Map<string, string>([
   ['faction_alpha', 'faction_alpha'],
   ['faction_beta', 'faction_beta'],
+  // Color keywords so viewers can join either side mid-battle.
+  ['blue', 'blue'],
+  ['red', 'red'],
 ]);
 
 // ---------------------------------------------------------------------------

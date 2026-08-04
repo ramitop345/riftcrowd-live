@@ -7,7 +7,9 @@ const Ui := preload("res://scripts/ui/ui_config.gd")
 const GC := preload("res://scripts/simulation/gameplay_config.gd")
 const ARENA_SCENE_PATH: String = "res://scenes/Arena3D.tscn"
 const INITIAL_PRE_TICKS: int = 100
-const RESULTS_DELAY: float = 3.0
+## After a battle ends: winner banner + stars, then this long before the next battle.
+const NEXT_BATTLE_COUNTDOWN: float = 10.0
+const MAX_STARS: int = 26
 
 @onready var _safe_area: MarginContainer = $SafeArea
 @onready var _mode_label: Label = $SafeArea/Layout/HUDRegion/HUDLayout/ModeLabel
@@ -40,6 +42,13 @@ var _faction_a: Dictionary = {}
 var _faction_b: Dictionary = {}
 var _results_timer: float = -1.0
 var _max_fortress_health: float = 500.0
+
+## Top banner announcing every new character added by viewers (red/blue chat).
+var _banner_label: Label = null
+var _banner_tween: Tween = null
+## End-of-battle presentation: winner banner + countdown to the next battle.
+var _victory_label: Label = null
+var _victory_color: Color = Color(1.0, 0.84, 0.0)
 
 ## Alternates technique factions for commands with an unknown factionId (mock mode).
 var _next_technique_faction: int = 0
@@ -137,6 +146,7 @@ func _ready() -> void:
 	_mode_label.text = "Autonomous Arena — %s" % pack_name if not pack_name.is_empty() else "Autonomous Arena"
 	# Initial HUD update.
 	_update_hud(_presenter.sandbox.world.get_snapshot() if _presenter.sandbox != null and _presenter.sandbox.world != null else {})
+	_create_banner_labels()
 	_speed1_btn.grab_focus()
 
 	# --- Tier 3: Programmatic orchestrator instantiation ---
@@ -151,8 +161,13 @@ func _process(delta: float) -> void:
 		return
 	if _results_timer > 0.0:
 		_results_timer -= delta
+		if _victory_label != null:
+			var secs_left: int = maxi(ceili(_results_timer), 0)
+			_victory_label.text = _victory_label.get_meta("headline", "Victory!") + "\nNext battle in %d..." % secs_left
 		if _results_timer <= 0.0:
-			# Auto-restart the round for continuous viewing.
+			# Countdown done — start the next battle.
+			if _victory_label != null:
+				_victory_label.modulate.a = 0.0
 			_on_restart_pressed()
 		return
 	var snapshot: Dictionary = _presenter.present(delta)
@@ -178,12 +193,18 @@ func _process(delta: float) -> void:
 func _update_hud(snapshot: Dictionary) -> void:
 	if snapshot.is_empty():
 		return
-	# Timer.
-	var elapsed: float = float(snapshot.get("elapsed", 0.0))
+	# Timer: the general battle countdown (10 minutes) plus the current stage.
 	var stage: String = str(snapshot.get("stage", "opening"))
-	var mins: int = int(elapsed) / 60
-	var secs: int = int(elapsed) % 60
-	_timer_label.text = "Round: %s  %d:%02d" % [stage, mins, secs]
+	var time_left: float = float(snapshot.get("battle_time_left", 0.0))
+	if time_left > 0.0:
+		var mins: int = int(time_left) / 60
+		var secs: int = int(time_left) % 60
+		_timer_label.text = "Battle ends in %d:%02d  [%s]" % [mins, secs, stage]
+	else:
+		var elapsed: float = float(snapshot.get("elapsed", 0.0))
+		var mins2: int = int(elapsed) / 60
+		var secs2: int = int(elapsed) % 60
+		_timer_label.text = "Round: %s  %d:%02d" % [stage, mins2, secs2]
 	# Dominion.
 	var dom: Variant = snapshot.get("dominion")
 	if typeof(dom) == TYPE_ARRAY and (dom as Array).size() >= 2:
@@ -195,29 +216,29 @@ func _update_hud(snapshot: Dictionary) -> void:
 			_dominion_bar_a.offset_right = bar_total * (dom_a / 100.0)
 			_dominion_bar_b.offset_left = -bar_total * (dom_b / 100.0)
 			_dominion_bar_b.offset_right = 0.0
-	# Faction health.
-	var fh: Variant = snapshot.get("fortress_health")
-	if typeof(fh) == TYPE_ARRAY and (fh as Array).size() >= 2:
-		var fh_arr: Array = fh
-		var hp_a: float = float(fh_arr[0])
-		var hp_b: float = float(fh_arr[1])
+	# Top bars: characters still alive on the battlefield per side.
+	var alive: Variant = snapshot.get("alive_counts")
+	if typeof(alive) == TYPE_ARRAY and (alive as Array).size() >= 2:
+		var alive_arr: Array = alive
+		var max_per_side: float = maxf(float(snapshot.get("max_units_per_side", 30)), 1.0)
 		var bar_w_a: float = _bar_bga.size.x
 		var bar_w_b: float = _bar_bgb.size.x
 		if bar_w_a > 0.0:
-			_bar_fill_a.offset_right = bar_w_a * clampf(hp_a / maxf(_max_fortress_health, 1.0), 0.0, 1.0)
+			_bar_fill_a.offset_right = bar_w_a * clampf(float(alive_arr[0]) / max_per_side, 0.0, 1.0)
 		if bar_w_b > 0.0:
-			_bar_fill_b.offset_right = bar_w_b * clampf(hp_b / maxf(_max_fortress_health, 1.0), 0.0, 1.0)
-	# Capture pressure.
-	var cp: Variant = snapshot.get("capture_pressure")
-	if typeof(cp) == TYPE_ARRAY and (cp as Array).size() >= 2:
-		var cp_arr: Array = cp
-		_pressure_label_a.text = "%.1f" % float(cp_arr[0])
-		_pressure_label_b.text = "%.1f" % float(cp_arr[1])
-	# Event spotlight.
+			_bar_fill_b.offset_right = bar_w_b * clampf(float(alive_arr[1]) / max_per_side, 0.0, 1.0)
+		_pressure_label_a.text = "%d/%d" % [int(alive_arr[0]), int(max_per_side)]
+		_pressure_label_b.text = "%d/%d" % [int(alive_arr[1]), int(max_per_side)]
+	# Event spotlight + viewer-join banners.
 	var events: Variant = snapshot.get("events")
 	if typeof(events) == TYPE_ARRAY and not (events as Array).is_empty():
-		var last_ev: String = str((events as Array).back())
-		_spotlight_label.text = last_ev
+		for ev: Variant in (events as Array):
+			var ev_str: String = str(ev)
+			if ev_str.begins_with("unit_joined:"):
+				var parts: PackedStringArray = ev_str.split(":", true, 2)
+				if parts.size() >= 3:
+					_show_join_banner(parts[2], int(parts[1]))
+		_spotlight_label.text = str((events as Array).back())
 
 
 func _resolve_factions() -> Array:
@@ -269,8 +290,22 @@ func _on_round_completed(snapshot: Dictionary) -> void:
 		winner_name = str(_faction_a.get("displayName", "A"))
 	elif winner == 1:
 		winner_name = str(_faction_b.get("displayName", "B"))
-	_spotlight_label.text = "Victory: %s (%s) — restarting..." % [winner_name, vtype]
-	# Celebratory gold bursts across the arena to punctuate the win.
+	_spotlight_label.text = "Victory: %s (%s) — next battle soon..." % [winner_name, vtype]
+	# Winner banner + a rain of stars in the winning faction's color.
+	if winner == 0:
+		_victory_color = Color(0.35, 0.6, 1.0)
+	elif winner == 1:
+		_victory_color = Color(1.0, 0.4, 0.3)
+	else:
+		_victory_color = Color(1.0, 0.84, 0.0)
+	if _victory_label != null:
+		var headline: String = "DRAW!" if winner < 0 else "%s WINS THE BATTLE!" % winner_name.to_upper()
+		_victory_label.set_meta("headline", headline)
+		_victory_label.text = headline + "\nNext battle in %d..." % int(NEXT_BATTLE_COUNTDOWN)
+		_victory_label.add_theme_color_override("font_color", _victory_color)
+		_victory_label.modulate.a = 1.0
+	_spawn_victory_stars(_victory_color)
+	# Celebratory bursts across the arena to punctuate the win.
 	if _vfx_pool != null:
 		var burst_color: String = "#ffd700"
 		if winner == 0:
@@ -285,8 +320,87 @@ func _on_round_completed(snapshot: Dictionary) -> void:
 				"duration": 2.0,
 			}
 			_vfx_pool.acquire("particle", params)
-	# Auto-restart after a brief delay so the battle loops continuously.
-	_results_timer = RESULTS_DELAY
+	# Winner presentation runs for NEXT_BATTLE_COUNTDOWN seconds, then the
+	# next battle starts automatically.
+	_results_timer = NEXT_BATTLE_COUNTDOWN
+
+
+## Creates the top banner (viewer joins) and center victory label once.
+func _create_banner_labels() -> void:
+	_banner_label = Label.new()
+	_banner_label.name = "JoinBanner"
+	_banner_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_banner_label.add_theme_font_size_override("font_size", 34)
+	_banner_label.add_theme_color_override("font_color", Color.WHITE)
+	_banner_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
+	_banner_label.add_theme_constant_override("shadow_offset_y", 2)
+	_banner_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_banner_label.position = Vector2(-300, 210)
+	_banner_label.size = Vector2(600, 60)
+	_banner_label.modulate.a = 0.0
+	_banner_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_banner_label)
+	_victory_label = Label.new()
+	_victory_label.name = "VictoryBanner"
+	_victory_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_victory_label.add_theme_font_size_override("font_size", 56)
+	_victory_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
+	_victory_label.add_theme_constant_override("shadow_offset_y", 3)
+	_victory_label.set_anchors_preset(Control.PRESET_CENTER)
+	_victory_label.position = Vector2(-500, -80)
+	_victory_label.size = Vector2(1000, 160)
+	_victory_label.modulate.a = 0.0
+	_victory_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_victory_label)
+
+
+## Slides the join banner in from the top for ~2.5 s. Called for every new
+## character added to the battlefield by a viewer.
+func _show_join_banner(viewer_name: String, faction: int) -> void:
+	if _banner_label == null:
+		return
+	var side_name: String = "BLUE" if faction == 0 else "RED"
+	var col: Color = Color(0.45, 0.7, 1.0) if faction == 0 else Color(1.0, 0.5, 0.4)
+	_banner_label.text = "%s joined the %s army!" % [viewer_name, side_name]
+	_banner_label.add_theme_color_override("font_color", col)
+	if _banner_tween != null and _banner_tween.is_valid():
+		_banner_tween.kill()
+	_banner_label.modulate.a = 0.0
+	_banner_label.position.y = 150.0
+	_banner_tween = create_tween()
+	_banner_tween.tween_property(_banner_label, "position:y", 210.0, 0.25)
+	_banner_tween.parallel().tween_property(_banner_label, "modulate:a", 1.0, 0.25)
+	_banner_tween.tween_interval(2.0)
+	_banner_tween.tween_property(_banner_label, "modulate:a", 0.0, 0.4)
+
+
+## Raining stars in the winner's color across the whole screen.
+func _spawn_victory_stars(col: Color) -> void:
+	var view_w: float = size.x if size.x > 10.0 else 1080.0
+	var view_h: float = size.y if size.y > 10.0 else 1920.0
+	for i in MAX_STARS:
+		var star := Polygon2D.new()
+		var radius: float = randf_range(10.0, 26.0)
+		star.polygon = _star_points(radius)
+		star.color = col.lerp(Color(1.0, 0.95, 0.6), randf_range(0.0, 0.5))
+		star.position = Vector2(randf_range(0.0, view_w), randf_range(-view_h * 0.5, -20.0))
+		add_child(star)
+		var fall_time: float = randf_range(1.8, 3.6)
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(star, "position:y", view_h + 40.0, fall_time)
+		tw.tween_property(star, "rotation", randf_range(-TAU, TAU), fall_time)
+		tw.chain().tween_callback(star.queue_free)
+
+
+## 5-point star polygon for the victory celebration.
+func _star_points(radius: float) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	for i in 10:
+		var angle: float = float(i) * TAU / 10.0 - PI / 2.0
+		var r: float = radius if i % 2 == 0 else radius * 0.45
+		pts.append(Vector2(cos(angle), sin(angle)) * r)
+	return pts
 
 
 # ===========================================================================
@@ -480,11 +594,29 @@ func _on_gift_apply(cmd: Dictionary) -> void:
 
 func _on_faction_join(cmd: Dictionary) -> void:
 	var viewer: String = str(cmd.get("displayName", cmd.get("viewerId", "Viewer")))
-	var faction: String = str(cmd.get("metadata", {}).get("faction", "unknown"))
-	_spotlight_label.text = "%s joined %s!" % [viewer, faction]
+	var metadata: Dictionary = cmd.get("metadata", {}) if typeof(cmd.get("metadata", {})) == TYPE_DICTIONARY else {}
+	var token: String = str(metadata.get("faction", str(cmd.get("factionId", "")))).to_lower()
+	# Resolve the requested side: blue = faction A (index 0), red = faction B (index 1).
+	var faction_index: int = -1
+	var id_a: String = str(_faction_a.get("id", "")).to_lower()
+	var id_b: String = str(_faction_b.get("id", "")).to_lower()
+	if token in ["blue", "faction_alpha"] or (not id_a.is_empty() and token == id_a):
+		faction_index = 0
+	elif token in ["red", "faction_beta"] or (not id_b.is_empty() and token == id_b):
+		faction_index = 1
+	else:
+		# Unknown keyword (mock mode) — alternate between sides.
+		faction_index = _next_technique_faction
+		_next_technique_faction = 1 - _next_technique_faction
+	_spotlight_label.text = "%s joined the %s army!" % [viewer, "BLUE" if faction_index == 0 else "RED"]
+	# Spawn the viewer's fighter into the deterministic world (capped per side).
+	if _presenter != null and _presenter.sandbox != null and _presenter.sandbox.world != null:
+		var added: bool = _presenter.sandbox.world.add_viewer_unit(faction_index, viewer)
+		if not added:
+			_show_full_banner(faction_index)
 	# Spawn a faction-colored VFX burst.
 	if _vfx_pool != null:
-		var color: String = "#4488ff" if faction.to_lower().contains("alpha") or faction.to_lower().contains("a") else "#ff4444"
+		var color: String = "#4488ff" if faction_index == 0 else "#ff4444"
 		var params: Dictionary = {
 			"x": randf_range(200.0, 880.0),
 			"y": randf_range(300.0, 900.0),
@@ -492,6 +624,24 @@ func _on_faction_join(cmd: Dictionary) -> void:
 			"duration": 1.0,
 		}
 		_vfx_pool.acquire("particle", params)
+
+
+## Banner when a join request is rejected because the side is at max capacity.
+func _show_full_banner(faction: int) -> void:
+	if _banner_label == null:
+		return
+	var side_name: String = "BLUE" if faction == 0 else "RED"
+	_banner_label.text = "The %s army is full (30 fighters max)!" % side_name
+	_banner_label.add_theme_color_override("font_color", Color(0.9, 0.85, 0.6))
+	if _banner_tween != null and _banner_tween.is_valid():
+		_banner_tween.kill()
+	_banner_label.modulate.a = 0.0
+	_banner_label.position.y = 150.0
+	_banner_tween = create_tween()
+	_banner_tween.tween_property(_banner_label, "position:y", 210.0, 0.25)
+	_banner_tween.parallel().tween_property(_banner_label, "modulate:a", 1.0, 0.25)
+	_banner_tween.tween_interval(2.0)
+	_banner_tween.tween_property(_banner_label, "modulate:a", 0.0, 0.4)
 
 
 func _on_display_spotlight(cmd: Dictionary) -> void:

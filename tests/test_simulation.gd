@@ -32,6 +32,10 @@ func _initialize() -> void:
 	_test_technique_determinism()
 	_test_celebration_config()
 	_test_victory_event_emitted()
+	_test_roster_cap_and_viewer_join()
+	_test_elimination_victory()
+	_test_timer_victory()
+	_test_battle_duration()
 	print("SIMULATION TESTS: %d passed, %d failed" % [_passed, _failed])
 	quit(0 if _failed == 0 else 1)
 
@@ -395,7 +399,12 @@ func _test_fortress_victory() -> void:
 	var fh: Array = snap["fortress_health"]
 	_check(vtype == "fortress", "fortress: only castle destruction wins")
 	_check(float(fh[0]) <= 0.0 or float(fh[1]) <= 0.0, "fortress: destroyed fortress has 0 health")
-	_check(int(snap["winner"]) >= 0 and int(snap["winner"]) <= 1, "fortress: winner is 0 or 1")
+	var winner: int = int(snap["winner"])
+	_check(winner >= 0 and winner <= 1, "fortress: winner is 0 or 1")
+	# A win requires the losing side fully eliminated: when a castle falls,
+	# every remaining character of that side falls with it.
+	var alive: Array = snap["alive_counts"]
+	_check(int(alive[1 - winner]) == 0, "fortress: losing side has zero characters left")
 
 
 # --- (h) Sudden death ---
@@ -423,8 +432,9 @@ func _test_sudden_death() -> void:
 	w2.run_ticks(20 * 10)  # 10 seconds
 	_check(w2.is_round_over(), "sudden_death: draw round ends")
 	var snap2: Dictionary = w2.get_snapshot()
-	# With 0 rate, dominion stays 0 for both; fortress health equal -> draw
-	_check(int(snap2["winner"]) == 2, "sudden_death: forced tie results in draw")
+	# Symmetric armies (1 captain each, nobody died) -> timer expires -> draw
+	_check(int(snap2["winner"]) == 2, "sudden_death: equal armies result in draw")
+	_check(str(snap2["victory_type"]) == "draw", "sudden_death: draw victory type")
 
 
 # --- (i) Full-round acceptance ---
@@ -477,6 +487,7 @@ func _test_snapshot_shape() -> void:
 		"tick", "elapsed", "stage", "stage_time_left", "dominion",
 		"fortress_health", "capture_pressure", "winner", "victory_type",
 		"units", "projectiles", "events", "pool_stats",
+		"battle_time_left", "alive_counts", "max_units_per_side",
 	]
 	for key: String in required_keys:
 		_check(snap.has(key), "snapshot: has key '%s'" % key)
@@ -742,6 +753,98 @@ func _test_victory_event_emitted() -> void:
 			break
 	_check(w.is_round_over(), "victory: round ends within budget")
 	_check(found_victory, "victory: victory:<winner>:<type> event emitted (drives celebration)")
+
+
+# --- (r) Roster cap + viewer joins (red/blue mid-battle) ---
+
+func _test_roster_cap_and_viewer_join() -> void:
+	var cfg: Dictionary = _make_config()
+	cfg["maxUnitsPerSide"] = 3
+	cfg["bots"] = {"spawnIntervalSeconds": 0.1, "unitCycle": ["champion"]}
+	cfg["stages"] = {"opening": 30, "crisis": 30, "finalSurge": 30, "suddenDeath": 30}
+	var w := _create_world(cfg, 101)
+	# Viewer join before the cap is hit succeeds and emits unit_joined.
+	_check(w.add_viewer_unit(0, "Viewer:One"), "roster: viewer join accepted below cap")
+	var snap_join: Dictionary = w.get_snapshot()
+	_check(_events_contain(snap_join, "unit_joined:0:Viewer One"), "roster: unit_joined event emitted with sanitized name")
+	_check(not _events_contain(snap_join, "unit_joined:0:Viewer:One"), "roster: ':' stripped from viewer name")
+	# Run long enough that bots would far exceed the cap without enforcement.
+	w.run_ticks(20 * 20)
+	var snap: Dictionary = w.get_snapshot()
+	var alive: Array = snap["alive_counts"]
+	_check(int(alive[0]) <= 3, "roster: faction 0 never exceeds maxUnitsPerSide")
+	_check(int(alive[1]) <= 3, "roster: faction 1 never exceeds maxUnitsPerSide")
+	_check(int(snap["max_units_per_side"]) == 3, "roster: snapshot reports the cap")
+	# Join at capacity is rejected.
+	while w.add_viewer_unit(1, "Filler"):
+		pass
+	_check(not w.add_viewer_unit(1, "Overflow"), "roster: join rejected at cap")
+	# Invalid faction index rejected.
+	_check(not w.add_viewer_unit(2, "Bad"), "roster: invalid faction rejected")
+
+
+# --- (s) Elimination victory ---
+
+func _test_elimination_victory() -> void:
+	# Deploy a normal army, then wipe faction 0 after its roster is fully
+	# deployed. After ELIMINATION_GRACE_SECONDS with zero characters left the
+	# battle must end by elimination. Fortress health is huge so castle
+	# destruction can't interfere.
+	var cfg: Dictionary = _make_config()
+	cfg["fortressHealth"] = 100000
+	cfg["bots"] = {"spawnIntervalSeconds": 1.0, "unitCycle": ["champion"]}
+	cfg["stages"] = {"opening": 20, "crisis": 20, "finalSurge": 20, "suddenDeath": 60}
+	var w := _create_world(cfg, 31)
+	w.run_ticks(20 * 5)  # let both sides field several units
+	var snap_mid: Dictionary = w.get_snapshot()
+	_check(int((snap_mid["alive_counts"] as Array)[0]) > 1, "elimination: faction 0 has a deployed army")
+	# Full roster deployed, then every character of faction 0 falls.
+	w._deployment_done[0] = true
+	w._wipe_faction(0, 1)
+	w.run_ticks(20 * 10)  # grace period (3s) + buffer
+	_check(w.is_round_over(), "elimination: round ends within budget")
+	var snap: Dictionary = w.get_snapshot()
+	var vtype: String = str(snap["victory_type"])
+	var winner: int = int(snap["winner"])
+	_check(vtype == "elimination", "elimination: last-character-down wins (got '%s')" % vtype)
+	_check(winner == 1, "elimination: surviving side wins")
+	if winner == 0 or winner == 1:
+		var alive: Array = snap["alive_counts"]
+		_check(int(alive[1 - winner]) == 0, "elimination: losing side fully wiped")
+
+
+# --- (t) Timer victory (fewer characters left loses at time-out) ---
+
+func _test_timer_victory() -> void:
+	var cfg: Dictionary = _make_config()
+	cfg["stages"] = {"opening": 1, "crisis": 1, "finalSurge": 1, "suddenDeath": 1}
+	cfg["fortressHealth"] = 100000
+	cfg["bots"] = {"spawnIntervalSeconds": 999.0, "unitCycle": ["champion"]}
+	var w := _create_world(cfg, 61)
+	# Give faction 0 one extra character; captains can't reach each other in
+	# 4 seconds, so the timer decides the battle by alive counts.
+	_check(w.add_viewer_unit(0, "ExtraFighter"), "timer: extra fighter added to faction 0")
+	w.run_ticks(20 * 8)
+	_check(w.is_round_over(), "timer: round ends at battle timer")
+	var snap: Dictionary = w.get_snapshot()
+	_check(int(snap["winner"]) == 0, "timer: side with more characters wins")
+	_check(str(snap["victory_type"]) == "timer", "timer: victory type is 'timer'")
+
+
+# --- (u) General battle timer (battleDurationSeconds) ---
+
+func _test_battle_duration() -> void:
+	var cfg: Dictionary = _make_config()
+	# Stages sum to 30s; battleDurationSeconds stretches sudden death so the
+	# whole battle lasts 60s.
+	cfg["battleDurationSeconds"] = 60
+	var w := _create_world(cfg, 11)
+	var snap0: Dictionary = w.get_snapshot()
+	_check(absf(float(snap0["battle_time_left"]) - 60.0) < 0.01, "duration: battle starts with full 60s")
+	w.run_ticks(20 * 10)  # 10 seconds
+	var snap1: Dictionary = w.get_snapshot()
+	_check(absf(float(snap1["battle_time_left"]) - 50.0) < 0.2, "duration: countdown tracks elapsed time")
+	_check(not w.is_round_over(), "duration: battle still running before timer end")
 
 
 func _total_health(w: SimWorld, faction: int) -> float:

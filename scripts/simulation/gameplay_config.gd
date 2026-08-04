@@ -18,7 +18,8 @@ const UNIT_STAT_KEYS: PackedStringArray = [
 	"moveSpeed", "attackRange", "retreatHealthFraction",
 ]
 const TOP_LEVEL_KEYS: PackedStringArray = [
-	"schemaVersion", "tickRate", "stages", "arena", "fortressHealth",
+	"schemaVersion", "tickRate", "battleDurationSeconds", "maxUnitsPerSide",
+	"stages", "arena", "fortressHealth",
 	"centerZone", "capturePressureWeights", "dominion", "unitStats", "pools",
 	"bots", "finalSurge", "suddenDeath", "crisis", "projectile",
 	"camera", "spaceBackdrop", "technique", "celebration",
@@ -37,6 +38,7 @@ const CAMERA_KEYS: PackedStringArray = [
 	"driftAmplitude", "driftSpeed", "breathingAmplitude", "smoothingHalfLife", "lookHalfLife",
 	"heatDecayPerSecond", "switchHysteresis", "minHoldSeconds",
 	"wingDistance", "wingHeight", "wingFov", "wingAttackZ",
+	"arrivalZoomInterval", "arrivalZoomDuration",
 ]
 const SPACE_BACKDROP_KEYS: PackedStringArray = [
 	"enabled", "starCount", "seed", "shipIntervalSeconds",
@@ -74,6 +76,10 @@ static func parse(data: Variant) -> Dictionary:
 	_check_unknown_keys(cfg, TOP_LEVEL_KEYS, "", errors)
 	_check_version_literal(cfg, "schemaVersion", CONFIG_SCHEMA_VERSION, "", errors)
 	_check_positive_int(cfg, "tickRate", 1.0, 120.0, "", errors)
+	if cfg.has("battleDurationSeconds"):
+		_check_positive_number(cfg, "battleDurationSeconds", 10.0, "", errors)
+	if cfg.has("maxUnitsPerSide"):
+		_check_positive_int(cfg, "maxUnitsPerSide", 1.0, 200.0, "", errors)
 	_validate_stages(cfg, errors)
 	_validate_arena(cfg, errors)
 	_check_positive_number(cfg, "fortressHealth", 1.0, "", errors)
@@ -312,7 +318,7 @@ static func _validate_camera(cfg: Dictionary, errors: Array[String]) -> void:
 	for key: String in ["driftAmplitude", "driftSpeed", "breathingAmplitude", "heatDecayPerSecond", "lookHeight"]:
 		if cam.has(key):
 			_check_non_negative_number(cam, key, path, errors)
-	for key: String in ["smoothingHalfLife", "lookHalfLife", "minHoldSeconds"]:
+	for key: String in ["smoothingHalfLife", "lookHalfLife", "minHoldSeconds", "arrivalZoomInterval", "arrivalZoomDuration"]:
 		if cam.has(key):
 			_check_positive_number(cam, key, 0.01, path, errors)
 	if cam.has("switchHysteresis"):

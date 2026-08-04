@@ -37,12 +37,14 @@ const GAIT_SMOOTHING: float = 0.35  # per-snapshot lerp factor for speed_scale
 const MODEL_FACING_OFFSET: float = 0.0
 const FACING_TURN_RATE: float = 10.0  # radians/s toward target bearing
 const FACING_MIN_MOVE: float = 0.01   # world units per snapshot to count as moving
-const GLIDE_FIX_MIN: float = 1.0      # ground speed above which a moving unit must play a leg clip
+const GLIDE_FIX_MIN: float = 0.25     # ground speed above which a moving unit must play a leg clip
+const GAIT_ATTACK_MOVE_MIN: float = 0.5  # attacking units above this speed keep stepping instead of planting
 
 # -- Faction identity (strongly colorize armor/clothes so sides read at a glance) --
 const FACTION_BLUE: Color = Color(0.3, 0.52, 1.0)
 const FACTION_RED: Color = Color(1.0, 0.36, 0.28)
-const FACTION_TINT_STRENGTH: float = 0.82  # blend toward faction hue (0 = original, 1 = full recolor)
+const FACTION_NEUTRAL: Color = Color(0.42, 0.38, 0.5)  # boss: dark neutral so it never reads white
+const FACTION_TINT_STRENGTH: float = 0.9  # blend toward faction hue (0 = original, 1 = full recolor)
 
 # -- Logical animation keys (resolved to actual GLB clip names at load) --
 const ANIM_IDLE: String = "idle"
@@ -186,9 +188,10 @@ func update_visual(unit_snapshot: Dictionary) -> void:
 		# Long-distance travel (march on the castle, repositioning): run.
 		_play_gait(ANIM_RUN)
 	elif state == "attack":
-		# Closing on an opponent = walk; planted in range = attack clip.
-		if _ground_speed > GAIT_WALK_MAX:
-			_play_gait(ANIM_WALK)
+		# Closing on an opponent = keep stepping (walk/run by speed); only
+		# plant and swing when actually standing in range.
+		if _ground_speed > GAIT_ATTACK_MOVE_MIN:
+			_play_gait(ANIM_RUN if _ground_speed > GAIT_WALK_MAX else ANIM_WALK)
 		else:
 			_play_anim(_attack_anim)
 	elif state == "retreat":
@@ -207,6 +210,7 @@ func update_visual(unit_snapshot: Dictionary) -> void:
 
 ## If a unit is moving but currently playing a stationary clip (idle/spawn/etc.),
 ## fall back to walk/run so it never slides across the ground without stepping.
+## Deliberately aggressive: any visible ground movement forces a leg clip.
 func _ensure_locomotion() -> void:
 	if _dead:
 		return
@@ -394,7 +398,8 @@ func _apply_gait_speed(logical: String) -> void:
 ## Strongly colorize a unit's meshes toward its faction hue so blue vs red is
 ## unmistakable on the battlefield. Preserves texture shading by scaling the
 ## faction color by each surface's original luminance, then blends with the
-## original albedo to keep skin/detail readable.
+## original albedo to keep skin/detail readable. Surfaces without a usable
+## material get a solid faction-color override so nothing renders white.
 func _apply_faction_tint(faction: int) -> void:
 	if _model == null:
 		return
@@ -404,7 +409,8 @@ func _apply_faction_tint(faction: int) -> void:
 	elif faction == 1:
 		faction_color = FACTION_RED
 	else:
-		return
+		# Neutral units (boss): darkened so they never show up white either.
+		faction_color = FACTION_NEUTRAL
 	_colorize_meshes(_model, faction_color)
 
 
@@ -415,19 +421,24 @@ func _colorize_meshes(node: Node, faction_color: Color) -> void:
 		if mesh != null:
 			for surface in mesh.get_surface_count():
 				var mat: Material = mesh.surface_get_material(surface)
-				if mat is BaseMaterial3D:
-					var base_mat: BaseMaterial3D = mat as BaseMaterial3D
+				var base_mat: BaseMaterial3D = mat if mat is BaseMaterial3D else null
+				var base: Color = base_mat.albedo_color if base_mat != null else Color.WHITE
+				var lum: float = clampf(0.299 * base.r + 0.587 * base.g + 0.114 * base.b, 0.12, 1.0)
+				var recolored := Color(
+					faction_color.r * lum * 1.7,
+					faction_color.g * lum * 1.7,
+					faction_color.b * lum * 1.7,
+					base.a
+				)
+				if base_mat != null:
 					var tinted: BaseMaterial3D = base_mat.duplicate() as BaseMaterial3D
-					var base: Color = base_mat.albedo_color
-					var lum: float = clampf(0.299 * base.r + 0.587 * base.g + 0.114 * base.b, 0.12, 1.0)
-					var recolored := Color(
-						faction_color.r * lum * 1.7,
-						faction_color.g * lum * 1.7,
-						faction_color.b * lum * 1.7,
-						base.a
-					)
 					tinted.albedo_color = base.lerp(recolored, FACTION_TINT_STRENGTH)
 					mi.set_surface_override_material(surface, tinted)
+				else:
+					# No material (or a non-standard one): solid faction color.
+					var solid := StandardMaterial3D.new()
+					solid.albedo_color = recolored
+					mi.set_surface_override_material(surface, solid)
 	for child in node.get_children():
 		_colorize_meshes(child, faction_color)
 
