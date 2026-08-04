@@ -17,6 +17,8 @@ func _initialize() -> void:
 	_test_determinism()
 	_test_state_machine()
 	_test_combat()
+	_test_center_doctrine()
+	_test_doctrine_config()
 	_test_pooling()
 	_test_capture_dominion()
 	_test_fortress_victory()
@@ -194,29 +196,121 @@ func _test_state_machine() -> void:
 func _test_combat() -> void:
 	var cfg: Dictionary = _make_config()
 	var w := _create_world(cfg, 13)
-	# Run enough ticks for units to spawn, move, fight, and kill. Fortress
-	# sieges start in final_surge (~18s), so the budget covers a full escalation.
+	# Run enough ticks for units to spawn, move, fight, and kill. Under the
+	# center-dominion doctrine fortress sieges are gated on holding the center
+	# zone, so fortress coverage lives in _test_center_doctrine instead.
 	var death_seen: bool = false
-	var fortress_damaged: bool = false
 	for batch in 80:
 		w.run_ticks(10)
 		var snap: Dictionary = w.get_snapshot()
 		var events: Array = snap["events"]
 		for e: Variant in events:
-			var ev: String = str(e)
-			if ev.begins_with("unit_died:"):
+			if str(e).begins_with("unit_died:"):
 				death_seen = true
-			if ev.begins_with("fortress_damaged:"):
-				fortress_damaged = true
-		if death_seen and fortress_damaged:
+		if death_seen:
 			break
 	_check(death_seen, "combat: unit death event emitted")
-	_check(fortress_damaged, "combat: fortress damage event emitted")
 	# Pool count: active should be <= capacity
 	var final_snap: Dictionary = w.get_snapshot()
 	var ps: Dictionary = final_snap["pool_stats"]
 	var champ_stats: Dictionary = ps["champion"]
 	_check(int(champ_stats["active"]) <= int(champ_stats["capacity"]), "combat: active <= capacity")
+
+
+# --- (d2) Center-dominion doctrine ---
+
+func _test_center_doctrine() -> void:
+	# Siege is gated on center control: while the center is contested no
+	# fortress may take damage, no matter how weak it is.
+	var cfg: Dictionary = _make_config()
+	cfg["stages"] = {"opening": 60, "crisis": 60, "finalSurge": 60, "suddenDeath": 60}
+	cfg["fortressHealth"] = 30
+	cfg["dominion"] = {"ratePerSecondAtFullAdvantage": 0.0, "smoothing": 0.15}
+	var w := _create_world(cfg, 21)
+	var siege_started: bool = false
+	var fortress_damaged_while_contested: bool = false
+	for batch in 120:  # 60 seconds
+		w.run_ticks(10)
+		var snap: Dictionary = w.get_snapshot()
+		var contested: bool = _both_factions_in_center(w)
+		for e: Variant in snap["events"]:
+			var ev: String = str(e)
+			if ev.begins_with("siege_started:"):
+				siege_started = true
+			if ev.begins_with("fortress_damaged:") and contested:
+				fortress_damaged_while_contested = true
+		if w.is_round_over():
+			break
+	_check(siege_started, "doctrine: siege_started emitted once a faction secures the center")
+	_check(not fortress_damaged_while_contested, "doctrine: fortress untouchable while center contested")
+	# Recall loop: with fragile fortresses the round must end by fortress
+	# destruction, and attackers get pulled back while defenders re-contest.
+	var cfg2: Dictionary = _make_config()
+	cfg2["stages"] = {"opening": 60, "crisis": 60, "finalSurge": 60, "suddenDeath": 60}
+	cfg2["fortressHealth"] = 40
+	cfg2["dominion"] = {"ratePerSecondAtFullAdvantage": 0.0, "smoothing": 0.15}
+	var w2 := _create_world(cfg2, 21)
+	var recall_seen: bool = false
+	var fortress_damaged: bool = false
+	for batch in 240:  # 120 seconds
+		w2.run_ticks(10)
+		var snap: Dictionary = w2.get_snapshot()
+		for e: Variant in snap["events"]:
+			var ev: String = str(e)
+			if ev.begins_with("siege_recalled:"):
+				recall_seen = true
+			if ev.begins_with("fortress_damaged:"):
+				fortress_damaged = true
+		if w2.is_round_over():
+			break
+	_check(fortress_damaged, "doctrine: fortress damaged once attackers clear the gate")
+	_check(recall_seen, "doctrine: siege_recalled emitted when new enemies contest the center")
+	_check(w2.is_round_over(), "doctrine: round ends within budget")
+	var snap_end: Dictionary = w2.get_snapshot()
+	_check(str(snap_end["victory_type"]) == "fortress", "doctrine: victory via fortress destruction")
+
+
+## True while both factions have at least one living unit inside the crown
+## capture zone (mirrors SimWorld's doctrine notion of a contested center).
+func _both_factions_in_center(w: SimWorld) -> bool:
+	var present: Array = [false, false]
+	for uid: int in w._unit_registry:
+		var u: SimUnit = w._unit_registry[uid]
+		if u.alive and u.faction_index >= 0:
+			if u.position.distance_to(w._crown) <= w._capture_radius:
+				present[u.faction_index] = true
+	return bool(present[0]) and bool(present[1])
+
+
+func _test_doctrine_config() -> void:
+	# Valid centerZone section accepted.
+	var cfg: Dictionary = _make_config()
+	cfg["centerZone"] = {"flankMinRadius": 30.0, "flankRadiusFraction": 0.8, "fortressShieldRadius": 160.0}
+	var r1: Dictionary = GC.parse(cfg)
+	_check(bool(r1["ok"]), "center_zone_cfg: valid centerZone accepted")
+	# Unknown key inside centerZone rejected.
+	var bad: Dictionary = _make_config()
+	bad["centerZone"] = {"flankMinRadius": 30.0, "bogus": 1}
+	var r2: Dictionary = GC.parse(bad)
+	_check(not r2["ok"], "center_zone_cfg: unknown centerZone key rejected")
+	# flankRadiusFraction above maximum rejected.
+	var big: Dictionary = _make_config()
+	big["centerZone"] = {"flankRadiusFraction": 2.0}
+	var r3: Dictionary = GC.parse(big)
+	_check(not r3["ok"], "center_zone_cfg: flankRadiusFraction above 1.5 rejected")
+	# Valid spaceBackdrop section accepted.
+	var cfg2: Dictionary = _make_config()
+	cfg2["spaceBackdrop"] = {
+		"enabled": true, "starCount": 500, "seed": 1, "shipIntervalSeconds": 15.0,
+		"shipSpeedMin": 5.0, "shipSpeedMax": 9.0, "maxShips": 2,
+	}
+	var r4: Dictionary = GC.parse(cfg2)
+	_check(bool(r4["ok"]), "space_cfg: valid spaceBackdrop accepted")
+	# Unknown key inside spaceBackdrop rejected.
+	var bad2: Dictionary = _make_config()
+	bad2["spaceBackdrop"] = {"enabled": true, "bogus": 1}
+	var r5: Dictionary = GC.parse(bad2)
+	_check(not r5["ok"], "space_cfg: unknown spaceBackdrop key rejected")
 
 
 # --- (e) Pooling ---
@@ -286,20 +380,22 @@ func _test_capture_dominion() -> void:
 
 func _test_fortress_victory() -> void:
 	var cfg: Dictionary = _make_config()
-	# Use very low fortress health for quick destruction
+	# Use very low fortress health for quick destruction. Under the
+	# center-dominion doctrine sieges are gated on center control, so the
+	# sudden_death stage is extended; fortress destruction is the ONLY victory
+	# condition, and that is exactly what this test asserts.
 	cfg["fortressHealth"] = 10
+	cfg["stages"] = {"opening": 12, "crisis": 6, "finalSurge": 6, "suddenDeath": 90}
 	var w := _create_world(cfg, 55)
-	var max_ticks: int = 20 * 30  # 30 seconds
+	var max_ticks: int = 20 * 115  # full stage budget + buffer
 	w.run_ticks(max_ticks)
 	_check(w.is_round_over(), "fortress: round ends within budget")
 	var snap: Dictionary = w.get_snapshot()
 	var vtype: String = str(snap["victory_type"])
 	var fh: Array = snap["fortress_health"]
-	# Either fortress or dominion win
-	_check(vtype == "fortress" or vtype == "dominion", "fortress: victory type is fortress or dominion")
-	if vtype == "fortress":
-		_check(float(fh[0]) <= 0.0 or float(fh[1]) <= 0.0, "fortress: destroyed fortress has 0 health")
-		_check(int(snap["winner"]) >= 0, "fortress: winner is 0 or 1")
+	_check(vtype == "fortress", "fortress: only castle destruction wins")
+	_check(float(fh[0]) <= 0.0 or float(fh[1]) <= 0.0, "fortress: destroyed fortress has 0 health")
+	_check(int(snap["winner"]) >= 0 and int(snap["winner"]) <= 1, "fortress: winner is 0 or 1")
 
 
 # --- (h) Sudden death ---
@@ -445,9 +541,11 @@ func _test_boss_spawn() -> void:
 				boss_alive = true
 	_check(boss_found, "boss_spawn: boss unit appears in snapshot")
 	_check(boss_alive, "boss_spawn: boss has faction_index == -1")
-	# Run further ticks to try to kill the boss (lots of combat ticks).
+	# Run further ticks to try to kill the boss (lots of combat ticks). The
+	# center-dominion doctrine clusters the brawl where the boss roams, but the
+	# boss soaks a lot of damage before going down, so allow a generous budget.
 	var boss_death_event: bool = false
-	for batch in 60:
+	for batch in 120:
 		w.run_ticks(10)
 		var s: Dictionary = w.get_snapshot()
 		for e: Variant in s["events"]:

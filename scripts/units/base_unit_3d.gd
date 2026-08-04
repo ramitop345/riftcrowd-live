@@ -12,6 +12,38 @@ const ARENA_H: float = 26.0
 const GROUND_Y: float = 1.0  # units stand on the flat arena ground
 const MODEL_SCALE: float = 1.0  # Meshy models are authored at real-world scale
 
+# -- Flying-engine transport --
+# Units ride a hover engine whenever they are outside the center arena (spawn
+# entrance, siege march to the castle, retreat). The deck sits exactly at foot
+# level so characters stand on it instead of floating above it.
+const CROWN_SIM: Vector2 = Vector2(540.0, 590.0)
+
+# -- Gait calibration (anti foot-slide) --
+# Ground speed is measured from snapshot position deltas in world units/s.
+# Below the walk threshold units stand and fight; closing on an opponent
+# plays walk; long-distance travel (march to the castle, retreat) plays run.
+const GAIT_WALK_MAX: float = 1.4
+const GAIT_RUN_MIN: float = 1.7
+# World units of ground covered per second of clip at speed_scale 1.0.
+const CALIBRATED_WALK_UPS: float = 1.1
+const CALIBRATED_RUN_UPS: float = 2.6
+const GAIT_SPEED_MIN: float = 0.6
+const GAIT_SPEED_MAX: float = 1.6
+const GAIT_SMOOTHING: float = 0.35  # per-snapshot lerp factor for speed_scale
+
+# -- Facing (characters turn toward their direction of travel) --
+# Meshy/glTF characters are authored facing +Z at rotation.y = 0. If a model
+# walks backwards, flip it by setting MODEL_FACING_OFFSET = PI.
+const MODEL_FACING_OFFSET: float = 0.0
+const FACING_TURN_RATE: float = 10.0  # radians/s toward target bearing
+const FACING_MIN_MOVE: float = 0.01   # world units per snapshot to count as moving
+const GLIDE_FIX_MIN: float = 1.0      # ground speed above which a moving unit must play a leg clip
+
+# -- Faction identity (strongly colorize armor/clothes so sides read at a glance) --
+const FACTION_BLUE: Color = Color(0.3, 0.52, 1.0)
+const FACTION_RED: Color = Color(1.0, 0.36, 0.28)
+const FACTION_TINT_STRENGTH: float = 0.82  # blend toward faction hue (0 = original, 1 = full recolor)
+
 # -- Logical animation keys (resolved to actual GLB clip names at load) --
 const ANIM_IDLE: String = "idle"
 const ANIM_WALK: String = "walk"
@@ -57,17 +89,43 @@ var _dead: bool = false
 var _spawned: bool = false
 var _ground_circle: MeshInstance3D = null
 var _anim_map: Dictionary = {}
+var _prev_world_pos: Vector3 = Vector3.ZERO
+var _has_prev_pos: bool = false
+var _prev_snapshot_usec: int = 0
+var _ground_speed: float = 0.0
+var _target_yaw: float = 0.0
+var _transport: Node3D = null
+var _transport_engine_mat: StandardMaterial3D = null
+var _center_radius_sim: float = 170.0  # arena capture zone radius in sim units
 
 
 func _ready() -> void:
 	_create_ground_circle()
 	_create_health_bar()
+	_build_transport()
+
+
+## Capture-zone radius in sim units (arena_3d passes the configured value).
+func set_center_radius(radius_sim: float) -> void:
+	_center_radius_sim = maxf(radius_sim, 1.0)
 
 
 func _process(delta: float) -> void:
 	if _hit_flash > 0.0:
 		_hit_flash = maxf(_hit_flash - delta * 4.0, 0.0)
 		_update_flash_tint()
+	_update_facing(delta)
+
+
+## Smoothly turn the character mesh toward its direction of travel so it never
+## walks one way while looking another. Framerate-independent turn speed.
+func _update_facing(delta: float) -> void:
+	if _dead:
+		return
+	if _model == null or not is_instance_valid(_model):
+		return
+	var t: float = minf(FACING_TURN_RATE * delta, 1.0)
+	_model.rotation.y = lerp_angle(_model.rotation.y, _target_yaw, t)
 
 
 ## Main public interface — same as 2D base_unit.gd.
@@ -75,16 +133,35 @@ func update_visual(unit_snapshot: Dictionary) -> void:
 	# Position: sim 2D → 3D world
 	var sx: float = float(unit_snapshot.get("x", 0.0))
 	var sy: float = float(unit_snapshot.get("y", 0.0))
-	position = Vector3(
+	var new_pos := Vector3(
 		(sx / SIM_W) * ARENA_W - ARENA_W * 0.5,
 		GROUND_Y,
 		-((sy / SIM_H) * ARENA_H - ARENA_H * 0.5)
 	)
+	# Ground speed from snapshot deltas (presentation-side gait detection).
+	# Measured against real time between update_visual calls, not render delta,
+	# because snapshot cadence differs from frame rate (and playback speed).
+	var now_usec: int = Time.get_ticks_usec()
+	if _has_prev_pos:
+		var dt_snapshot: float = clampf(float(now_usec - _prev_snapshot_usec) / 1000000.0, 0.001, 0.25)
+		var move_delta := Vector2(new_pos.x, new_pos.z) - Vector2(_prev_world_pos.x, _prev_world_pos.z)
+		var raw_speed: float = move_delta.length() / dt_snapshot
+		_ground_speed = lerpf(_ground_speed, raw_speed, 0.5)
+		# Re-aim only while actually travelling so idle/attacking units keep
+		# their last bearing instead of snapping to a stale direction.
+		if move_delta.length() > FACING_MIN_MOVE:
+			_target_yaw = atan2(move_delta.x, move_delta.y) + MODEL_FACING_OFFSET
+	else:
+		_has_prev_pos = true
+	_prev_snapshot_usec = now_usec
+	_prev_world_pos = new_pos
+	position = new_pos
 	# Faction → GLB variant
 	var new_faction: int = int(unit_snapshot.get("faction", -1))
 	if new_faction != _faction_index:
 		_faction_index = new_faction
 		_swap_model(new_faction)
+		_paint_transport_engine(new_faction)
 	# Health
 	var new_health: float = clampf(float(unit_snapshot.get("health_fraction", 1.0)), 0.0, 1.0)
 	if new_health < _prev_health - 0.01:
@@ -99,21 +176,119 @@ func update_visual(unit_snapshot: Dictionary) -> void:
 	if state == "dead":
 		if not _dead:
 			_dead = true
+			_ground_speed = 0.0
 			_play_anim(ANIM_DEATH)
 	elif state == "spawning":
 		if not _spawned:
 			_spawned = true
 			_play_anim(ANIM_SPAWN)
 	elif state == "advance":
-		_play_anim(ANIM_RUN)
+		# Long-distance travel (march on the castle, repositioning): run.
+		_play_gait(ANIM_RUN)
 	elif state == "attack":
-		_play_anim(_attack_anim)
+		# Closing on an opponent = walk; planted in range = attack clip.
+		if _ground_speed > GAIT_WALK_MAX:
+			_play_gait(ANIM_WALK)
+		else:
+			_play_anim(_attack_anim)
 	elif state == "retreat":
-		_play_anim(ANIM_RETREAT)
+		_play_gait(ANIM_RETREAT)
 	elif state == "defend":
 		_play_anim(ANIM_SHIELD if _class_name == "guardian" else ANIM_IDLE)
 	else:
 		_play_anim(ANIM_IDLE)
+	# Anti-levitation: whatever the sim state, a unit that is clearly travelling
+	# must play a locomotion track so its legs move instead of gliding.
+	_ensure_locomotion()
+	# Flying engine: ridden whenever the unit is outside the center arena.
+	if _transport != null:
+		_transport.visible = _wants_transport(sx, sy)
+
+
+## If a unit is moving but currently playing a stationary clip (idle/spawn/etc.),
+## fall back to walk/run so it never slides across the ground without stepping.
+func _ensure_locomotion() -> void:
+	if _dead:
+		return
+	if _ground_speed < GLIDE_FIX_MIN:
+		return
+	if _current_anim == ANIM_RUN or _current_anim == ANIM_WALK or _current_anim == ANIM_RETREAT:
+		return
+	_play_gait(ANIM_RUN if _ground_speed > GAIT_WALK_MAX else ANIM_WALK)
+
+
+# ---------------------------------------------------------------------------
+# Flying-engine transport (hover platform ridden outside the center arena)
+# ---------------------------------------------------------------------------
+
+## Primitive hover engine built in code (Meshy-swappable later). Deck top sits
+## exactly at local y = 0 (foot level) so the character stands on it, not above.
+func _build_transport() -> void:
+	if _class_name == "boss":
+		return  # the boss is a creature — it walks everywhere on its own
+	_transport = Node3D.new()
+	_transport.name = "FlyEngine"
+	var hull_mat := StandardMaterial3D.new()
+	hull_mat.albedo_color = Color(0.28, 0.3, 0.36)
+	hull_mat.metallic = 0.7
+	hull_mat.roughness = 0.35
+	var deck := MeshInstance3D.new()
+	deck.name = "Deck"
+	var deck_mesh := CylinderMesh.new()
+	deck_mesh.top_radius = 0.95
+	deck_mesh.bottom_radius = 0.7
+	deck_mesh.height = 0.16
+	deck.mesh = deck_mesh
+	deck.material_override = hull_mat
+	deck.position = Vector3(0, -0.08, 0)  # deck top flush with the feet
+	_transport.add_child(deck)
+	var rim := MeshInstance3D.new()
+	rim.name = "Rim"
+	var rim_mesh := TorusMesh.new()
+	rim_mesh.inner_radius = 0.62
+	rim_mesh.outer_radius = 0.8
+	rim.mesh = rim_mesh
+	rim.material_override = hull_mat
+	rim.position = Vector3(0, -0.2, 0)
+	_transport.add_child(rim)
+	_transport_engine_mat = StandardMaterial3D.new()
+	_transport_engine_mat.albedo_color = Color(0.3, 0.7, 1.0)
+	_transport_engine_mat.emission_enabled = true
+	_transport_engine_mat.emission = Color(0.3, 0.7, 1.0)
+	_transport_engine_mat.emission_energy_multiplier = 2.0
+	var glow := MeshInstance3D.new()
+	glow.name = "EngineGlow"
+	var glow_mesh := CylinderMesh.new()
+	glow_mesh.top_radius = 0.55
+	glow_mesh.bottom_radius = 0.38
+	glow_mesh.height = 0.1
+	glow.mesh = glow_mesh
+	glow.material_override = _transport_engine_mat
+	glow.position = Vector3(0, -0.24, 0)
+	_transport.add_child(glow)
+	_transport.visible = false
+	add_child(_transport)
+
+
+## Engine glow matches the faction so riders read as blue/red at a glance.
+func _paint_transport_engine(faction: int) -> void:
+	if _transport_engine_mat == null:
+		return
+	var col := Color(0.3, 0.7, 1.0)
+	if faction == 0:
+		col = Color(0.25, 0.5, 1.0)
+	elif faction == 1:
+		col = Color(1.0, 0.35, 0.25)
+	_transport_engine_mat.albedo_color = col
+	_transport_engine_mat.emission = col
+
+
+## True while the unit stands outside the center capture zone — i.e. arriving
+## from the spawn, marching on the enemy castle, or falling back to defend.
+func _wants_transport(sx: float, sy: float) -> bool:
+	if _dead:
+		return false
+	return Vector2(sx, sy).distance_to(CROWN_SIM) > _center_radius_sim
 
 
 # ---------------------------------------------------------------------------
@@ -143,6 +318,7 @@ func _swap_model(faction: int) -> void:
 	_model = packed.instantiate()
 	_model.name = "Model"
 	_model.scale = Vector3(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE)
+	_model.rotation.y = _target_yaw
 	add_child(_model)
 	if use_tint:
 		_apply_faction_tint(faction)
@@ -151,6 +327,7 @@ func _swap_model(faction: int) -> void:
 	_build_anim_map()
 	_current_anim = ""
 	if _anim_player != null:
+		_anim_player.speed_scale = 1.0
 		_play_anim(ANIM_IDLE)
 	# Update ground circle color to match faction.
 	if _ground_circle != null and _ground_circle.material_override != null:
@@ -188,24 +365,50 @@ func _play_anim(logical: String) -> void:
 		_current_anim = logical
 
 
-## Faction tint applied to a single shared model (keeps base texture readable).
-## Node3D has no `modulate`, so we multiply each mesh surface albedo by the tint.
+## Gait playback: pick the requested locomotion clip, falling back run → walk
+## → idle for models missing a track, then calibrate playback speed to the
+## measured ground speed so feet never slide.
+func _play_gait(logical: String) -> void:
+	var want: String = logical
+	if not _anim_map.has(want):
+		if want == ANIM_RUN and _anim_map.has(ANIM_WALK):
+			want = ANIM_WALK
+		elif want == ANIM_WALK and _anim_map.has(ANIM_RUN):
+			want = ANIM_RUN
+	_play_anim(want)
+	_apply_gait_speed(want)
+
+
+## speed_scale ∝ ground speed / calibrated clip coverage, clamped to a
+## readable range and smoothed so gait transitions don't pop.
+func _apply_gait_speed(logical: String) -> void:
+	if _anim_player == null:
+		return
+	var calibrated: float = CALIBRATED_RUN_UPS
+	if logical == ANIM_WALK:
+		calibrated = CALIBRATED_WALK_UPS
+	var target: float = clampf(_ground_speed / calibrated, GAIT_SPEED_MIN, GAIT_SPEED_MAX)
+	_anim_player.speed_scale = lerpf(_anim_player.speed_scale, target, GAIT_SMOOTHING)
+
+
+## Strongly colorize a unit's meshes toward its faction hue so blue vs red is
+## unmistakable on the battlefield. Preserves texture shading by scaling the
+## faction color by each surface's original luminance, then blends with the
+## original albedo to keep skin/detail readable.
 func _apply_faction_tint(faction: int) -> void:
 	if _model == null:
 		return
-	var tint: Color
+	var faction_color: Color
 	if faction == 0:
-		tint = Color(0.75, 0.85, 1.15)
+		faction_color = FACTION_BLUE
 	elif faction == 1:
-		tint = Color(1.15, 0.8, 0.75)
+		faction_color = FACTION_RED
 	else:
-		tint = Color.WHITE
-	if tint == Color.WHITE:
 		return
-	_tint_meshes(_model, tint)
+	_colorize_meshes(_model, faction_color)
 
 
-func _tint_meshes(node: Node, tint: Color) -> void:
+func _colorize_meshes(node: Node, faction_color: Color) -> void:
 	if node is MeshInstance3D:
 		var mi: MeshInstance3D = node as MeshInstance3D
 		var mesh: Mesh = mi.mesh
@@ -213,16 +416,20 @@ func _tint_meshes(node: Node, tint: Color) -> void:
 			for surface in mesh.get_surface_count():
 				var mat: Material = mesh.surface_get_material(surface)
 				if mat is BaseMaterial3D:
-					var tinted: BaseMaterial3D = (mat as BaseMaterial3D).duplicate() as BaseMaterial3D
-					tinted.albedo_color = Color(
-						mat.albedo_color.r * tint.r,
-						mat.albedo_color.g * tint.g,
-						mat.albedo_color.b * tint.b,
-						mat.albedo_color.a
+					var base_mat: BaseMaterial3D = mat as BaseMaterial3D
+					var tinted: BaseMaterial3D = base_mat.duplicate() as BaseMaterial3D
+					var base: Color = base_mat.albedo_color
+					var lum: float = clampf(0.299 * base.r + 0.587 * base.g + 0.114 * base.b, 0.12, 1.0)
+					var recolored := Color(
+						faction_color.r * lum * 1.7,
+						faction_color.g * lum * 1.7,
+						faction_color.b * lum * 1.7,
+						base.a
 					)
+					tinted.albedo_color = base.lerp(recolored, FACTION_TINT_STRENGTH)
 					mi.set_surface_override_material(surface, tinted)
 	for child in node.get_children():
-		_tint_meshes(child, tint)
+		_colorize_meshes(child, faction_color)
 
 
 ## Faction index of the model currently shown (0 = left/blue, 1 = right/red, -1 = neutral).
@@ -233,6 +440,23 @@ func get_faction_index() -> int:
 ## Whether this visual is currently dead (celebrations skip fallen units).
 func is_dead() -> bool:
 	return _dead
+
+
+## Play the death animation and become a corpse. The arena keeps the body lying
+## on the battlefield for a while before sweeping it, instead of vanishing.
+func die() -> void:
+	if _dead:
+		return
+	_dead = true
+	_ground_speed = 0.0
+	_play_anim(ANIM_DEATH)
+	if _transport != null:
+		_transport.visible = false
+	if _health_bar != null:
+		_health_bar.visible = false
+	var bg: Node = get_node_or_null("HealthBarBg")
+	if bg != null:
+		bg.visible = false
 
 
 ## Plays a gift-tier technique animation (tier 1 = minor, 2 = average, 3 = major).
@@ -337,10 +561,10 @@ func _create_health_bar() -> void:
 	_health_bar = Sprite3D.new()
 	_health_bar.name = "HealthBar"
 	_health_bar.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	_health_bar.pixel_size = 0.005
+	_health_bar.pixel_size = 0.007
 	_health_bar.no_depth_test = true
 	_health_bar.transparent = true
-	_health_bar.position = Vector3(0, 2.2, 0)
+	_health_bar.position = Vector3(0, 2.6, 0)
 	# Create a simple 1x1 white texture for the bar
 	var img: Image = Image.create(64, 4, false, Image.FORMAT_RGBA8)
 	img.fill(Color.WHITE)
@@ -353,10 +577,10 @@ func _create_health_bar() -> void:
 	var bg := Sprite3D.new()
 	bg.name = "HealthBarBg"
 	bg.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	bg.pixel_size = 0.005
+	bg.pixel_size = 0.007
 	bg.no_depth_test = true
 	bg.transparent = true
-	bg.position = Vector3(0, 2.2, -0.01)
+	bg.position = Vector3(0, 2.6, -0.01)
 	var bg_img: Image = Image.create(64, 4, false, Image.FORMAT_RGBA8)
 	bg_img.fill(Color(0.15, 0.15, 0.15, 0.7))
 	bg.texture = ImageTexture.create_from_image(bg_img)

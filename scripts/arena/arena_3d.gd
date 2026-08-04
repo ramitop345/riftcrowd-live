@@ -4,6 +4,7 @@
 extends Node3D
 
 const MeshyLod := preload("res://scripts/units/meshy_lod.gd")
+const SpaceBackdropScript := preload("res://scripts/vfx/space_backdrop.gd")
 
 const UNIT_SCENE_PATHS: Dictionary = {
 	"champion": "res://scenes/units/3d/Champion3D.tscn",
@@ -24,9 +25,15 @@ const GROUND_Y: float = 1.0  # objects sit on the flat arena ground
 
 signal round_ended(victory_type: String, winner: int)
 
+## Fallen units stay on the battlefield as corpses for this long before the
+## arena sweeps them, so kills are visible instead of units vanishing instantly.
+const CORPSE_TTL_SECONDS: float = 15.0
+
 ## Visual registries keyed by simulation id.
 var _unit_visuals: Dictionary = {}
 var _projectile_visuals: Dictionary = {}
+## uid -> {"node": Node, "died_usec": int} for corpses awaiting sweep.
+var _corpses: Dictionary = {}
 
 ## Child references for static elements.
 var _fortress_a: Node = null
@@ -46,21 +53,43 @@ var _shake_intensity: float = 0.0
 var _shake_duration: float = 0.0
 var _shake_timer: float = 0.0
 
-## Camera director state (wide master shot + drift + technique focus).
-var _drift_time: float = 0.0
-var _drift_amplitude: float = 1.2
-var _drift_speed: float = 0.15
-var _master_pos: Vector3 = Vector3(0, 24, -28)
-var _master_fov: float = 75.0
+## Camera director v3: a wide, mostly-static master shot that always frames the
+## whole center arena, with a slow lateral drift + breathing so it never feels
+## frozen. Heat-driven wing cuts (sieges/entrances) and technique/victory focus
+## still punch in on demand. No continuous 360° orbit.
+var _master_distance: float = 22.0
+var _master_height: float = 16.0
+var _master_fov: float = 50.0
+var _focus_fov: float = 45.0
+var _look_height: float = 1.5
+var _drift_amplitude: float = 2.5
+var _drift_speed: float = 0.07
+var _breathing_amplitude: float = 0.6
+var _smoothing_half_life: float = 0.9
+var _look_half_life: float = 0.6
+var _heat_decay_per_second: float = 0.6
+var _switch_hysteresis: float = 1.5
+var _min_hold_seconds: float = 6.0
+var _wing_distance: float = 24.0
+var _wing_height: float = 12.0
+var _wing_fov: float = 52.0
+var _wing_attack_z: float = -10.0
+var _cam_time: float = 0.0
+var _heat: Array = [0.0, 0.0, 0.0]  ## [center, left wing (castle A), right wing (castle B)]
+var _active_shot: int = 0
+var _shot_age: float = 0.0
+var _cam_pos: Vector3 = Vector3(0, 16, -22)
+var _cam_look: Vector3 = Vector3(0, 1.5, 0)
+var _cam_fov: float = 50.0
 var _focus_timer: float = 0.0
 var _focus_duration: float = 0.0
 var _focus_pos: Vector3 = Vector3.ZERO
-var _focus_fov: float = 55.0
 
 var _config: Dictionary = {}
 var _faction_a: Dictionary = {}
 var _faction_b: Dictionary = {}
 var _victory_emitted: bool = false
+var _space_backdrop: Node = null
 
 
 func _ready() -> void:
@@ -87,7 +116,9 @@ func _ready() -> void:
 	_camera = _find_camera()
 	if _camera != null:
 		_camera_base_pos = _camera.position
-		_frame_battle_camera()
+		_camera.position = _cam_pos
+		_camera.look_at(_cam_look, Vector3.UP)
+		_camera.fov = _master_fov
 
 
 ## Instantiates fortress/crown/capture-zone nodes with correct 3D positions.
@@ -120,17 +151,17 @@ func setup(config: Dictionary, faction_a: Dictionary, faction_b: Dictionary) -> 
 		_crown = crown_packed.instantiate()
 		_crown.position = Vector3(0, GROUND_Y, 0)
 		add_child(_crown)
-	# Fortresses at x = ±20m.
+	# Fortresses at x = ±21m (matches the sim mapping of sim x=120/960).
 	var fort_packed: PackedScene = load(FORTRESS_SCENE_PATH) as PackedScene
 	if fort_packed != null:
 		_fortress_a = fort_packed.instantiate()
 		add_child(_fortress_a)
-		_fortress_a.position = Vector3(-20, GROUND_Y, 0)
+		_fortress_a.position = Vector3(-21, GROUND_Y, 0)
 		if _fortress_a.has_method("update_visual"):
 			_fortress_a.call("update_visual", 1.0, 0)
 		_fortress_b = fort_packed.instantiate()
 		add_child(_fortress_b)
-		_fortress_b.position = Vector3(20, GROUND_Y, 0)
+		_fortress_b.position = Vector3(21, GROUND_Y, 0)
 		if _fortress_b.has_method("update_visual"):
 			_fortress_b.call("update_visual", 1.0, 1)
 	# Dynamic containers.
@@ -140,41 +171,119 @@ func setup(config: Dictionary, faction_a: Dictionary, faction_b: Dictionary) -> 
 	_projectile_container = Node3D.new()
 	_projectile_container.name = "ProjectileContainer"
 	add_child(_projectile_container)
+	_setup_space_backdrop()
 
 
 func _process(delta: float) -> void:
-	_drift_time += delta
+	_cam_time += delta
+	_sweep_corpses()
+	_update_shot_selection(delta)
+	# Shot targets: wide master framing the whole center arena, or wing shots.
+	var target_pos: Vector3
+	var target_look: Vector3
+	var target_fov: float
+	if _active_shot == 1:
+		target_pos = _wing_position(0)
+		target_look = Vector3(-17.0, 2.0, 0.0)
+		target_fov = _wing_fov
+	elif _active_shot == 2:
+		target_pos = _wing_position(1)
+		target_look = Vector3(17.0, 2.0, 0.0)
+		target_fov = _wing_fov
+	else:
+		# Wide master shot: camera stays on one side of the arena, high and
+		# pulled back so the entire center arena is always in frame. A slow
+		# lateral drift + breathing keep it alive without rotating around.
+		var drift_x: float = sin(_cam_time * _drift_speed * TAU) * _drift_amplitude
+		var breathe: float = sin(_cam_time * 0.5 * TAU) * _breathing_amplitude
+		target_pos = Vector3(drift_x, _master_height + breathe, -_master_distance)
+		target_look = Vector3(0, _look_height, 0)
+		target_fov = _master_fov
+	# Focus push-in (major techniques, victory celebration) overrides framing.
+	if _focus_timer > 0.0:
+		_focus_timer -= delta
+		var focus_t: float = clampf(_focus_timer / maxf(_focus_duration, 0.01), 0.0, 1.0)
+		var eased: float = focus_t * focus_t  # ease back out at the end
+		var focus_cam_pos: Vector3 = _focus_pos + Vector3(0, 6, -9)
+		target_pos = focus_cam_pos.lerp(target_pos, eased)
+		target_look = _focus_pos.lerp(target_look, eased)
+		target_fov = lerpf(_focus_fov, target_fov, eased)
+	# Framerate-independent exponential smoothing (half-life based).
+	var pos_alpha: float = 1.0 - pow(0.5, delta / maxf(_smoothing_half_life, 0.01))
+	var look_alpha: float = 1.0 - pow(0.5, delta / maxf(_look_half_life, 0.01))
+	_cam_pos = _cam_pos.lerp(target_pos, pos_alpha)
+	_cam_look = _cam_look.lerp(target_look, look_alpha)
+	_cam_fov = lerpf(_cam_fov, target_fov, pos_alpha)
+	if _camera == null:
+		return
 	# Camera shake takes priority over directed framing.
 	if _shake_timer > 0.0:
 		_shake_timer -= delta
 		var t: float = _shake_timer / maxf(_shake_duration, 0.01)
-		if _camera != null:
-			_camera.position = _camera_base_pos + Vector3(
-				randf_range(-1.0, 1.0) * _shake_intensity * t,
-				randf_range(-1.0, 1.0) * _shake_intensity * t * 0.5,
-				randf_range(-1.0, 1.0) * _shake_intensity * t
-			)
-		return
-	if _camera == null:
-		return
-	# Technique focus: push in toward the action, then ease back to master.
-	if _focus_timer > 0.0:
-		_focus_timer -= delta
-		var focus_t: float = clampf(_focus_timer / maxf(_focus_duration, 0.01), 0.0, 1.0)
-		var eased: float = focus_t * focus_t
-		var focus_cam_pos: Vector3 = _focus_pos + Vector3(0, 10, -12)
-		_camera.position = _master_pos.lerp(focus_cam_pos, 1.0 - eased)
-		_camera.fov = lerpf(_master_fov, _focus_fov, 1.0 - eased)
-		_camera.look_at(_focus_pos.lerp(Vector3(0, 1, 0), eased), Vector3.UP)
+		_camera.position = _cam_pos + Vector3(
+			randf_range(-1.0, 1.0) * _shake_intensity * t,
+			randf_range(-1.0, 1.0) * _shake_intensity * t * 0.5,
+			randf_range(-1.0, 1.0) * _shake_intensity * t
+		)
+		_camera.look_at(_cam_look, Vector3.UP)
+		_camera.fov = _cam_fov
 		_camera_base_pos = _camera.position
 		return
-	# Default: wide master shot with slow lateral drift across the arena.
-	var drift_x: float = sin(_drift_time * _drift_speed * TAU) * _drift_amplitude
-	var drift_y: float = sin(_drift_time * _drift_speed * 0.6 * TAU) * _drift_amplitude * 0.3
-	_camera.position = _master_pos + Vector3(drift_x, drift_y, 0.0)
-	_camera.fov = _master_fov
-	_camera.look_at(Vector3(0, 1, 0), Vector3.UP)
-	_camera_base_pos = _camera.position
+	_camera.position = _cam_pos
+	_camera.look_at(_cam_look, Vector3.UP)
+	_camera.fov = _cam_fov
+	_camera_base_pos = _cam_pos
+
+
+## Zone heat: ATTACK-state units per zone plus siege events build heat that
+## decays over time; the director cuts to whichever zone is hottest, with
+## hysteresis + minimum hold so the edit never ping-pongs.
+func _update_shot_selection(delta: float) -> void:
+	_shot_age += delta
+	for i in 3:
+		_heat[i] = maxf(float(_heat[i]) - _heat_decay_per_second * delta, 0.0)
+	var challenger: int = 0
+	if float(_heat[1]) > float(_heat[2]) and float(_heat[1]) > 0.0:
+		challenger = 1
+	elif float(_heat[2]) > float(_heat[1]) and float(_heat[2]) > 0.0:
+		challenger = 2
+	if challenger == _active_shot:
+		return
+	var challenger_heat: float = float(_heat[challenger])
+	var current_heat: float = float(_heat[_active_shot])
+	if challenger_heat >= current_heat * _switch_hysteresis and _shot_age >= _min_hold_seconds:
+		_active_shot = challenger
+		_shot_age = 0.0
+
+
+## Wing shot: low camera between the middle and the sieged castle, pulled
+## back along the attack axis so both gate and attackers stay in frame.
+func _wing_position(faction_being_sieged: int) -> Vector3:
+	var side: float = -1.0 if faction_being_sieged == 0 else 1.0
+	var castle_x: float = side * 21.0
+	var inward: Vector3 = Vector3(-side, 0.0, 0.0)
+	var cam_x: float = castle_x + inward.x * _wing_distance
+	var cam_z: float = _wing_attack_z - side * 2.0
+	return Vector3(cam_x, _wing_height, cam_z)
+
+
+## Feeds the director with battlefield activity from the latest snapshot.
+func _director_feed(snapshot: Dictionary) -> void:
+	var units: Variant = snapshot.get("units")
+	if typeof(units) == TYPE_ARRAY:
+		for entry: Variant in (units as Array):
+			if typeof(entry) != TYPE_DICTIONARY:
+				continue
+			var u: Dictionary = entry
+			if str(u.get("state", "")) != "attack":
+				continue
+			var wx: float = (float(u.get("x", 540.0)) / 1080.0) * 54.0 - 27.0
+			if wx < -12.0:
+				_heat[1] = float(_heat[1]) + 0.4
+			elif wx > 12.0:
+				_heat[2] = float(_heat[2]) + 0.4
+			else:
+				_heat[0] = float(_heat[0]) + 0.15
 
 
 ## Shake the camera (called from battle.gd on boss ground slam etc).
@@ -195,34 +304,70 @@ func _find_camera() -> Camera3D:
 	return null
 
 
-## Positions the camera for a low, side-on battle view. The camera sits on the
-## field behind the near rock line and looks across the battle line (z ~ 0),
-## so players see the units' bodies fighting rather than a flat top-down map.
-func _frame_battle_camera() -> void:
-	if _camera == null:
+func _find_world_environment() -> WorldEnvironment:
+	for child in get_children():
+		if child is WorldEnvironment:
+			return child
+	return null
+
+
+## Space backdrop: replaces the sky with a seeded starfield panorama and
+## starts periodic spaceship fly-bys. Created once; survives round restarts.
+func _setup_space_backdrop() -> void:
+	if _space_backdrop != null and is_instance_valid(_space_backdrop):
 		return
-	_camera.position = _master_pos
-	_camera.look_at(Vector3(0, 1, 0), Vector3.UP)
-	_camera.fov = _master_fov
-	# Keep the shake-rest position in sync with the framed battle view.
-	_camera_base_pos = _camera.position
+	var space_v: Variant = _config.get("spaceBackdrop", {})
+	if typeof(space_v) != TYPE_DICTIONARY:
+		return
+	var space_cfg: Dictionary = space_v
+	if not bool(space_cfg.get("enabled", false)):
+		return
+	var we: WorldEnvironment = _find_world_environment()
+	if we == null or we.environment == null:
+		push_warning("Arena3D: spaceBackdrop enabled but no WorldEnvironment found")
+		return
+	_space_backdrop = SpaceBackdropScript.new()
+	_space_backdrop.name = "SpaceBackdrop"
+	add_child(_space_backdrop)
+	_space_backdrop.call("configure", we.environment, space_cfg)
 
 
-## Applies the camera section of gameplay.json (drift, master framing, focus fov).
+## Applies the camera section of gameplay.json (wide master anchor, drift,
+## heat switching, wing siege shots and smoothing).
 func _apply_camera_config() -> void:
 	var cam_cfg: Dictionary = {}
 	var cfg_v: Variant = _config.get("camera", {})
 	if typeof(cfg_v) == TYPE_DICTIONARY:
 		cam_cfg = cfg_v
-	_drift_amplitude = float(cam_cfg.get("driftAmplitude", 1.2))
-	_drift_speed = float(cam_cfg.get("driftSpeed", 0.15))
-	_master_fov = float(cam_cfg.get("masterFov", 75.0))
-	_focus_fov = float(cam_cfg.get("focusFov", 55.0))
-	var pos_v: Variant = cam_cfg.get("masterPos", [0.0, 24.0, -28.0])
-	if typeof(pos_v) == TYPE_ARRAY and (pos_v as Array).size() >= 3:
-		var arr: Array = pos_v
-		_master_pos = Vector3(float(arr[0]), float(arr[1]), float(arr[2]))
-	_frame_battle_camera()
+	_master_distance = float(cam_cfg.get("masterDistance", 22.0))
+	_master_height = float(cam_cfg.get("masterHeight", 16.0))
+	_master_fov = float(cam_cfg.get("masterFov", 50.0))
+	_focus_fov = float(cam_cfg.get("focusFov", 45.0))
+	_look_height = float(cam_cfg.get("lookHeight", 1.5))
+	_drift_amplitude = float(cam_cfg.get("driftAmplitude", 2.5))
+	_drift_speed = float(cam_cfg.get("driftSpeed", 0.07))
+	_breathing_amplitude = float(cam_cfg.get("breathingAmplitude", 0.6))
+	_smoothing_half_life = float(cam_cfg.get("smoothingHalfLife", 0.9))
+	_look_half_life = float(cam_cfg.get("lookHalfLife", 0.6))
+	_heat_decay_per_second = float(cam_cfg.get("heatDecayPerSecond", 0.6))
+	_switch_hysteresis = float(cam_cfg.get("switchHysteresis", 1.5))
+	_min_hold_seconds = float(cam_cfg.get("minHoldSeconds", 6.0))
+	_wing_distance = float(cam_cfg.get("wingDistance", 24.0))
+	_wing_height = float(cam_cfg.get("wingHeight", 12.0))
+	_wing_fov = float(cam_cfg.get("wingFov", 52.0))
+	_wing_attack_z = float(cam_cfg.get("wingAttackZ", -10.0))
+	_reset_director_state()
+
+
+func _reset_director_state() -> void:
+	_heat = [0.0, 0.0, 0.0]
+	_active_shot = 0
+	_shot_age = 0.0
+	_cam_time = 0.0
+	_cam_pos = Vector3(0, _master_height, -_master_distance)
+	_cam_look = Vector3(0, _look_height, 0)
+	_cam_fov = _master_fov
+	_focus_timer = 0.0
 
 
 ## Cinematic push-in toward a world position (major technique, boss moments).
@@ -238,6 +383,7 @@ func focus_on(world_pos: Vector3, duration: float = 2.0) -> void:
 
 ## Syncs every visual node with the latest simulation snapshot.
 func apply_snapshot(snapshot: Dictionary) -> void:
+	_director_feed(snapshot)
 	# Fortress health.
 	var fh: Variant = snapshot.get("fortress_health")
 	if typeof(fh) == TYPE_ARRAY and (fh as Array).size() >= 2:
@@ -273,13 +419,13 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 				var node: Node = _acquire_unit_visual(u)
 				if node != null:
 					_unit_visuals[uid] = node
-	# Remove dead/gone unit visuals.
+	# Remove dead/gone unit visuals — they become corpses, not instant removals.
 	var to_remove: Array = []
 	for uid: int in _unit_visuals.keys():
 		if not active_ids.has(uid):
 			to_remove.append(uid)
 	for uid: int in to_remove:
-		_release_unit_visual(uid)
+		_kill_unit_visual(uid)
 	# Projectiles.
 	var active_proj_ids: Dictionary = {}
 	var projs: Variant = snapshot.get("projectiles")
@@ -315,6 +461,24 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 				var parts: PackedStringArray = ev_str.split(":")
 				if parts.size() >= 3:
 					_perform_technique_visuals(int(parts[1]), int(parts[2]))
+			elif ev_str.begins_with("siege_started:"):
+				# Attackers march on castle <1 - faction>: spike that wing's heat
+				# so the director cuts to the siege as it begins.
+				var parts: PackedStringArray = ev_str.split(":")
+				if parts.size() >= 2:
+					var target_wing: int = 1 if int(parts[1]) == 0 else 2
+					_heat[target_wing] = float(_heat[target_wing]) + 6.0
+			elif ev_str.begins_with("siege_recalled:"):
+				# Attackers pulled back to the middle: let the wing cool fast.
+				var parts: PackedStringArray = ev_str.split(":")
+				if parts.size() >= 2:
+					var target_wing: int = 1 if int(parts[1]) == 0 else 2
+					_heat[target_wing] = maxf(float(_heat[target_wing]) - 4.0, 0.0)
+			elif ev_str.begins_with("fortress_damaged:"):
+				var parts: PackedStringArray = ev_str.split(":")
+				if parts.size() >= 2:
+					var wing: int = 1 + int(parts[1])
+					_heat[wing] = float(_heat[wing]) + 1.5
 			elif not _victory_emitted and ev_str.begins_with("victory:"):
 				var parts: PackedStringArray = ev_str.split(":")
 				if parts.size() >= 3:
@@ -403,6 +567,7 @@ func _perform_victory_celebration(winner: int) -> void:
 func clear_round() -> void:
 	_clear_all()
 	_victory_emitted = false
+	_reset_director_state()
 
 
 ## Public restart.
@@ -421,6 +586,11 @@ func _acquire_unit_visual(unit_snap: Dictionary) -> Node:
 		return null
 	var node: Node = packed.instantiate()
 	_unit_container.add_child(node)
+	# Tell the unit how big the center arena is (for its flying-engine rides).
+	if node.has_method("set_center_radius"):
+		var arena_v: Variant = _config.get("arena", {})
+		var arena_cfg: Dictionary = arena_v if typeof(arena_v) == TYPE_DICTIONARY else {}
+		node.call("set_center_radius", float(arena_cfg.get("captureZoneRadius", 170.0)))
 	if node.has_method("update_visual"):
 		node.call("update_visual", unit_snap)
 	return node
@@ -444,6 +614,42 @@ func _release_unit_visual(uid: int) -> void:
 	_unit_visuals.erase(uid)
 	if node != null and is_instance_valid(node):
 		node.queue_free()
+
+
+## A unit left the simulation snapshot (it died). Keep its visual around as a
+## corpse: play the death animation, let it lie down, and schedule a sweep after
+## CORPSE_TTL_SECONDS rather than vanishing the instant it falls.
+func _kill_unit_visual(uid: int) -> void:
+	if not _unit_visuals.has(uid):
+		return
+	var node: Node = _unit_visuals[uid]
+	_unit_visuals.erase(uid)
+	if node == null or not is_instance_valid(node):
+		return
+	if node.has_method("die"):
+		node.call("die")
+	_corpses[uid] = {"node": node, "died_usec": Time.get_ticks_usec()}
+
+
+## Frees corpses that have lain longer than CORPSE_TTL_SECONDS.
+func _sweep_corpses() -> void:
+	if _corpses.is_empty():
+		return
+	var now_usec: int = Time.get_ticks_usec()
+	var ttl_usec: int = int(CORPSE_TTL_SECONDS * 1000000.0)
+	var expired: Array = []
+	for uid: int in _corpses.keys():
+		var corpse: Dictionary = _corpses[uid]
+		var node: Node = corpse["node"]
+		var stale: bool = (now_usec - int(corpse["died_usec"])) >= ttl_usec
+		if node == null or not is_instance_valid(node) or stale:
+			expired.append(uid)
+	for uid: int in expired:
+		var corpse: Dictionary = _corpses[uid]
+		var node: Node = corpse["node"]
+		if node != null and is_instance_valid(node):
+			node.queue_free()
+		_corpses.erase(uid)
 
 
 func _release_projectile_visual(pid: int) -> void:
@@ -479,6 +685,7 @@ func _clear_all() -> void:
 		_projectile_container = null
 	_unit_visuals.clear()
 	_projectile_visuals.clear()
+	_corpses.clear()
 
 
 func get_visual_unit_count() -> int:

@@ -13,6 +13,11 @@
     "captureZoneRadius": 170
   },
   "fortressHealth": 500,
+  "centerZone": {
+    "flankMinRadius": 30.0,
+    "flankRadiusFraction": 0.8,
+    "fortressShieldRadius": 160.0
+  },
   "capturePressureWeights": {
     "champion": 1.0,
     "guardian": 0.6,
@@ -20,7 +25,7 @@
     "captain": 1.5
   },
   "dominion": {
-    "ratePerSecondAtFullAdvantage": 4.0,
+    "ratePerSecondAtFullAdvantage": 3.0,
     "smoothing": 0.15
   },
   "unitStats": {
@@ -28,7 +33,7 @@
       "maxHealth": 100,
       "attackDamage": 12,
       "attackIntervalSeconds": 1.0,
-      "moveSpeed": 140,
+      "moveSpeed": 65,
       "attackRange": 60,
       "retreatHealthFraction": 0.25
     },
@@ -36,7 +41,7 @@
       "maxHealth": 160,
       "attackDamage": 8,
       "attackIntervalSeconds": 1.2,
-      "moveSpeed": 100,
+      "moveSpeed": 50,
       "attackRange": 50,
       "retreatHealthFraction": 0.25
     },
@@ -44,7 +49,7 @@
       "maxHealth": 70,
       "attackDamage": 16,
       "attackIntervalSeconds": 0.8,
-      "moveSpeed": 190,
+      "moveSpeed": 85,
       "attackRange": 55,
       "retreatHealthFraction": 0.25
     },
@@ -52,7 +57,7 @@
       "maxHealth": 400,
       "attackDamage": 25,
       "attackIntervalSeconds": 1.4,
-      "moveSpeed": 110,
+      "moveSpeed": 55,
       "attackRange": 80,
       "retreatHealthFraction": 0
     },
@@ -60,7 +65,7 @@
       "maxHealth": 1200,
       "attackDamage": 30,
       "attackIntervalSeconds": 1.6,
-      "moveSpeed": 80,
+      "moveSpeed": 40,
       "attackRange": 90,
       "retreatHealthFraction": 0
     }
@@ -91,11 +96,32 @@
     "speed": 420
   },
   "camera": {
-    "driftAmplitude": 1.2,
-    "driftSpeed": 0.15,
-    "masterFov": 75.0,
-    "focusFov": 55.0,
-    "masterPos": [0.0, 24.0, -28.0]
+    "masterDistance": 22.0,
+    "masterHeight": 16.0,
+    "masterFov": 50.0,
+    "focusFov": 45.0,
+    "lookHeight": 1.5,
+    "driftAmplitude": 2.5,
+    "driftSpeed": 0.07,
+    "breathingAmplitude": 0.6,
+    "smoothingHalfLife": 0.9,
+    "lookHalfLife": 0.6,
+    "heatDecayPerSecond": 0.6,
+    "switchHysteresis": 1.5,
+    "minHoldSeconds": 6.0,
+    "wingDistance": 24.0,
+    "wingHeight": 12.0,
+    "wingFov": 52.0,
+    "wingAttackZ": -10.0
+  },
+  "spaceBackdrop": {
+    "enabled": true,
+    "starCount": 1200,
+    "seed": 7,
+    "shipIntervalSeconds": 15.0,
+    "shipSpeedMin": 4.0,
+    "shipSpeedMax": 7.0,
+    "maxShips": 2
   },
   "technique": {
     "tier1": {

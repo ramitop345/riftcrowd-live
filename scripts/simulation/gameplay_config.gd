@@ -19,11 +19,12 @@ const UNIT_STAT_KEYS: PackedStringArray = [
 ]
 const TOP_LEVEL_KEYS: PackedStringArray = [
 	"schemaVersion", "tickRate", "stages", "arena", "fortressHealth",
-	"capturePressureWeights", "dominion", "unitStats", "pools",
+	"centerZone", "capturePressureWeights", "dominion", "unitStats", "pools",
 	"bots", "finalSurge", "suddenDeath", "crisis", "projectile",
-	"camera", "technique", "celebration",
+	"camera", "spaceBackdrop", "technique", "celebration",
 ]
 const ARENA_KEYS: PackedStringArray = ["width", "height", "captureZoneRadius"]
+const CENTER_ZONE_KEYS: PackedStringArray = ["flankMinRadius", "flankRadiusFraction", "fortressShieldRadius"]
 const DOMINION_KEYS: PackedStringArray = ["ratePerSecondAtFullAdvantage", "smoothing"]
 const POOL_KEYS: PackedStringArray = ["champion", "guardian", "striker", "projectile"]
 const BOTS_KEYS: PackedStringArray = ["spawnIntervalSeconds", "unitCycle"]
@@ -31,7 +32,16 @@ const FINAL_SURGE_KEYS: PackedStringArray = ["spawnIntervalMultiplier"]
 const SUDDEN_DEATH_KEYS: PackedStringArray = ["dominionRateMultiplier", "healingAllowed"]
 const CRISIS_KEYS: PackedStringArray = ["bossEnabled", "bossCaptureBonus", "bossCaptureBonusSeconds"]
 const PROJECTILE_KEYS: PackedStringArray = ["speed"]
-const CAMERA_KEYS: PackedStringArray = ["driftAmplitude", "driftSpeed", "masterFov", "focusFov", "masterPos"]
+const CAMERA_KEYS: PackedStringArray = [
+	"masterDistance", "masterHeight", "masterFov", "focusFov", "lookHeight",
+	"driftAmplitude", "driftSpeed", "breathingAmplitude", "smoothingHalfLife", "lookHalfLife",
+	"heatDecayPerSecond", "switchHysteresis", "minHoldSeconds",
+	"wingDistance", "wingHeight", "wingFov", "wingAttackZ",
+]
+const SPACE_BACKDROP_KEYS: PackedStringArray = [
+	"enabled", "starCount", "seed", "shipIntervalSeconds",
+	"shipSpeedMin", "shipSpeedMax", "maxShips",
+]
 const TECHNIQUE_KEYS: PackedStringArray = ["tier1", "tier2", "tier3", "performDurationSeconds", "staggerStepSeconds"]
 const TECHNIQUE_TIER1_KEYS: PackedStringArray = ["damageBuffFraction", "buffDurationSeconds"]
 const TECHNIQUE_TIER2_KEYS: PackedStringArray = ["aoeRadius", "aoeDamage"]
@@ -67,6 +77,7 @@ static func parse(data: Variant) -> Dictionary:
 	_validate_stages(cfg, errors)
 	_validate_arena(cfg, errors)
 	_check_positive_number(cfg, "fortressHealth", 1.0, "", errors)
+	_validate_center_zone(cfg, errors)
 	_validate_capture_weights(cfg, errors)
 	_validate_dominion(cfg, errors)
 	_validate_unit_stats(cfg, errors)
@@ -77,6 +88,7 @@ static func parse(data: Variant) -> Dictionary:
 	_validate_crisis(cfg, errors)
 	_validate_projectile(cfg, errors)
 	_validate_camera(cfg, errors)
+	_validate_space_backdrop(cfg, errors)
 	_validate_technique(cfg, errors)
 	_validate_celebration(cfg, errors)
 	if errors.is_empty():
@@ -111,6 +123,27 @@ static func _validate_arena(cfg: Dictionary, errors: Array[String]) -> void:
 	_check_positive_number(arena, "width", 100.0, path, errors)
 	_check_positive_number(arena, "height", 100.0, path, errors)
 	_check_positive_number(arena, "captureZoneRadius", 10.0, path, errors)
+
+
+## Optional center-dominion doctrine section (flank spread inside the capture
+## zone + fortress shield radius).
+static func _validate_center_zone(cfg: Dictionary, errors: Array[String]) -> void:
+	var path := "centerZone"
+	if not cfg.has("centerZone"):
+		return
+	if typeof(cfg["centerZone"]) != TYPE_DICTIONARY:
+		errors.append(path + ": expected an object")
+		return
+	var cz: Dictionary = cfg["centerZone"]
+	_check_unknown_keys(cz, CENTER_ZONE_KEYS, path, errors)
+	if cz.has("flankMinRadius"):
+		_check_non_negative_number(cz, "flankMinRadius", path, errors)
+	if cz.has("flankRadiusFraction"):
+		_check_positive_number(cz, "flankRadiusFraction", 0.01, path, errors)
+		if _is_finite_number(cz.get("flankRadiusFraction")) and float(cz["flankRadiusFraction"]) > 1.5:
+			errors.append(path + ".flankRadiusFraction: above maximum (1.5)")
+	if cz.has("fortressShieldRadius"):
+		_check_non_negative_number(cz, "fortressShieldRadius", path, errors)
 
 
 static func _validate_capture_weights(cfg: Dictionary, errors: Array[String]) -> void:
@@ -263,7 +296,7 @@ static func _validate_projectile(cfg: Dictionary, errors: Array[String]) -> void
 	_check_positive_number(proj, "speed", 1.0, path, errors)
 
 
-## Optional camera director section (Godot-side presentation config).
+## Optional camera director section (orbit rig + heat-based shot selection).
 static func _validate_camera(cfg: Dictionary, errors: Array[String]) -> void:
 	var path := "camera"
 	if not cfg.has("camera"):
@@ -273,21 +306,43 @@ static func _validate_camera(cfg: Dictionary, errors: Array[String]) -> void:
 		return
 	var cam: Dictionary = cfg["camera"]
 	_check_unknown_keys(cam, CAMERA_KEYS, path, errors)
-	if cam.has("driftAmplitude"):
-		_check_non_negative_number(cam, "driftAmplitude", path, errors)
-	if cam.has("driftSpeed"):
-		_check_non_negative_number(cam, "driftSpeed", path, errors)
-	if cam.has("masterFov"):
-		_check_positive_number(cam, "masterFov", 10.0, path, errors)
-	if cam.has("focusFov"):
-		_check_positive_number(cam, "focusFov", 10.0, path, errors)
-	if cam.has("masterPos"):
-		if typeof(cam["masterPos"]) != TYPE_ARRAY or (cam["masterPos"] as Array).size() != 3:
-			errors.append(path + ".masterPos: expected an array of 3 numbers")
-		else:
-			for i in 3:
-				if not _is_finite_number((cam["masterPos"] as Array)[i]):
-					errors.append(path + ".masterPos[%d]: expected a finite number" % i)
+	for key: String in ["masterDistance", "masterHeight", "masterFov", "focusFov", "wingDistance", "wingHeight", "wingFov"]:
+		if cam.has(key):
+			_check_positive_number(cam, key, 0.1, path, errors)
+	for key: String in ["driftAmplitude", "driftSpeed", "breathingAmplitude", "heatDecayPerSecond", "lookHeight"]:
+		if cam.has(key):
+			_check_non_negative_number(cam, key, path, errors)
+	for key: String in ["smoothingHalfLife", "lookHalfLife", "minHoldSeconds"]:
+		if cam.has(key):
+			_check_positive_number(cam, key, 0.01, path, errors)
+	if cam.has("switchHysteresis"):
+		_check_positive_number(cam, "switchHysteresis", 1.0, path, errors)
+
+
+## Optional space backdrop section (starfield sky + fly-by ships).
+static func _validate_space_backdrop(cfg: Dictionary, errors: Array[String]) -> void:
+	var path := "spaceBackdrop"
+	if not cfg.has("spaceBackdrop"):
+		return
+	if typeof(cfg["spaceBackdrop"]) != TYPE_DICTIONARY:
+		errors.append(path + ": expected an object")
+		return
+	var sp: Dictionary = cfg["spaceBackdrop"]
+	_check_unknown_keys(sp, SPACE_BACKDROP_KEYS, path, errors)
+	if sp.has("enabled"):
+		_check_bool(sp, "enabled", path, errors)
+	if sp.has("starCount"):
+		_check_positive_int(sp, "starCount", 1.0, 20000.0, path, errors)
+	if sp.has("seed"):
+		_check_non_negative_number(sp, "seed", path, errors)
+	if sp.has("shipIntervalSeconds"):
+		_check_positive_number(sp, "shipIntervalSeconds", 0.1, path, errors)
+	if sp.has("shipSpeedMin"):
+		_check_positive_number(sp, "shipSpeedMin", 0.01, path, errors)
+	if sp.has("shipSpeedMax"):
+		_check_positive_number(sp, "shipSpeedMax", 0.01, path, errors)
+	if sp.has("maxShips"):
+		_check_positive_int(sp, "maxShips", 1.0, 10.0, path, errors)
 
 
 ## Optional gift technique section (tier effects for CAST_TECHNIQUE).

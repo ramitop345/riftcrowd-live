@@ -17,8 +17,6 @@ extends RefCounted
 
 const SPAWN_JITTER: float = 40.0
 const SPAWN_SPREAD: float = 130.0      ## wider radial spawn band around the fortress
-const FLANK_MIN: float = 50.0          ## per-unit marching offset bounds
-const FLANK_MAX: float = 140.0
 const SEPARATION_RADIUS: float = 26.0  ## light push so squads don't stack
 const ARENA_MARGIN: float = 40.0
 const ARENA_SIM_W: float = 1080.0
@@ -29,7 +27,12 @@ const PROJECTILE_HIT_RADIUS: float = 12.0
 const FORTRESS_ATTACK_RANGE: float = 80.0
 const DEFEND_PULL_RANGE: float = 150.0
 const MAX_DEFENDERS: int = 3
-const DOMINION_AGGRESSION_THRESHOLD: float = 20.0
+## Center-dominion doctrine defaults (overridable via config.centerZone):
+## flanks stay inside the capture zone and fortresses are shielded while
+## their owner still has living units nearby.
+const DEFAULT_FLANK_MIN: float = 30.0
+const DEFAULT_FLANK_MAX_FRACTION: float = 0.8
+const DEFAULT_FORTRESS_SHIELD_RADIUS: float = 160.0
 
 ## Stage names used in snapshots and events.
 const STAGE_OPENING: String = "opening"
@@ -83,6 +86,10 @@ var _projectile_speed: float = 420.0
 var _unit_registry: Dictionary = {}  # global_id -> SimUnit
 var _dead_pending: Array = []        # SimUnit refs awaiting pool release
 
+# Center-dominion doctrine state.
+var _enemy_in_center: Array = [false, false]  ## per faction: enemy present in center zone
+var _sieging: Array = [false, false]          ## per faction: objective is the enemy fortress
+
 # Cached config values
 var _tick_rate: int = 20
 var _stage_durations: Dictionary = {}
@@ -90,6 +97,9 @@ var _total_time: float = 0.0
 var _dominion_rate: float = 4.0
 var _dominion_smoothing: float = 0.15
 var _weights: Dictionary = {}
+var _flank_min: float = DEFAULT_FLANK_MIN
+var _flank_max_radius: float = DEFAULT_FLANK_MAX_FRACTION * 170.0
+var _fortress_shield_radius: float = DEFAULT_FORTRESS_SHIELD_RADIUS
 
 
 ## Static factory matching the public API contract.
@@ -128,6 +138,10 @@ func _init_world(config: Dictionary, seed_value: int, faction_a: Dictionary, fac
 	_dominion_rate = float(dom.get("ratePerSecondAtFullAdvantage", 4.0))
 	_dominion_smoothing = float(dom.get("smoothing", 0.15))
 	_weights = config.get("capturePressureWeights", {})
+	var cz: Dictionary = config.get("centerZone", {})
+	_flank_min = float(cz.get("flankMinRadius", DEFAULT_FLANK_MIN))
+	_flank_max_radius = _capture_radius * float(cz.get("flankRadiusFraction", DEFAULT_FLANK_MAX_FRACTION))
+	_fortress_shield_radius = float(cz.get("fortressShieldRadius", DEFAULT_FORTRESS_SHIELD_RADIUS))
 	_projectile_speed = float(config.get("projectile", {}).get("speed", 420))
 	var pools: Dictionary = config.get("pools", {})
 	_champion_pool = UnitPool.new(int(pools.get("champion", 60)))
@@ -155,6 +169,8 @@ func _init_world(config: Dictionary, seed_value: int, faction_a: Dictionary, fac
 	_events.clear()
 	_dead_pending.clear()
 	_unit_registry.clear()
+	_enemy_in_center = [false, false]
+	_sieging = [false, false]
 	# Spawn captains
 	_spawn_captain(0)
 	_spawn_captain(1)
@@ -169,6 +185,7 @@ func tick() -> void:
 	if _round_over:
 		return
 	_spawn_bots()
+	_update_doctrine_state()
 	_tick_units()
 	_tick_projectiles()
 	_resolve_cleanup()
@@ -248,6 +265,8 @@ func reset(seed_value: int) -> void:
 	_events.clear()
 	_dead_pending.clear()
 	_unit_registry.clear()
+	_enemy_in_center = [false, false]
+	_sieging = [false, false]
 	_spawn_captain(0)
 	_spawn_captain(1)
 
@@ -474,9 +493,10 @@ func _configure_unit(u: SimUnit, utype: String, faction: int) -> void:
 		u.position = _clamp_arena(base + Vector2(cos(spawn_angle), sin(spawn_angle)) * spawn_radius)
 	else:
 		u.position = _crown
-	# Assign a personal flanking lane so the army sweeps the full arena.
+	# Assign a personal slot inside the center zone so armies spread across
+	# the whole middle scene instead of stacking on the crown point.
 	var flank_angle: float = _rng.randf() * TAU
-	var flank_mag: float = _rng.randf_range(FLANK_MIN, FLANK_MAX)
+	var flank_mag: float = _rng.randf_range(_flank_min, maxf(_flank_max_radius, _flank_min + 1.0))
 	u.flank_offset = Vector2(cos(flank_angle), sin(flank_angle)) * flank_mag
 	_unit_registry[gid] = u
 
@@ -509,6 +529,38 @@ func _find_unit(uid: int) -> SimUnit:
 
 
 # --- Tick sub-systems ---
+
+## Center-dominion doctrine. Recomputed once per tick (before unit AI):
+## a faction may only START a siege while it holds the center zone and the
+## enemy has NO living unit inside it (at round start nobody holds the
+## center yet, so armies always converge on the middle first). Once a siege
+## is underway it stays active while the center remains enemy-free — even
+## while the attackers themselves march away toward the fortress. The moment
+## an enemy is alive in the center again (fresh spawns included) every
+## attacker's objective flips back to the center — the siege force turns
+## around and returns to fight.
+func _update_doctrine_state() -> void:
+	var in_center: Array = [false, false]
+	for pool in [_champion_pool, _guardian_pool, _striker_pool, _captain_pool]:
+		for u: SimUnit in pool.active_units():
+			if u.alive and u.faction_index >= 0:
+				if u.position.distance_to(_crown) <= _capture_radius:
+					in_center[u.faction_index] = true
+	for faction in 2:
+		_enemy_in_center[faction] = in_center[1 - faction]
+		var enemy_clear: bool = not bool(_enemy_in_center[faction])
+		var holds_center: bool = bool(in_center[faction])
+		var center_uncontested: bool = not bool(in_center[0]) and not bool(in_center[1])
+		# Uncontested center (e.g. mutual wipe) lets squads push forward; units
+		# already sieging keep pressure on the gate, and the moment a defender
+		# respawns inside the zone the recall fires and pulls them back.
+		var wants_siege: bool = enemy_clear and (holds_center or center_uncontested or bool(_sieging[faction]))
+		if wants_siege and not bool(_sieging[faction]):
+			_events.append("siege_started:%d" % faction)
+		elif not wants_siege and bool(_sieging[faction]):
+			_events.append("siege_recalled:%d" % faction)
+		_sieging[faction] = wants_siege
+
 
 func _tick_units() -> void:
 	# Collect all active units for deterministic id-ordered processing
@@ -787,9 +839,27 @@ func _process_fortress_attacks(all_units: Array) -> void:
 		var enemy_fortress: int = 1 - u.faction_index
 		var dist: float = u.position.distance_to(_fortress_positions[enemy_fortress])
 		if dist <= FORTRESS_ATTACK_RANGE and u.attack_cooldown <= 0.0:
+			# Castle shield: a fortress only takes damage while its owner has
+			# no living unit near it. Fresh spawns defend their gate, so
+			# attackers must clear the defenders before breaking the walls.
+			if _is_fortress_shielded(enemy_fortress):
+				continue
 			u.attack_cooldown = u.attack_interval
 			_fortress_health[enemy_fortress] -= _effective_damage(u)
 			_events.append("fortress_damaged:%d" % enemy_fortress)
+
+
+## True while the fortress owner still has a living unit within the shield
+## radius of their own fortress.
+func _is_fortress_shielded(faction: int) -> bool:
+	var fortress_pos: Vector2 = _fortress_positions[faction]
+	for pool in [_champion_pool, _guardian_pool, _striker_pool, _captain_pool]:
+		for u: SimUnit in pool.active_units():
+			if not u.alive or u.faction_index != faction:
+				continue
+			if u.position.distance_to(fortress_pos) <= _fortress_shield_radius:
+				return true
+	return false
 
 
 func _kill_unit(victim: SimUnit, killer_faction: int) -> void:
@@ -873,16 +943,10 @@ func _get_objective(u: SimUnit) -> Vector2:
 		if nearest != null:
 			return nearest.position
 		return _crown
-	# Striker aggression: siege the enemy fortress on a >= 20 dominion lead,
-	# and unconditionally once the round escalates (final surge / sudden death)
-	# so late rounds always pressure both fortresses.
-	if u.unit_type == "striker":
-		if _stage == STAGE_FINAL_SURGE or _stage == STAGE_SUDDEN_DEATH:
-			return _fortress_positions[1 - u.faction_index]
-		var my_dom: float = _dominion_display[u.faction_index]
-		var enemy_dom: float = _dominion_display[1 - u.faction_index]
-		if my_dom - enemy_dom >= DOMINION_AGGRESSION_THRESHOLD:
-			return _fortress_positions[1 - u.faction_index]
+	# Center-dominion doctrine: fight for the middle scene; only march on the
+	# enemy fortress while no enemy remains alive in the center zone.
+	if bool(_sieging[u.faction_index]):
+		return _fortress_positions[1 - u.faction_index]
 	return _crown
 
 
@@ -920,14 +984,8 @@ func _should_defend(u: SimUnit) -> bool:
 
 
 func _check_victory() -> void:
-	# Dominion win
-	if _dominion_raw[0] >= 100.0:
-		_end_round(0, "dominion")
-		return
-	if _dominion_raw[1] >= 100.0:
-		_end_round(1, "dominion")
-		return
-	# Fortress destruction
+	# A battle can only be won by destroying the enemy castle. Dominion is a
+	# measure of center control (it gates the siege) but never wins on its own.
 	if _fortress_health[0] <= 0.0:
 		_end_round(1, "fortress")
 		return
@@ -937,14 +995,12 @@ func _check_victory() -> void:
 
 
 func _resolve_sudden_death() -> void:
-	if _dominion_display[0] > _dominion_display[1]:
-		_end_round(0, "sudden_death")
-	elif _dominion_display[1] > _dominion_display[0]:
-		_end_round(1, "sudden_death")
-	elif _fortress_health[0] > _fortress_health[1]:
-		_end_round(0, "sudden_death")
-	elif _fortress_health[1] > _fortress_health[0]:
-		_end_round(1, "sudden_death")
+	# Only castle destruction wins; reaching the end of sudden death with both
+	# keeps standing means neither side broke through the enemy defenses.
+	if _fortress_health[0] <= 0.0:
+		_end_round(1, "fortress")
+	elif _fortress_health[1] <= 0.0:
+		_end_round(0, "fortress")
 	else:
 		_end_round(2, "draw")
 
