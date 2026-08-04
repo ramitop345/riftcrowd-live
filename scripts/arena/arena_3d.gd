@@ -18,6 +18,9 @@ const FORTRESS_SCENE_PATH: String = "res://scenes/units/3d/Fortress3D.tscn"
 const CROWN_SCENE_PATH: String = "res://scenes/units/3d/Crown3D.tscn"
 const CAPTURE_ZONE_SCENE_PATH: String = "res://scenes/units/3d/CaptureZone3D.tscn"
 const ARENA_GLB_PATH: String = "res://assets/models/environment/env_arena_v1.glb"
+const BRIDGE_GLB_PATH: String = "res://assets/models/environment/env_bridge_v2.glb"
+## Authored bridge length in meters (zone end x=0 to gate end).
+const BRIDGE_AUTHORED_LENGTH: float = 11.7
 # Meshy arena authored ~1.9 x 1.4 m; stretch to span the 54 x 40 battle field
 # (fortresses at x = ±21 stay on solid ground).
 const ARENA_SCALE: Vector3 = Vector3(26.0, 8.0, 24.0)
@@ -47,6 +50,7 @@ var _fortress_b: Node = null
 var _crown: Node = null
 var _capture_zone: Node = null
 var _arena_ground: Node3D = null
+var _bridges: Node3D = null
 
 ## Dynamic containers.
 var _unit_container: Node3D
@@ -195,6 +199,10 @@ func setup(config: Dictionary, faction_a: Dictionary, faction_b: Dictionary) -> 
 		_fortress_b.position = Vector3(21, GROUND_Y, 0)
 		if _fortress_b.has_method("update_visual"):
 			_fortress_b.call("update_visual", 1.0, 1)
+	# Stone bridges connecting each fortress to the capture zone. The fly engine
+	# is gone: every character crosses on foot, so the sim funnels out-of-zone
+	# traffic onto these corridors (see sim_world BRIDGE_HALF_SIM).
+	_build_bridges()
 	# Dynamic containers.
 	_unit_container = Node3D.new()
 	_unit_container.name = "UnitContainer"
@@ -748,6 +756,9 @@ func _release_projectile_visual(pid: int) -> void:
 
 
 func _clear_all() -> void:
+	if _bridges != null and is_instance_valid(_bridges):
+		_bridges.queue_free()
+		_bridges = null
 	if _fortress_a != null and is_instance_valid(_fortress_a):
 		_fortress_a.queue_free()
 		_fortress_a = null
@@ -776,6 +787,81 @@ func _clear_all() -> void:
 
 func get_visual_unit_count() -> int:
 	return _unit_visuals.size()
+
+
+## Builds one futuristic bridge per side from the fortress gate to the capture
+## zone rim using the Blender-authored v2 set piece (same hull/cyan/amber
+## language as the capture zone). Deck tops sit just above the ground plane so
+## walking units stay on the walkway; width matches the sim bridge corridor
+## (BRIDGE_HALF_SIM 90). Falls back to plain boxes if the GLB is missing.
+func _build_bridges() -> void:
+	_bridges = Node3D.new()
+	_bridges.name = "Bridges"
+	add_child(_bridges)
+	var arena_cfg: Dictionary = _config.get("arena", {}) if _config is Dictionary else {}
+	var radius: float = float(arena_cfg.get("captureZoneRadius", 170.0))
+	# Sim -> world x: 1080 sim units span 54 world meters.
+	var zone_x: float = radius * (54.0 / 1080.0)
+	var x0: float = zone_x - 1.0  # overlap the zone rim slightly
+	var x1: float = 20.2  # reach the fortress at x = 21
+	var bridge_packed: PackedScene = load(BRIDGE_GLB_PATH) as PackedScene
+	for side in [-1.0, 1.0]:
+		var holder := Node3D.new()
+		holder.name = "Bridge%s" % ("A" if side < 0.0 else "B")
+		_bridges.add_child(holder)
+		if bridge_packed != null:
+			var model: Node3D = bridge_packed.instantiate()
+			# Stretch to span zone rim -> gate; rotate 180° on the left side so
+			# the gate pylons always sit at the fortress end.
+			model.scale = Vector3((x1 - x0) / BRIDGE_AUTHORED_LENGTH, 1.0, 1.0)
+			if side < 0.0:
+				model.rotation.y = PI
+				model.position = Vector3(-x0, GROUND_Y, 0.0)
+			else:
+				model.position = Vector3(x0, GROUND_Y, 0.0)
+			holder.add_child(model)
+		else:
+			_build_box_bridge(holder, side, x0, x1)
+
+
+## Primitive fallback walkway if the v2 GLB fails to load.
+func _build_box_bridge(holder: Node3D, side: float, x0: float, x1: float) -> void:
+	var length: float = x1 - x0
+	var cx: float = side * (x0 + x1) * 0.5
+	var deck_mat := StandardMaterial3D.new()
+	deck_mat.albedo_color = Color(0.42, 0.4, 0.37)
+	deck_mat.roughness = 0.95
+	deck_mat.metallic = 0.0
+	var curb_mat := StandardMaterial3D.new()
+	curb_mat.albedo_color = Color(0.3, 0.28, 0.26)
+	curb_mat.roughness = 0.95
+	curb_mat.metallic = 0.0
+	# Deck: top surface just above GROUND_Y so feet stay on the walkway.
+	var deck := MeshInstance3D.new()
+	var deck_mesh := BoxMesh.new()
+	deck_mesh.size = Vector3(length, 0.24, 6.1)
+	deck.mesh = deck_mesh
+	deck.material_override = deck_mat
+	deck.position = Vector3(cx, GROUND_Y - 0.09, 0.0)
+	holder.add_child(deck)
+	# Curbs on both edges keep the corridor visually bounded.
+	for z_edge in [-2.96, 2.96]:
+		var curb := MeshInstance3D.new()
+		var curb_mesh := BoxMesh.new()
+		curb_mesh.size = Vector3(length, 0.42, 0.18)
+		curb.mesh = curb_mesh
+		curb.material_override = curb_mat
+		curb.position = Vector3(cx, GROUND_Y + 0.12, z_edge)
+		holder.add_child(curb)
+	# Gate posts at the fortress end of the bridge.
+	for z_edge in [-2.9, 2.9]:
+		var post := MeshInstance3D.new()
+		var post_mesh := BoxMesh.new()
+		post_mesh.size = Vector3(0.5, 1.6, 0.5)
+		post.mesh = post_mesh
+		post.material_override = curb_mat
+		post.position = Vector3(side * (x1 - 0.3), GROUND_Y + 0.8, z_edge)
+		holder.add_child(post)
 
 
 func get_visual_projectile_count() -> int:

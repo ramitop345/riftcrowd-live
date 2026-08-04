@@ -12,7 +12,7 @@
   "arena": {
     "width": 1080,
     "height": 1180,
-    "captureZoneRadius": 170
+    "captureZoneRadius": 190
   },
   "fortressHealth": 500,
   "centerZone": {

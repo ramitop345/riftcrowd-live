@@ -17,6 +17,10 @@ extends RefCounted
 
 const SPAWN_JITTER: float = 40.0
 const SPAWN_SPREAD: float = 130.0      ## wider radial spawn band around the fortress
+## Half width (sim units) of the stone-bridge corridor between each fortress
+## and the capture zone. Marches outside the zone are funneled into this band
+## so troops visibly cross the bridges on foot.
+const BRIDGE_HALF_SIM: float = 90.0
 const SEPARATION_RADIUS: float = 26.0  ## light push so squads don't stack
 const ARENA_MARGIN: float = 40.0
 ## Casual stroll speed as a fraction of move_speed (idle wandering in the zone).
@@ -705,6 +709,11 @@ func _advance_ai(u: SimUnit) -> void:
 			return
 		u.wander_target = Vector2.ZERO
 		obj_pos = slot
+	# Bridge corridor: outside the capture zone every march (spawn approach,
+	# siege, recall) is funneled onto the stone bridge on the unit's side so
+	# troops visibly cross on foot instead of cutting across open ground.
+	if u.faction_index >= 0 and u.position.distance_to(_crown) > _capture_radius:
+		obj_pos = Vector2(obj_pos.x, _crown.y + clampf(u.position.y - _crown.y, -BRIDGE_HALF_SIM, BRIDGE_HALF_SIM))
 	_move_toward(u, obj_pos)
 	# Defend check
 	if u.faction_index >= 0 and _is_fortress_threatened(u.faction_index):
@@ -743,7 +752,10 @@ func _retreat_ai(u: SimUnit) -> void:
 		u.state_time = 0.0
 		return
 	if u.faction_index >= 0:
-		_move_toward(u, _fortress_positions[u.faction_index])
+		var fp: Vector2 = _fortress_positions[u.faction_index]
+		if u.position.distance_to(_crown) > _capture_radius:
+			fp = Vector2(fp.x, _crown.y + clampf(u.position.y - _crown.y, -BRIDGE_HALF_SIM, BRIDGE_HALF_SIM))
+		_move_toward(u, fp)
 
 
 func _defend_ai(u: SimUnit) -> void:
@@ -752,6 +764,8 @@ func _defend_ai(u: SimUnit) -> void:
 		u.state_time = 0.0
 		return
 	var fortress_pos: Vector2 = _fortress_positions[u.faction_index]
+	if u.position.distance_to(_crown) > _capture_radius:
+		fortress_pos = Vector2(fortress_pos.x, _crown.y + clampf(u.position.y - _crown.y, -BRIDGE_HALF_SIM, BRIDGE_HALF_SIM))
 	_move_toward(u, fortress_pos)
 	# Attack nearby enemies
 	var target := _find_nearest_enemy(u, u.attack_range * 2.0)

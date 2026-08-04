@@ -12,15 +12,6 @@ const ARENA_H: float = 40.0  # depth stretched so troops fill top/bottom of the 
 const GROUND_Y: float = 1.0  # units stand on the flat arena ground
 const MODEL_SCALE: float = 1.0  # Meshy models are authored at real-world scale
 
-# -- Flying-engine transport --
-# Units ride a hover engine whenever they are outside the center arena (spawn
-# entrance, siege march to the castle, retreat). The deck sits exactly at foot
-# level so characters stand on it instead of floating above it.
-const CROWN_SIM: Vector2 = Vector2(540.0, 590.0)
-## Troops dismount this many sim units BEFORE the capture zone border so they
-## are already walking on foot when they cross the zone edge.
-const DESCENT_LEAD_SIM: float = 50.0
-
 # -- Gait calibration (anti foot-slide) --
 # Ground speed is measured from snapshot position deltas in world units/s.
 # Below the walk threshold units stand and fight; closing on an opponent
@@ -102,11 +93,6 @@ var _prev_snapshot_usec: int = 0
 var _ground_speed: float = 0.0
 var _last_move_usec: int = 0
 var _target_yaw: float = 0.0
-var _transport: Node3D = null
-var _transport_engine_mat: StandardMaterial3D = null
-var _transport_state: int = 0  # 0 = hidden, 1 = hovering/rising, 2 = sinking
-var _transport_tween: Tween = null
-var _center_radius_sim: float = 170.0  # arena capture zone radius in sim units
 
 ## Grayscale versions of baked albedo textures (shared across all units).
 ## Meshy GLBs bake armor hues into the TEXTURE while albedo_color stays
@@ -119,12 +105,6 @@ static var _gray_tex_cache: Dictionary = {}
 func _ready() -> void:
 	_create_ground_circle()
 	_create_health_bar()
-	_build_transport()
-
-
-## Capture-zone radius in sim units (arena_3d passes the configured value).
-func set_center_radius(radius_sim: float) -> void:
-	_center_radius_sim = maxf(radius_sim, 1.0)
 
 
 func _process(delta: float) -> void:
@@ -185,7 +165,6 @@ func update_visual(unit_snapshot: Dictionary) -> void:
 	if new_faction != _faction_index:
 		_faction_index = new_faction
 		_swap_model(new_faction)
-		_paint_transport_engine(new_faction)
 	# Health
 	var new_health: float = clampf(float(unit_snapshot.get("health_fraction", 1.0)), 0.0, 1.0)
 	if new_health < _prev_health - 0.01:
@@ -230,12 +209,9 @@ func update_visual(unit_snapshot: Dictionary) -> void:
 	else:
 		_play_anim(ANIM_IDLE)
 	# Anti-levitation: whatever the sim state, a unit that is clearly travelling
-	# must play a locomotion track so its legs move instead of gliding.
+	# must play a locomotion track so its legs move instead of gliding. There is
+	# no fly engine anymore — every character crosses the bridges on foot.
 	_ensure_locomotion()
-	# Flying engine: ridden whenever the unit is outside the center arena.
-	# Dismount begins DESCENT_LEAD_SIM before the border so characters are
-	# already walking on foot the moment they reach the capture zone edge.
-	_update_transport(_wants_transport(sx, sy))
 
 
 ## If a unit is moving but currently playing a stationary clip (idle/spawn/etc.),
@@ -249,116 +225,6 @@ func _ensure_locomotion() -> void:
 	if _current_anim == ANIM_RUN or _current_anim == ANIM_WALK or _current_anim == ANIM_RETREAT:
 		return
 	_play_gait(ANIM_WALK)
-
-
-# ---------------------------------------------------------------------------
-# Flying-engine transport (hover platform ridden outside the center arena)
-# ---------------------------------------------------------------------------
-
-## Primitive hover engine built in code (Meshy-swappable later). Deck top sits
-## exactly at local y = 0 (foot level) so the character stands on it, not above.
-func _build_transport() -> void:
-	if _class_name == "boss":
-		return  # the boss is a creature — it walks everywhere on its own
-	_transport = Node3D.new()
-	_transport.name = "FlyEngine"
-	var hull_mat := StandardMaterial3D.new()
-	hull_mat.albedo_color = Color(0.28, 0.3, 0.36)
-	hull_mat.metallic = 0.7
-	hull_mat.roughness = 0.35
-	var deck := MeshInstance3D.new()
-	deck.name = "Deck"
-	var deck_mesh := CylinderMesh.new()
-	deck_mesh.top_radius = 0.95
-	deck_mesh.bottom_radius = 0.7
-	deck_mesh.height = 0.16
-	deck.mesh = deck_mesh
-	deck.material_override = hull_mat
-	deck.position = Vector3(0, -0.08, 0)  # deck top flush with the feet
-	_transport.add_child(deck)
-	var rim := MeshInstance3D.new()
-	rim.name = "Rim"
-	var rim_mesh := TorusMesh.new()
-	rim_mesh.inner_radius = 0.62
-	rim_mesh.outer_radius = 0.8
-	rim.mesh = rim_mesh
-	rim.material_override = hull_mat
-	rim.position = Vector3(0, -0.2, 0)
-	_transport.add_child(rim)
-	_transport_engine_mat = StandardMaterial3D.new()
-	_transport_engine_mat.albedo_color = Color(0.3, 0.7, 1.0)
-	_transport_engine_mat.emission_enabled = true
-	_transport_engine_mat.emission = Color(0.3, 0.7, 1.0)
-	_transport_engine_mat.emission_energy_multiplier = 2.0
-	var glow := MeshInstance3D.new()
-	glow.name = "EngineGlow"
-	var glow_mesh := CylinderMesh.new()
-	glow_mesh.top_radius = 0.55
-	glow_mesh.bottom_radius = 0.38
-	glow_mesh.height = 0.1
-	glow.mesh = glow_mesh
-	glow.material_override = _transport_engine_mat
-	glow.position = Vector3(0, -0.24, 0)
-	_transport.add_child(glow)
-	_transport.visible = false
-	add_child(_transport)
-
-
-## Engine glow matches the faction so riders read as blue/red at a glance.
-func _paint_transport_engine(faction: int) -> void:
-	if _transport_engine_mat == null:
-		return
-	var col := Color(0.3, 0.7, 1.0)
-	if faction == 0:
-		col = Color(0.25, 0.5, 1.0)
-	elif faction == 1:
-		col = Color(1.0, 0.35, 0.25)
-	_transport_engine_mat.albedo_color = col
-	_transport_engine_mat.emission = col
-
-
-## True while the unit stands outside the center capture zone — i.e. arriving
-## from the spawn, marching on the enemy castle, or falling back to defend.
-## The + DESCENT_LEAD_SIM margin drops the engine before the border so the
-## troop walks across the zone edge instead of gliding in on the deck.
-func _wants_transport(sx: float, sy: float) -> bool:
-	if _dead:
-		return false
-	return Vector2(sx, sy).distance_to(CROWN_SIM) > _center_radius_sim + DESCENT_LEAD_SIM
-
-
-## Board/dismount state machine: the engine rises when the unit heads out of
-## the zone and sinks away just before the border so troops walk across it.
-func _update_transport(wants: bool) -> void:
-	if _transport == null:
-		return
-	if wants:
-		if _transport_state == 2 and _transport_tween != null and _transport_tween.is_valid():
-			_transport_tween.kill()
-			_transport_tween = null
-		if _transport_state == 0:
-			_transport.visible = true
-			_transport.position.y = -0.8
-		_transport_state = 1
-		if _transport.position.y < -0.01 and (_transport_tween == null or not _transport_tween.is_valid()):
-			_transport_tween = create_tween()
-			_transport_tween.tween_property(_transport, "position:y", 0.0, 0.25).set_ease(Tween.EASE_OUT)
-		return
-	if _transport_state == 1:
-		_transport_state = 2
-		if _transport_tween != null and _transport_tween.is_valid():
-			_transport_tween.kill()
-		_transport_tween = create_tween()
-		_transport_tween.tween_property(_transport, "position:y", -1.2, 0.3).set_ease(Tween.EASE_IN)
-		_transport_tween.tween_callback(_finish_descent)
-
-
-func _finish_descent() -> void:
-	_transport_state = 0
-	_transport_tween = null
-	if _transport != null and is_instance_valid(_transport):
-		_transport.visible = false
-		_transport.position.y = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -561,8 +427,6 @@ func die() -> void:
 	_dead = true
 	_ground_speed = 0.0
 	_play_anim(ANIM_DEATH)
-	if _transport != null:
-		_transport.visible = false
 	if _health_bar != null:
 		_health_bar.visible = false
 	var bg: Node = get_node_or_null("HealthBarBg")
@@ -599,15 +463,13 @@ func play_celebration(seed_index: int) -> void:
 	_play_anim(key)
 
 
-## Victory return march: plays the walk clip at a fixed calibrated pace and
-## hides the fly engine — the arena tweens the node back to the center.
+## Victory return march: plays the walk clip at a fixed calibrated pace;
+## the arena tweens the node back to the center.
 func play_return_march() -> void:
 	if _dead:
 		return
 	_ground_speed = CALIBRATED_WALK_UPS  # gait speed_scale settles at ~1.0
 	_play_gait(ANIM_WALK)
-	if _transport != null:
-		_transport.visible = false
 
 
 ## Instantly face a world position (used by the victory return march, since
