@@ -17,6 +17,9 @@ const NEXT_BATTLE_COUNTDOWN: float = 10.0
 ## Gate picture-in-picture cameras stay up this long after fresh entries.
 const PIP_SHOW_SECONDS: float = 5.0
 const MAX_STARS: int = 26
+## Event audio (Revision 10) — ElevenLabs-generated SFX + announcer voice lines.
+const SFX_DIR: String = "res://assets/audio/sfx/"
+const VOICE_DIR: String = "res://assets/audio/voice/"
 
 @onready var _safe_area: MarginContainer = $SafeArea
 @onready var _mode_label: Label = $SafeArea/Layout/HUDRegion/HUDLayout/ModeLabel
@@ -73,6 +76,9 @@ var _pip_timers: Array = [0.0, 0.0]
 
 ## Alternates technique factions for commands with an unknown factionId (mock mode).
 var _next_technique_faction: int = 0
+
+## Last-play timestamps (seconds) for throttled audio keys (Revision 10).
+var _audio_last: Dictionary = {}
 
 # Orchestrator references (Tier 3 — programmatic instantiation)
 var _ws_client: WSClient = null
@@ -179,6 +185,7 @@ func _ready() -> void:
 	_wire_signals()
 	_connect_to_gateway()
 	_load_gateway_configs()
+	_play_battle_start()
 
 
 func _process(delta: float) -> void:
@@ -273,8 +280,13 @@ func _update_hud(snapshot: Dictionary) -> void:
 				var parts: PackedStringArray = ev_str.split(":", true, 2)
 				if parts.size() >= 3:
 					_show_join_banner(parts[2], int(parts[1]))
-			if ev_str.begins_with("siege_started:"):
+				_play_sfx("spawn_chime.mp3")
+				_play_voice("voice_warrior_joins.mp3", 8.0)
+			elif ev_str.begins_with("unit_died:"):
+				_play_sfx("laser_burst.mp3", 1.2)
+			elif ev_str.begins_with("siege_started:"):
 				_show_wipe_banner(int(ev_str.split(":")[1]))
+				_play_sfx("laser_burst.mp3")
 		_spotlight_label.text = str((events as Array).back())
 
 
@@ -300,14 +312,17 @@ func _resolve_factions() -> Array:
 
 
 func _on_pause_pressed() -> void:
+	_play_sfx("ui_click.mp3")
 	_presenter.toggle_pause()
 
 
 func _on_speed(speed: float) -> void:
+	_play_sfx("ui_click.mp3")
 	_presenter.set_speed(speed)
 
 
 func _on_restart_pressed() -> void:
+	_play_sfx("ui_click.mp3")
 	_teardown_victory_overlays()
 	_victory_phase = ""
 	_results_timer = -1.0
@@ -318,12 +333,57 @@ func _on_restart_pressed() -> void:
 			pip.visible = false
 	_presenter.restart(randi())
 	_spotlight_label.text = "Round restarted..."
+	_play_battle_start()
 
 
 func _on_end_battle_pressed() -> void:
+	_play_sfx("ui_click.mp3")
 	if _presenter != null and _presenter.sandbox != null:
 		_presenter.sandbox.paused = true
 	AppState.goto(AppState.Screen.RESULTS)
+
+
+# ---------------------------------------------------------------------------
+# Event audio (Revision 10) — ElevenLabs assets in res://assets/audio/
+# ---------------------------------------------------------------------------
+
+## Plays a sound effect from assets/audio/sfx; optional minimum gap throttles
+## chatty events (e.g. per-death laser bursts).
+func _play_sfx(track_name: String, min_gap_sec: float = 0.0) -> void:
+	if _audio_mgr == null:
+		return
+	if not _audio_gap_ok(track_name, min_gap_sec):
+		return
+	_audio_mgr.play(SFX_DIR + track_name, "sfx")
+
+
+## Plays an announcer line from assets/audio/voice on the dedicated voice
+## player, throttled per-line so spammy events never stack chatter.
+func _play_voice(track_name: String, min_gap_sec: float = 0.0) -> void:
+	if _audio_mgr == null:
+		return
+	if not _audio_gap_ok(track_name, min_gap_sec):
+		return
+	_audio_mgr.play(VOICE_DIR + track_name, "voice")
+
+
+## Throttle check: returns true (and records the timestamp) when enough time
+## has passed since the key last played.
+func _audio_gap_ok(key: String, min_gap_sec: float) -> bool:
+	if min_gap_sec <= 0.0:
+		return true
+	var now: float = float(Time.get_ticks_msec()) / 1000.0
+	var last: float = float(_audio_last.get(key, -1.0e9))
+	if now - last < min_gap_sec:
+		return false
+	_audio_last[key] = now
+	return true
+
+
+## Horn + announcer line at battle start and on every restart.
+func _play_battle_start() -> void:
+	_play_sfx("battle_horn.mp3")
+	_play_voice("voice_battle_begins.mp3", 4.0)
 
 
 func _on_round_completed(snapshot: Dictionary) -> void:
@@ -347,6 +407,8 @@ func _on_round_completed(snapshot: Dictionary) -> void:
 		_victory_phase = "destruction"
 		_results_timer = DESTRUCTION_SECONDS
 		_show_fall_banner()
+		_play_sfx("explosion.mp3")
+		_play_voice("voice_fortress_fallen.mp3")
 	else:
 		# Phase 1 — the winners march back to the arena to celebrate (arena-side
 		# tweens); no overlay yet so the march stays fully visible.
@@ -655,6 +717,8 @@ func _begin_celebration() -> void:
 	_victory_phase = "celebration"
 	_results_timer = CELEBRATION_SECONDS
 	_build_celebration_overlay()
+	_play_sfx("victory_cheer.mp3")
+	_play_voice("voice_victory.mp3")
 	_spawn_victory_stars(_victory_color)
 	# Celebratory bursts across the arena to punctuate the win.
 	if _vfx_pool != null:
@@ -746,6 +810,7 @@ func _begin_countdown() -> void:
 	_victory_phase = "countdown"
 	_results_timer = NEXT_BATTLE_COUNTDOWN
 	_last_countdown_int = -1
+	_play_voice("voice_next_battle.mp3")
 	_teardown_victory_overlays()
 	var root := Control.new()
 	root.name = "CountdownOverlay"
@@ -812,6 +877,8 @@ func _update_countdown_display() -> void:
 	if secs_left != _last_countdown_int:
 		_last_countdown_int = secs_left
 		_countdown_digit.text = str(secs_left)
+		if secs_left >= 1 and secs_left <= 3:
+			_play_sfx("countdown_beep.mp3")
 		_countdown_digit.scale = Vector2(1.5, 1.5)
 		var tw := create_tween()
 		tw.tween_property(_countdown_digit, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)

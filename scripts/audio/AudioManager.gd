@@ -1,6 +1,6 @@
 ## AudioManager (Phase 15) — Godot-side audio playback with volume groups.
 ##
-## Volume groups: master, music, sfx, ui.
+## Volume groups: master, music, sfx, ui, voice.
 ## Effective volume = master × group / 10000 (both 0-100 scale, output 0-1).
 ## Connects to CommandDispatcher signal (play_audio).
 class_name AudioManager
@@ -11,11 +11,13 @@ extends Node
 @export var music_volume: int = 60
 @export var sfx_volume: int = 90
 @export var ui_volume: int = 70
+@export var voice_volume: int = 100
 
 ## Internal audio stream players for each group.
 var _music_player: AudioStreamPlayer
 var _sfx_player: AudioStreamPlayer
 var _ui_player: AudioStreamPlayer
+var _voice_player: AudioStreamPlayer
 
 ## Track cache to avoid re-loading.
 var _track_cache: Dictionary = {}
@@ -33,6 +35,10 @@ func _ready() -> void:
 	_ui_player = AudioStreamPlayer.new()
 	_ui_player.bus = "Master"
 	add_child(_ui_player)
+
+	_voice_player = AudioStreamPlayer.new()
+	_voice_player.bus = "Master"
+	add_child(_voice_player)
 
 
 ## Play a track in the given volume group.
@@ -69,6 +75,8 @@ func compute_volume(volume_group: String) -> float:
 			group_vol = sfx_volume
 		"ui":
 			group_vol = ui_volume
+		"voice":
+			group_vol = voice_volume
 		"master":
 			group_vol = 100
 	return float(master_volume * group_vol) / 10000.0
@@ -81,6 +89,8 @@ func _get_player(volume_group: String) -> AudioStreamPlayer:
 			return _music_player
 		"ui":
 			return _ui_player
+		"voice":
+			return _voice_player
 		_:
 			return _sfx_player
 
@@ -121,6 +131,7 @@ func stop_all() -> void:
 	_music_player.stop()
 	_sfx_player.stop()
 	_ui_player.stop()
+	_voice_player.stop()
 
 
 ## Load config from gateway HTTP endpoint.
