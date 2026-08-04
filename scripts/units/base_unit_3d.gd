@@ -41,6 +41,9 @@ const FACTION_BLUE: Color = Color(0.12, 0.38, 1.0)
 const FACTION_RED: Color = Color(1.0, 0.2, 0.12)
 const FACTION_NEUTRAL: Color = Color(0.28, 0.24, 0.36)
 const FACTION_TINT_STRENGTH: float = 0.9  # blend toward faction hue (0 = original, 1 = full recolor)
+# Flat faction glow baked into every tinted material so dark texture regions
+# still read as the team color instead of brown/steel (two-color rule).
+const FACTION_BASE_EMISSION: float = 0.25
 
 # -- Logical animation keys (resolved to actual GLB clip names at load) --
 const ANIM_IDLE: String = "idle"
@@ -81,7 +84,8 @@ var _current_anim: String = ""
 var _health_fraction: float = 1.0
 var _prev_health: float = 1.0
 var _hit_flash: float = 0.0
-var _faction_index: int = -1
+var _faction_index: int = -2  # sentinel: any first snapshot (incl. boss -1) triggers _swap_model
+var _faction_color: Color = FACTION_NEUTRAL
 var _health_bar: Sprite3D = null
 var _dead: bool = false
 var _spawned: bool = false
@@ -343,6 +347,7 @@ func _apply_faction_tint(faction: int) -> void:
 	else:
 		# Neutral units (boss): darkened so they never show up white either.
 		faction_color = FACTION_NEUTRAL
+	_faction_color = faction_color
 	_colorize_meshes(_model, faction_color)
 
 
@@ -363,6 +368,12 @@ static func _grayscale_texture(tex: Texture2D) -> Texture2D:
 			img.decompress()
 		if not img.is_compressed():
 			img.convert(Image.FORMAT_L8)
+			# L8 uploads to the GPU as a single-channel RED format and samples
+			# as (lum, 0, 0, 1) — multiplying that over the BLUE faction hue
+			# turned textured armor/cape surfaces dark red on the blue side.
+			# Expanding to RGBA8 on the CPU replicates luminance into every
+			# channel so the texture reads as true grayscale in the shader.
+			img.convert(Image.FORMAT_RGBA8)
 			gray_tex = ImageTexture.create_from_image(img)
 	_gray_tex_cache[tex] = gray_tex
 	return gray_tex
@@ -378,6 +389,10 @@ func _colorize_meshes(node: Node, faction_color: Color) -> void:
 				var base_mat: BaseMaterial3D = mat if mat is BaseMaterial3D else null
 				if base_mat != null:
 					var tinted: BaseMaterial3D = base_mat.duplicate() as BaseMaterial3D
+					# Constant faction glow so shadowed armor keeps the team hue.
+					tinted.emission_enabled = true
+					tinted.emission = faction_color
+					tinted.emission_energy_multiplier = FACTION_BASE_EMISSION
 					if tinted.albedo_texture != null:
 						# Grayscale the baked texture; the faction color now owns
 						# the hue entirely and the texture only supplies shading.
@@ -404,6 +419,9 @@ func _colorize_meshes(node: Node, faction_color: Color) -> void:
 					# No material (or a non-standard one): solid faction color.
 					var solid := StandardMaterial3D.new()
 					solid.albedo_color = faction_color
+					solid.emission_enabled = true
+					solid.emission = faction_color
+					solid.emission_energy_multiplier = FACTION_BASE_EMISSION
 					mi.set_surface_override_material(surface, solid)
 	for child in node.get_children():
 		_colorize_meshes(child, faction_color)
@@ -412,6 +430,42 @@ func _colorize_meshes(node: Node, faction_color: Color) -> void:
 ## Faction index of the model currently shown (0 = left/blue, 1 = right/red, -1 = neutral).
 func get_faction_index() -> int:
 	return _faction_index
+
+
+## Debug report (Revision 11): faction + per-surface override/base albedo so a
+## live game can be audited for tint leaks without node surgery.
+func debug_tint_report() -> String:
+	var rep: String = str(_class_name) + " f" + str(_faction_index)
+	if _model == null:
+		return rep + " model=null"
+	var meshes: Array = []
+	_collect_meshes(_model, meshes)
+	if meshes.is_empty():
+		return rep + " mesh=null"
+	rep += " meshes=" + str(meshes.size())
+	var idx: int = 0
+	for m in meshes:
+		var mi: MeshInstance3D = m as MeshInstance3D
+		if mi.mesh == null:
+			rep += " |m" + str(idx) + "=nomesh"
+			idx += 1
+			continue
+		var n: int = mi.mesh.get_surface_count()
+		for s in n:
+			var om: Material = mi.get_surface_override_material(s)
+			var bmat: Material = mi.mesh.surface_get_material(s)
+			var ov_str: String = str((om as BaseMaterial3D).albedo_color) if om is BaseMaterial3D else "null"
+			var base_str: String = str((bmat as BaseMaterial3D).albedo_color) if bmat is BaseMaterial3D else "null"
+			rep += " |m" + str(idx) + "s" + str(s) + " ov=" + ov_str + " base=" + base_str
+		idx += 1
+	return rep
+
+
+func _collect_meshes(node: Node, out: Array) -> void:
+	if node is MeshInstance3D:
+		out.append(node)
+	for child in node.get_children():
+		_collect_meshes(child, out)
 
 
 ## Whether this visual is currently dead (celebrations skip fallen units).
@@ -622,11 +676,12 @@ func _apply_mesh_flash(node: Node, flash: float) -> void:
 							mi.set_surface_override_material(surface, mat)
 					if mat is BaseMaterial3D:
 						var bm: BaseMaterial3D = mat as BaseMaterial3D
-						if flash > 0.01:
-							bm.emission_enabled = true
-							bm.emission = Color(1.0, 0.3, 0.2, 1.0)
-							bm.emission_energy_multiplier = flash * 5.0
-						else:
-							bm.emission_energy_multiplier = 0.0
+						# Flash in the unit's OWN faction hue: red emission made
+						# blue units read as the enemy camp, white emission washed
+						# them grey — both broke the two-color rule mid-fight.
+						# The base glow keeps the team hue readable at all times.
+						bm.emission_enabled = true
+						bm.emission = _faction_color
+						bm.emission_energy_multiplier = FACTION_BASE_EMISSION + flash * 0.6
 		elif child is Node3D:
 			_apply_mesh_flash(child, flash)
