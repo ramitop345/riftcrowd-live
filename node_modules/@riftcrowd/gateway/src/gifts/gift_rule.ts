@@ -200,6 +200,30 @@ export class GiftRule implements Rule {
     if (!overflowResult.allowed) {
       const log = `${giftId} from ${viewerId} → ${impact.tierId} → ${impact.impactType} magnitude=${impact.magnitude} → overflow, +${overflowResult.reserveAdded} ${overflowResult.reserveType}`;
       this.logFn(`[GiftRule] ${log}`);
+
+      // Even when the primary impact (spawn_champion etc.) overflows, the
+      // technique must still fire — it's a separate effect (meteor damage,
+      // volley, wipe) that doesn't consume unit slots.
+      const overflowCommands: GameCommand[] = [];
+      if (impact.techniqueTier !== undefined) {
+        overflowCommands.push({
+          schemaVersion: COMMAND_SCHEMA_VERSION,
+          id: `cmd_${randomUUID()}`,
+          type: 'CAST_TECHNIQUE',
+          createdAt: new Date().toISOString(),
+          factionId,
+          viewerId,
+          displayName: impact.displayName,
+          sourceEventIds: [event.id],
+          metadata: {
+            giftTier: impact.tierId,
+            giftName: impact.displayName ?? giftId,
+            techniqueTier: impact.techniqueTier,
+            ...(impact.techniqueCinematic !== undefined ? { cinematic: impact.techniqueCinematic } : {}),
+          },
+        });
+      }
+
       this.decisions.push({
         eventId: event.id,
         viewerId,
@@ -213,10 +237,10 @@ export class GiftRule implements Rule {
         cooldownBlocked: false,
         overflowed: true,
         reserveAdded: overflowResult.reserveAdded,
-        commandsProduced: 0,
+        commandsProduced: overflowCommands.length,
         log,
       });
-      return null;
+      return overflowCommands.length > 0 ? overflowCommands : null;
     }
 
     // 5. Record streak (only on happy path — FIX 5)

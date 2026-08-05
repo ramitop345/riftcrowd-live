@@ -14,7 +14,7 @@
     "height": 1180,
     "captureZoneRadius": 190
   },
-  "fortressHealth": 600,
+  "fortressHealth": 750,
   "centerZone": {
     "flankMinRadius": 50.0,
     "flankRadiusFraction": 0.95,
@@ -135,7 +135,7 @@
   "technique": {
     "tier1": {},
     "tier2": {
-      "aoeDamage": 60
+      "aoeDamage": 80
     },
     "tier3": {
       "fortressDamageFraction": 0.8,

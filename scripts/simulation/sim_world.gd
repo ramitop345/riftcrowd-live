@@ -805,6 +805,19 @@ func _advance_ai(u: SimUnit) -> void:
 			return
 		u.wander_target = Vector2.ZERO
 		obj_pos = slot
+	# Siege positioning: when marching on the enemy fortress, troops stop at
+	# weapon range and spread around the fortress instead of overlapping it.
+	# Each unit gets a personal slot on the ring so the squad forms a line.
+	if u.faction_index >= 0 and bool(_sieging[u.faction_index]):
+		var enemy_fort: int = 1 - u.faction_index
+		var fort_pos: Vector2 = _fortress_positions[enemy_fort]
+		var siege_ring: float = FORTRESS_ATTACK_RANGE * 0.85
+		var dist_to_fort: float = u.position.distance_to(fort_pos)
+		if dist_to_fort < siege_ring + 40.0:
+			# Personal angle based on unit id so squads fan out evenly.
+			var personal_angle: float = fmod(float(u.id) * 2.39996, TAU)  # golden angle
+			var ring_target: Vector2 = fort_pos + Vector2(cos(personal_angle), sin(personal_angle)) * siege_ring
+			obj_pos = ring_target
 	# Bridge corridor: outside the capture zone every march (spawn approach,
 	# siege, recall) is funneled onto the stone bridge on the unit's side so
 	# troops visibly cross on foot instead of cutting across open ground.

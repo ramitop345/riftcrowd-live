@@ -105,14 +105,14 @@ text = "Faction A"
 [node name="BarBgA" type="ColorRect" parent="SafeArea/Layout/HUDRegion/HUDLayout/HealthRowA"]
 layout_mode = 2
 size_flags_horizontal = 3
-custom_minimum_size = Vector2(0, 12)
+custom_minimum_size = Vector2(0, 20)
 color = Color(0.2, 0.2, 0.2, 0.8)
 
 [node name="BarFillA" type="ColorRect" parent="SafeArea/Layout/HUDRegion/HUDLayout/HealthRowA/BarBgA"]
 offset_left = 0.0
 offset_top = 0.0
 offset_right = 100.0
-offset_bottom = 12.0
+offset_bottom = 20.0
 color = Color(0.2, 0.5, 0.9, 1)
 
 [node name="PressureLabelA" type="Label" parent="SafeArea/Layout/HUDRegion/HUDLayout/HealthRowA"]
@@ -134,14 +134,14 @@ text = "Faction B"
 [node name="BarBgB" type="ColorRect" parent="SafeArea/Layout/HUDRegion/HUDLayout/HealthRowB"]
 layout_mode = 2
 size_flags_horizontal = 3
-custom_minimum_size = Vector2(0, 12)
+custom_minimum_size = Vector2(0, 20)
 color = Color(0.2, 0.2, 0.2, 0.8)
 
 [node name="BarFillB" type="ColorRect" parent="SafeArea/Layout/HUDRegion/HUDLayout/HealthRowB/BarBgB"]
 offset_left = 0.0
 offset_top = 0.0
 offset_right = 100.0
-offset_bottom = 12.0
+offset_bottom = 20.0
 color = Color(0.9, 0.2, 0.2, 1)
 
 [node name="PressureLabelB" type="Label" parent="SafeArea/Layout/HUDRegion/HUDLayout/HealthRowB"]
@@ -149,6 +149,64 @@ custom_minimum_size = Vector2(50, 0)
 layout_mode = 2
 theme_override_font_sizes/font_size = 20
 text = "0.0"
+horizontal_alignment = 2
+
+[node name="FortressRowA" type="HBoxContainer" parent="SafeArea/Layout/HUDRegion/HUDLayout"]
+layout_mode = 2
+
+[node name="LabelA" type="Label" parent="SafeArea/Layout/HUDRegion/HUDLayout/FortressRowA"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Fortress A"
+
+[node name="FortBarBgA" type="ColorRect" parent="SafeArea/Layout/HUDRegion/HUDLayout/FortressRowA"]
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 16)
+color = Color(0.15, 0.15, 0.15, 0.8)
+
+[node name="FortBarFillA" type="ColorRect" parent="SafeArea/Layout/HUDRegion/HUDLayout/FortressRowA/FortBarBgA"]
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 100.0
+offset_bottom = 16.0
+color = Color(0.3, 0.7, 1.0, 1)
+
+[node name="FortLabelA" type="Label" parent="SafeArea/Layout/HUDRegion/HUDLayout/FortressRowA"]
+custom_minimum_size = Vector2(50, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "100%"
+horizontal_alignment = 2
+
+[node name="FortressRowB" type="HBoxContainer" parent="SafeArea/Layout/HUDRegion/HUDLayout"]
+layout_mode = 2
+
+[node name="LabelB" type="Label" parent="SafeArea/Layout/HUDRegion/HUDLayout/FortressRowB"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Fortress B"
+
+[node name="FortBarBgB" type="ColorRect" parent="SafeArea/Layout/HUDRegion/HUDLayout/FortressRowB"]
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 16)
+color = Color(0.15, 0.15, 0.15, 0.8)
+
+[node name="FortBarFillB" type="ColorRect" parent="SafeArea/Layout/HUDRegion/HUDLayout/FortressRowB/FortBarBgB"]
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 100.0
+offset_bottom = 16.0
+color = Color(1.0, 0.5, 0.4, 1)
+
+[node name="FortLabelB" type="Label" parent="SafeArea/Layout/HUDRegion/HUDLayout/FortressRowB"]
+custom_minimum_size = Vector2(50, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "100%"
 horizontal_alignment = 2
 
 [node name="ArenaPanel" type="Panel" parent="SafeArea/Layout"]

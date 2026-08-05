@@ -38,7 +38,7 @@ signal cinematic_finished()
 
 ## Fallen units stay on the battlefield as corpses for this long before the
 ## arena sweeps them, so kills are visible instead of units vanishing instantly.
-const CORPSE_TTL_SECONDS: float = 15.0
+const CORPSE_TTL_SECONDS: float = 60.0
 ## How long the director holds on a falling castle before the winners' march
 ## and celebration take over the presentation.
 const FALL_PRESENT_SECONDS: float = 3.6
@@ -96,6 +96,9 @@ var _cam_time: float = 0.0
 var _heat: Array = [0.0, 0.0, 0.0]  ## [center, left wing (castle A), right wing (castle B)]
 var _active_shot: int = 0
 var _shot_age: float = 0.0
+## While >= 0 the director is locked on a fortress wing (siege in progress).
+## Only cleared when the siege is recalled (enemies respawn) or the fortress falls.
+var _siege_lock_wing: int = -1
 var _cam_pos: Vector3 = Vector3(0, 16, -22)
 var _cam_look: Vector3 = Vector3(0, 1.5, 0)
 var _cam_fov: float = 50.0
@@ -299,10 +302,18 @@ func _process(delta: float) -> void:
 ## Zone heat: wing shots are driven ONLY by siege/castle-under-attack events
 ## (no per-snapshot activity feed), decaying over time so the director drifts
 ## back to the arena once the castle stops being attacked.
+## During an active siege the camera is locked on the fortress wing regardless
+## of heat — it only returns to center when the siege is recalled.
 func _update_shot_selection(delta: float) -> void:
 	_shot_age += delta
 	if _shot_lock_timer > 0.0:
 		_shot_lock_timer -= delta
+		return
+	# Siege lock: while a siege is underway the camera stays on the fortress.
+	if _siege_lock_wing >= 0:
+		if _active_shot != _siege_lock_wing:
+			_active_shot = _siege_lock_wing
+			_shot_age = 0.0
 		return
 	for i in 3:
 		_heat[i] = maxf(float(_heat[i]) - _heat_decay_per_second * delta, 0.0)
@@ -418,6 +429,7 @@ func _reset_director_state() -> void:
 	_active_shot = 0
 	_shot_age = 0.0
 	_shot_lock_timer = 0.0
+	_siege_lock_wing = -1
 	_cam_time = 0.0
 	_cam_pos = Vector3(0, _master_height, -_master_distance)
 	_cam_look = Vector3(0, _look_height, 0)
@@ -529,18 +541,22 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 					_perform_technique_visuals(int(parts[1]), int(parts[2]))
 			elif ev_str.begins_with("siege_started:"):
 				# Attackers march on castle <1 - faction>: cut to that wing
-				# immediately so the march on the castle is always shown.
+				# immediately and lock the camera until the siege ends.
 				var parts: PackedStringArray = ev_str.split(":")
 				if parts.size() >= 2:
 					var target_wing: int = 1 if int(parts[1]) == 0 else 2
 					_heat[target_wing] = float(_heat[target_wing]) + 6.0
 					_force_shot(target_wing)
+					_siege_lock_wing = target_wing
 			elif ev_str.begins_with("siege_recalled:"):
-				# Attackers pulled back to the middle: let the wing cool fast.
+				# Attackers pulled back to the middle: release the siege lock
+				# so the camera can return to center. Let the wing cool fast.
 				var parts: PackedStringArray = ev_str.split(":")
 				if parts.size() >= 2:
 					var target_wing: int = 1 if int(parts[1]) == 0 else 2
 					_heat[target_wing] = maxf(float(_heat[target_wing]) - 4.0, 0.0)
+					if _siege_lock_wing == target_wing:
+						_siege_lock_wing = -1
 			elif ev_str.begins_with("fortress_damaged:"):
 				# Castle under attack: show it, no questions asked.
 				var parts: PackedStringArray = ev_str.split(":")
@@ -557,6 +573,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 					if vtype == "fortress":
 						# Hold the camera on the collapsing castle first; the
 						# march/celebration starts once the fall has been shown.
+						_siege_lock_wing = -1
 						_present_fortress_fall(winner)
 					else:
 						_perform_victory_celebration(winner)

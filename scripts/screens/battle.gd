@@ -35,6 +35,12 @@ const VOICE_DIR: String = "res://assets/audio/voice/"
 @onready var _bar_bgb: ColorRect = $SafeArea/Layout/HUDRegion/HUDLayout/HealthRowB/BarBgB
 @onready var _bar_fill_b: ColorRect = $SafeArea/Layout/HUDRegion/HUDLayout/HealthRowB/BarBgB/BarFillB
 @onready var _pressure_label_b: Label = $SafeArea/Layout/HUDRegion/HUDLayout/HealthRowB/PressureLabelB
+@onready var _fort_bar_bga: ColorRect = $SafeArea/Layout/HUDRegion/HUDLayout/FortressRowA/FortBarBgA
+@onready var _fort_bar_fill_a: ColorRect = $SafeArea/Layout/HUDRegion/HUDLayout/FortressRowA/FortBarBgA/FortBarFillA
+@onready var _fort_label_a: Label = $SafeArea/Layout/HUDRegion/HUDLayout/FortressRowA/FortLabelA
+@onready var _fort_bar_bgb: ColorRect = $SafeArea/Layout/HUDRegion/HUDLayout/FortressRowB/FortBarBgB
+@onready var _fort_bar_fill_b: ColorRect = $SafeArea/Layout/HUDRegion/HUDLayout/FortressRowB/FortBarBgB/FortBarFillB
+@onready var _fort_label_b: Label = $SafeArea/Layout/HUDRegion/HUDLayout/FortressRowB/FortLabelB
 @onready var _arena_panel: Panel = $SafeArea/Layout/ArenaPanel
 @onready var _pause_btn: Button = $SafeArea/Layout/BottomRegion/BottomLayout/SpeedRow/PauseButton
 @onready var _speed1_btn: Button = $SafeArea/Layout/BottomRegion/BottomLayout/SpeedRow/Speed1Button
@@ -280,6 +286,34 @@ func _update_hud(snapshot: Dictionary) -> void:
 			_bar_fill_b.offset_right = bar_w_b * clampf(float(alive_arr[1]) / max_per_side, 0.0, 1.0)
 		_pressure_label_a.text = "%d/%d" % [int(alive_arr[0]), int(max_per_side)]
 		_pressure_label_b.text = "%d/%d" % [int(alive_arr[1]), int(max_per_side)]
+	# Fortress health bars (HUD).
+	var fh: Variant = snapshot.get("fortress_health")
+	if typeof(fh) == TYPE_ARRAY and (fh as Array).size() >= 2:
+		var fh_arr: Array = fh
+		var max_fort_hp: float = maxf(_max_fortress_health, 1.0)
+		var fort_a_frac: float = clampf(float(fh_arr[0]) / max_fort_hp, 0.0, 1.0)
+		var fort_b_frac: float = clampf(float(fh_arr[1]) / max_fort_hp, 0.0, 1.0)
+		var fort_w_a: float = _fort_bar_bga.size.x
+		var fort_w_b: float = _fort_bar_bgb.size.x
+		if fort_w_a > 0.0:
+			_fort_bar_fill_a.offset_right = fort_w_a * fort_a_frac
+		if fort_w_b > 0.0:
+			_fort_bar_fill_b.offset_right = fort_w_b * fort_b_frac
+		_fort_label_a.text = "%d%%" % int(fort_a_frac * 100.0)
+		_fort_label_b.text = "%d%%" % int(fort_b_frac * 100.0)
+		# Color shift: green > yellow > red as health drops.
+		if fort_a_frac > 0.5:
+			_fort_bar_fill_a.color = Color(0.3, 0.7, 1.0, 1)
+		elif fort_a_frac > 0.25:
+			_fort_bar_fill_a.color = Color(0.9, 0.7, 0.2, 1)
+		else:
+			_fort_bar_fill_a.color = Color(0.9, 0.3, 0.2, 1)
+		if fort_b_frac > 0.5:
+			_fort_bar_fill_b.color = Color(1.0, 0.5, 0.4, 1)
+		elif fort_b_frac > 0.25:
+			_fort_bar_fill_b.color = Color(0.9, 0.7, 0.2, 1)
+		else:
+			_fort_bar_fill_b.color = Color(0.9, 0.3, 0.2, 1)
 	# Event spotlight + viewer-join banners.
 	var events: Variant = snapshot.get("events")
 	if typeof(events) == TYPE_ARRAY and not (events as Array).is_empty():

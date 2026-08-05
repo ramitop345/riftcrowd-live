@@ -663,12 +663,17 @@ describe('GiftRule', () => {
       rule.execute(makeGiftEvent('gift_008', sameFactionViewers[i]!), {});
       clock.advance(4000); // avoid cooldown between different viewers
     }
-    // 6th should overflow (same faction)
+    // 6th should overflow (same faction) — primary impact is blocked, but
+    // the CAST_TECHNIQUE command still fires (techniques don't consume slots).
     const cmds = rule.execute(makeGiftEvent('gift_008', 'ak'), {});
-    expect(cmds).toBeNull();
+    expect(cmds).not.toBeNull();
+    const techCmds = cmds!.filter((c) => c.type === 'CAST_TECHNIQUE');
+    expect(techCmds.length).toBe(1);
+    expect(techCmds[0]!.metadata?.['techniqueTier']).toBe(2);
     const decisions = rule.getDecisions();
     const lastDecision = decisions[decisions.length - 1];
     expect(lastDecision!.overflowed).toBe(true);
+    expect(lastDecision!.commandsProduced).toBe(1);
   });
 
   it('streak multiplies magnitude', () => {
