@@ -1,4 +1,5 @@
 ## Champion 3D visual — sword, melee attack.
+
 extends BaseUnit3D
 
 func _ready() -> void:

@@ -588,19 +588,24 @@ export function fourModeRound(): Scenario {
 
 // ---------------------------------------------------------------------------
 // Scenario 8: technique_demo
-// One gift per tier (Spark/Flare/Nova) from different viewers, spaced well
-// beyond all gift cooldowns so each gift produces its CAST_TECHNIQUE
-// command. Lets the game demo all three technique tiers in mock mode.
+// Three viewers join a team by typing a color in chat, then each sends one
+// technique gift (Finger Heart / Galaxy / Lion). Gifts only fire for viewers
+// who joined a team, so the join comment always precedes the gift, spaced
+// well beyond all gift cooldowns. Lets the game demo all three technique
+// tiers in mock mode.
 // ---------------------------------------------------------------------------
 
 export function techniqueDemo(): Scenario {
   resetEventCounter();
   const events: ScheduledEvent[] = [
-    makeGiftEvent({ timeMs: 2000, viewerId: 'tech_viewer_1', giftId: 'gift_001', giftName: 'Rose', providerValue: 1 }),
-    makeGiftEvent({ timeMs: 8000, viewerId: 'tech_viewer_2', giftId: 'gift_008', giftName: 'Blaze', providerValue: 10 }),
-    makeGiftEvent({ timeMs: 14000, viewerId: 'tech_viewer_3', giftId: 'gift_015', giftName: 'Phoenix', providerValue: 100 }),
+    makeChatEvent({ timeMs: 1000, viewerId: 'tech_viewer_1', comment: 'blue' }),
+    makeChatEvent({ timeMs: 1500, viewerId: 'tech_viewer_2', comment: 'red' }),
+    makeChatEvent({ timeMs: 2000, viewerId: 'tech_viewer_3', comment: 'blue' }),
+    makeGiftEvent({ timeMs: 4000, viewerId: 'tech_viewer_1', giftId: 'gift_021', giftName: 'Finger Heart', providerValue: 1 }),
+    makeGiftEvent({ timeMs: 10000, viewerId: 'tech_viewer_2', giftId: 'gift_022', giftName: 'Galaxy', providerValue: 10 }),
+    makeGiftEvent({ timeMs: 16000, viewerId: 'tech_viewer_3', giftId: 'gift_023', giftName: 'Lion', providerValue: 100 }),
   ];
-  return { name: 'technique_demo', events, durationMs: 20_000 };
+  return { name: 'technique_demo', events, durationMs: 22_000 };
 }
 
 // ---------------------------------------------------------------------------

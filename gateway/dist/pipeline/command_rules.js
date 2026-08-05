@@ -41,6 +41,9 @@ const MODE_VOTE_KEYWORDS = new Set([
 const SYNTHETIC_FACTION_KEYWORDS = new Map([
     ['faction_alpha', 'faction_alpha'],
     ['faction_beta', 'faction_beta'],
+    // Color keywords so viewers can join either side mid-battle.
+    ['blue', 'blue'],
+    ['red', 'red'],
 ]);
 // ---------------------------------------------------------------------------
 // Built-in rules
@@ -130,6 +133,31 @@ export const KickRule = {
         return null; // Pipeline handles kick via director.hideViewer()
     },
 };
+/**
+ * GiftApplyRule: gift event → GIFT_APPLY command so the game client
+ * can show visual feedback (spotlight text, VFX burst).
+ */
+export const GiftApplyRule = {
+    name: 'GiftApplyRule',
+    applies(event) {
+        return event.type === 'gift';
+    },
+    execute(event) {
+        const gift = event.gift;
+        return [
+            makeCommand('GIFT_APPLY', event, {
+                viewerId: event.user.id,
+                displayName: event.user.displayName,
+                metadata: {
+                    giftId: gift?.id ?? 'unknown',
+                    giftName: gift?.name ?? 'Gift',
+                    repeatCount: gift?.repeatCount ?? 1,
+                    providerValue: gift?.providerValue ?? 0,
+                },
+            }),
+        ];
+    },
+};
 // ---------------------------------------------------------------------------
 // CommandRulesEngine
 // ---------------------------------------------------------------------------
@@ -137,7 +165,7 @@ export class CommandRulesEngine {
     rules = [];
     constructor() {
         // Register built-in rules by default
-        this.rules = [ModeVoteRule, JoinFactionRule, EndRoundRule, PauseRule, KickRule];
+        this.rules = [ModeVoteRule, JoinFactionRule, GiftApplyRule, EndRoundRule, PauseRule, KickRule];
     }
     /** Registers a custom rule. */
     registerRule(rule) {

@@ -48,6 +48,8 @@ export class GiftMapper {
             duration: tier.impact.duration,
             cinematic: tier.impact.cinematic,
             displayName: mapping.displayName,
+            techniqueTier: tier.technique?.magnitude,
+            techniqueCinematic: tier.technique?.cinematic,
         };
     }
     /**

@@ -192,12 +192,14 @@ export class MatchDirector {
     // Faction joining
     // -------------------------------------------------------------------------
     /**
-     * Records a viewer's faction join during FACTION_LOBBY using a pre-resolved factionId.
+     * Records a viewer's faction join using a pre-resolved factionId.
      * Called from handleChatEvent where the CommandParser has already resolved the faction.
+     * Allowed during FACTION_LOBBY and all battle states — viewers join
+     * mid-battle by typing red/blue, which also unlocks their gift techniques.
      * One switch allowed; subsequent joins after the switch are ignored.
      */
     recordFactionJoin(viewerId, factionId) {
-        if (this.state !== 'FACTION_LOBBY')
+        if (this.state !== 'FACTION_LOBBY' && !BATTLE_STATES.has(this.state))
             return;
         // Phase 7: reject hidden viewers
         const profile = this.viewerRegistry.get(viewerId);
@@ -212,6 +214,10 @@ export class MatchDirector {
                 profile.factionId = factionId;
             }
         }
+        else if (existing.factionId === factionId) {
+            // Repeat join of the same team (every red/blue comment adds a new
+            // character) — no bookkeeping change.
+        }
         else if (!existing.switched) {
             // One switch allowed
             existing.factionId = factionId;
@@ -225,14 +231,14 @@ export class MatchDirector {
         // else: subsequent joins ignored
     }
     /**
-     * Records a viewer's faction join during FACTION_LOBBY using raw comment text.
+     * Records a viewer's faction join using raw comment text.
      * Matches against SYNTHETIC_FACTIONS only (for backward-compat / direct API calls).
      * When called from handleChatEvent, prefer recordFactionJoin with the resolved factionId.
      * @param rawComment — capped at 200 chars (matching shared lib's matchJoinKeyword cap).
      *   Excess characters are ignored, not truncated.
      */
     handleFactionJoin(viewerId, rawComment) {
-        if (this.state !== 'FACTION_LOBBY')
+        if (this.state !== 'FACTION_LOBBY' && !BATTLE_STATES.has(this.state))
             return;
         // Phase 7: reject hidden viewers
         const profile = this.viewerRegistry.get(viewerId);

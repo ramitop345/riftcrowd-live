@@ -31,6 +31,8 @@ const SPAWN_DELAY: float = 0.2
 const RETREAT_DURATION: float = 3.0
 const PROJECTILE_HIT_RADIUS: float = 12.0
 const FORTRESS_ATTACK_RANGE: float = 80.0
+## Volley combat: one strike pose per unit, then back to the march.
+const ATTACK_POSE_SECONDS: float = 1.0
 const DEFEND_PULL_RANGE: float = 150.0
 const MAX_DEFENDERS: int = 3
 ## Center-dominion doctrine defaults (overridable via config.centerZone):
@@ -101,6 +103,13 @@ var _sieging: Array = [false, false]          ## per faction: objective is the e
 var _max_units_per_side: int = DEFAULT_MAX_UNITS_PER_SIDE
 var _deployment_done: Array = [false, false]  ## per faction: full roster deployed
 
+# Volley combat pacing: armies gather in the middle and trade exactly one
+# strike every _volley_interval seconds (gift techniques add extra volleys).
+var _volley_interval: float = 20.0
+var _volley_timer: float = 20.0
+## Lion technique locks the enemy out of adding new characters for a moment.
+var _spawn_lock: Array = [0.0, 0.0]
+
 # Cached config values
 var _tick_rate: int = 20
 var _stage_durations: Dictionary = {}
@@ -136,12 +145,16 @@ func _init_world(config: Dictionary, seed_value: int, faction_a: Dictionary, fac
 		STAGE_FINAL_SURGE: float(stages.get("finalSurge", 60)),
 		STAGE_SUDDEN_DEATH: float(stages.get("suddenDeath", 45)),
 	}
-	# General battle timer: when configured, sudden death is stretched so the
-	# whole battle lasts exactly battleDurationSeconds (e.g. 600 = 10 minutes).
+	# General battle timer: when configured, the four stages are scaled
+	# proportionally (opening:crisis:finalSurge:suddenDeath = 1:1:1:2) so the
+	# whole battle lasts exactly battleDurationSeconds — even sub-minute runs.
 	var battle_duration: float = float(config.get("battleDurationSeconds", 0.0))
 	if battle_duration > 0.0:
-		var pre_sudden: float = _stage_durations[STAGE_OPENING] + _stage_durations[STAGE_CRISIS] + _stage_durations[STAGE_FINAL_SURGE]
-		_stage_durations[STAGE_SUDDEN_DEATH] = maxf(battle_duration - pre_sudden, 15.0)
+		var quarter: float = battle_duration / 5.0
+		_stage_durations[STAGE_OPENING] = quarter
+		_stage_durations[STAGE_CRISIS] = quarter
+		_stage_durations[STAGE_FINAL_SURGE] = quarter
+		_stage_durations[STAGE_SUDDEN_DEATH] = 2.0 * quarter
 	_total_time = 0.0
 	for key in _stage_durations:
 		_total_time += _stage_durations[key]
@@ -189,9 +202,13 @@ func _init_world(config: Dictionary, seed_value: int, faction_a: Dictionary, fac
 	_unit_registry.clear()
 	_sieging = [false, false]
 	_deployment_done = [false, false]
-	# Spawn captains
-	_spawn_captain(0)
-	_spawn_captain(1)
+	var combat_cfg: Dictionary = _config.get("combat", {})
+	_volley_interval = maxf(float(combat_cfg.get("volleyIntervalSeconds", 20.0)), 1.0)
+	_volley_timer = _volley_interval
+	_spawn_lock = [0.0, 0.0]
+	# Opening deployment: a small starting squad per side (default 5).
+	# Everything else only arrives through viewer joins (red/blue comments).
+	_spawn_initial_squads()
 
 
 func tick() -> void:
@@ -203,6 +220,8 @@ func tick() -> void:
 	if _round_over:
 		return
 	_spawn_bots()
+	_tick_spawn_locks()
+	_tick_volley()
 	_update_doctrine_state()
 	_tick_units()
 	_tick_projectiles()
@@ -288,8 +307,9 @@ func reset(seed_value: int) -> void:
 	_unit_registry.clear()
 	_sieging = [false, false]
 	_deployment_done = [false, false]
-	_spawn_captain(0)
-	_spawn_captain(1)
+	_volley_timer = _volley_interval
+	_spawn_lock = [0.0, 0.0]
+	_spawn_initial_squads()
 
 
 func is_round_over() -> bool:
@@ -297,9 +317,10 @@ func is_round_over() -> bool:
 
 
 ## Gift technique system. Triggered by CAST_TECHNIQUE commands (gift tiers).
-## All living units of `faction` perform the technique with full gameplay
-## effects: tier 1 = team damage buff, tier 2 = instant AoE damage around
-## each performer, tier 3 = larger AoE + team damage/speed buffs.
+## tier 1 (finger heart) = the whole team immediately launches one volley;
+## tier 2 (galaxy) = meteorites fall on the field and hit every enemy;
+## tier 3 (lion) = supreme art: wipes every enemy, removes a large fraction
+## of the enemy fortress health and forbids enemy joins for a few seconds.
 ## Emits a "technique:<faction>:<tier>" sim event so the arena can play
 ## staggered technique animations for the performing faction.
 func trigger_technique(faction: int, tier: int) -> bool:
@@ -308,55 +329,45 @@ func trigger_technique(faction: int, tier: int) -> bool:
 	var tech_cfg: Dictionary = _config.get("technique", {})
 	if tech_cfg.is_empty():
 		return false
-	# Collect living performers sorted by id for determinism.
-	var performers: Array = []
-	for pool in [_champion_pool, _guardian_pool, _striker_pool, _captain_pool]:
-		for u: SimUnit in pool.active_units():
-			if u.alive and u.faction_index == faction:
-				performers.append(u)
-	performers.sort_custom(func(a: SimUnit, b: SimUnit) -> bool: return a.id < b.id)
-	if performers.is_empty():
+	if _count_alive(faction) == 0:
 		return false
 	match tier:
 		1:
-			var t1: Dictionary = tech_cfg.get("tier1", {})
-			var fraction: float = float(t1.get("damageBuffFraction", 0.5))
-			var duration: float = float(t1.get("buffDurationSeconds", 3.0))
-			for u: SimUnit in performers:
-				_apply_buff_max(u, "damage", fraction, duration)
+			# Finger heart: the team attacks once, right now. While enemies
+			# live they are the target; once wiped out the volley falls on
+			# the enemy fortress instead (handled in _perform_single_attack).
+			_perform_volley(faction)
 		2:
+			# Galaxy: meteorites rain on the whole battlefield and damage
+			# every living enemy of the casting team.
 			var t2: Dictionary = tech_cfg.get("tier2", {})
-			_apply_technique_aoe(performers, faction,
-				float(t2.get("aoeRadius", 140.0)), float(t2.get("aoeDamage", 30.0)))
+			_apply_meteor_damage(faction, float(t2.get("aoeDamage", 60.0)))
 		3:
+			# Lion: destroy every enemy, cripple the enemy fortress and lock
+			# the enemy team out of adding new characters for a short time.
 			var t3: Dictionary = tech_cfg.get("tier3", {})
-			_apply_technique_aoe(performers, faction,
-				float(t3.get("aoeRadius", 240.0)), float(t3.get("aoeDamage", 60.0)))
-			var buff_duration: float = float(t3.get("buffDurationSeconds", 6.0))
-			for u: SimUnit in performers:
-				if u.alive:
-					_apply_buff_max(u, "damage", float(t3.get("teamDamageBuffFraction", 0.25)), buff_duration)
-					_apply_buff_max(u, "speed", float(t3.get("teamSpeedBuffFraction", 0.15)), buff_duration)
+			var enemy: int = 1 - faction
+			_wipe_faction(enemy, faction)
+			var frac: float = float(t3.get("fortressDamageFraction", 0.8))
+			_fortress_health[enemy] -= _max_fortress_health * frac
+			_events.append("fortress_damaged:%d" % enemy)
+			_spawn_lock[enemy] = float(t3.get("spawnLockSeconds", 5.0))
 	_events.append("technique:%d:%d" % [faction, tier])
 	return true
 
 
-## Instant AoE damage around each performer, applied to all enemies
-## (opposing faction + neutral boss) within radius. Deaths are attributed
-## to the performing faction so boss bonuses and kill events stay correct.
-func _apply_technique_aoe(performers: Array, faction: int, radius: float, damage: float) -> void:
-	if radius <= 0.0 or damage <= 0.0:
+## Galaxy technique: meteorites strike the entire battlefield, damaging every
+## living enemy (opposing faction + neutral boss). Deaths are attributed to
+## the casting faction so boss bonuses and kill events stay correct.
+func _apply_meteor_damage(faction: int, damage: float) -> void:
+	if damage <= 0.0:
 		return
-	var r2: float = radius * radius
 	for pool in [_champion_pool, _guardian_pool, _striker_pool, _captain_pool]:
 		for enemy: SimUnit in pool.active_units():
 			if not enemy.alive or enemy.faction_index == faction:
 				continue
-			for u: SimUnit in performers:
-				if enemy.position.distance_squared_to(u.position) <= r2:
-					enemy.health -= damage
-					enemy.last_hit_faction = faction
-					break
+			enemy.health -= damage
+			enemy.last_hit_faction = faction
 	# Deterministic death pass (same pattern as the two-pass projectile system).
 	for pool in [_champion_pool, _guardian_pool, _striker_pool, _captain_pool]:
 		for u: SimUnit in pool.active_units():
@@ -434,6 +445,10 @@ func _advance_stage() -> void:
 
 func _spawn_bots() -> void:
 	var bots_cfg: Dictionary = _config.get("bots", {})
+	# Viewer-driven rosters: bot auto-spawn can be disabled so only chat
+	# joins (red/blue comments) add characters after the opening squads.
+	if not bool(bots_cfg.get("enabled", true)):
+		return
 	var interval: float = float(bots_cfg.get("spawnIntervalSeconds", 4.0))
 	if _stage == STAGE_FINAL_SURGE:
 		var fs: Dictionary = _config.get("finalSurge", {})
@@ -482,11 +497,31 @@ func _spawn_bot(faction: int, utype: String) -> SimUnit:
 	return u
 
 
+## Opening deployment: one captain plus initialSquadSize - 1 fighters per
+## side (default 5 vs 5). Further characters only arrive via viewer joins.
+func _spawn_initial_squads() -> void:
+	var bots_cfg: Dictionary = _config.get("bots", {})
+	var squad_size: int = maxi(int(bots_cfg.get("initialSquadSize", 5)), 1)
+	var cycle: Array = bots_cfg.get("unitCycle", ["champion", "guardian", "striker"])
+	for faction in 2:
+		_spawn_captain(faction)
+		for i in range(squad_size - 1):
+			if cycle.is_empty():
+				break
+			var idx: int = _spawn_cycles[faction] % cycle.size()
+			_spawn_cycles[faction] += 1
+			_spawn_bot(faction, str(cycle[idx]))
+
+
 ## Viewer join: a chat user typed red/blue mid-battle to add one character to
 ## that side. Respects the maxUnitsPerSide cap. Emits a unit_joined event so
 ## the arena/HUD can show the "X joined the BLUE army" banner.
 func add_viewer_unit(faction: int, viewer_name: String = "") -> bool:
 	if _round_over or faction < 0 or faction > 1:
+		return false
+	# Lion ultimate: the hit side is briefly forbidden from fielding fresh
+	# characters (the lock counts down in _tick_spawn_locks).
+	if float(_spawn_lock[faction]) > 0.0:
 		return false
 	if _count_alive(faction) >= _max_units_per_side:
 		return false
@@ -621,6 +656,72 @@ func _update_doctrine_state() -> void:
 		_sieging[faction] = wants_siege
 
 
+## Counts down lion-technique spawn locks once per tick.
+func _tick_spawn_locks() -> void:
+	for faction in 2:
+		if float(_spawn_lock[faction]) > 0.0:
+			_spawn_lock[faction] = maxf(float(_spawn_lock[faction]) - _dt, 0.0)
+
+
+## Volley combat: both armies gather in the middle and trade exactly one
+## coordinated strike every _volley_interval seconds. Gift techniques
+## (finger hearts) trigger extra volleys for the gifting team only.
+func _tick_volley() -> void:
+	_volley_timer -= _dt
+	if _volley_timer > 0.0:
+		return
+	_volley_timer += _volley_interval
+	_perform_volley(0)
+	_perform_volley(1)
+	_perform_volley(-1)  # The neutral boss strikes on the same rhythm.
+
+
+## Every living unit of `faction` performs exactly one attack: the nearest
+## enemy if any remain, otherwise one blow on the enemy fortress while a
+## siege is underway.
+func _perform_volley(faction: int) -> void:
+	if _round_over:
+		return
+	var attackers: Array = []
+	for pool in [_champion_pool, _guardian_pool, _striker_pool, _captain_pool]:
+		for u: SimUnit in pool.active_units():
+			if not u.alive or u.faction_index != faction:
+				continue
+			if u.state == SimUnit.State.SPAWNING or u.state == SimUnit.State.RETREAT:
+				continue
+			attackers.append(u)
+	attackers.sort_custom(func(a: SimUnit, b: SimUnit) -> bool: return a.id < b.id)
+	for u: SimUnit in attackers:
+		_perform_single_attack(u)
+
+
+## One strike: melee/projectile damage on the nearest enemy, or a single
+## blow on the enemy fortress during a siege (in range, shield down).
+func _perform_single_attack(u: SimUnit) -> void:
+	if not u.alive or _round_over:
+		return
+	u.attack_cooldown = 0.0
+	var target := _find_nearest_enemy(u, 99999.0)
+	if target != null:
+		u.target_id = target.id
+		u.state = SimUnit.State.ATTACK
+		u.state_time = 0.0
+		if u.uses_projectiles:
+			_fire_projectile(u, target)
+		else:
+			_apply_melee(u, target)
+		return
+	# No enemies left: annihilation doctrine — one strike on the fortress.
+	if u.faction_index >= 0 and bool(_sieging[u.faction_index]):
+		var enemy_fortress: int = 1 - u.faction_index
+		var dist: float = u.position.distance_to(_fortress_positions[enemy_fortress])
+		if dist <= FORTRESS_ATTACK_RANGE and not _is_fortress_shielded(enemy_fortress):
+			u.state = SimUnit.State.ATTACK
+			u.state_time = 0.0
+			_fortress_health[enemy_fortress] -= _effective_damage(u)
+			_events.append("fortress_damaged:%d" % enemy_fortress)
+
+
 func _tick_units() -> void:
 	# Collect all active units for deterministic id-ordered processing
 	var all: Array = []
@@ -640,8 +741,8 @@ func _tick_units() -> void:
 	# Process AI
 	for u: SimUnit in all:
 		_unit_ai(u)
-	# Fortress damage pass
-	_process_fortress_attacks(all)
+	# Fortress damage is now volley-driven (see _perform_single_attack) — no
+	# continuous siege pass.
 
 
 func _unit_ai(u: SimUnit) -> void:
@@ -678,13 +779,8 @@ func _unit_ai(u: SimUnit) -> void:
 
 
 func _advance_ai(u: SimUnit) -> void:
-	# Find enemy in aggro range
-	var target := _find_nearest_enemy(u, u.attack_range * 4.0)
-	if target != null:
-		u.target_id = target.id
-		u.state = SimUnit.State.ATTACK
-		u.state_time = 0.0
-		return
+	# Volley combat: no auto-aggro. Units gather in the middle and wait;
+	# strikes only happen on the volley timer or a gift technique.
 	# Move toward objective. Flanked lanes apply only around the crown —
 	# siege objectives must be closed to within fortress attack range.
 	var obj_pos: Vector2 = _get_objective(u)
@@ -722,27 +818,15 @@ func _advance_ai(u: SimUnit) -> void:
 			u.state_time = 0.0
 
 
+## Volley combat: the ATTACK state plays exactly one strike for
+## ATTACK_POSE_SECONDS (the damage was already applied by the volley or
+## technique that triggered it), then the unit resumes its march. No
+## continuous attacks — the next blow waits for the next volley or gift.
 func _attack_ai(u: SimUnit) -> void:
-	var target := _find_unit(u.target_id)
-	if target == null:
+	if u.state_time >= ATTACK_POSE_SECONDS:
 		u.target_id = -1
 		u.state = SimUnit.State.ADVANCE
 		u.state_time = 0.0
-		return
-	var dist: float = u.position.distance_to(target.position)
-	if dist <= u.attack_range:
-		if u.uses_projectiles:
-			_fire_projectile(u, target)
-		else:
-			_apply_melee(u, target)
-	else:
-		# Move toward target to maintain range
-		_move_toward(u, target.position)
-		# If too far, revert to advance
-		if dist > u.attack_range * 4.0:
-			u.target_id = -1
-			u.state = SimUnit.State.ADVANCE
-			u.state_time = 0.0
 
 
 func _retreat_ai(u: SimUnit) -> void:
@@ -767,16 +851,8 @@ func _defend_ai(u: SimUnit) -> void:
 	if u.position.distance_to(_crown) > _capture_radius:
 		fortress_pos = Vector2(fortress_pos.x, _crown.y + clampf(u.position.y - _crown.y, -BRIDGE_HALF_SIM, BRIDGE_HALF_SIM))
 	_move_toward(u, fortress_pos)
-	# Attack nearby enemies
-	var target := _find_nearest_enemy(u, u.attack_range * 2.0)
-	if target != null:
-		u.target_id = target.id
-		var dist: float = u.position.distance_to(target.position)
-		if dist <= u.attack_range:
-			if u.uses_projectiles:
-				_fire_projectile(u, target)
-			else:
-				_apply_melee(u, target)
+	# Volley combat: defenders hold the gate but do not auto-attack — their
+	# strikes land with the next volley like everyone else's.
 	# Clear defend if threat gone
 	if not _is_fortress_threatened(u.faction_index):
 		u.state = SimUnit.State.ADVANCE
@@ -918,27 +994,6 @@ func _tick_projectiles() -> void:
 		for u: SimUnit in pool.active_units():
 			if u.alive and u.health <= 0.0:
 				_kill_unit(u, u.last_hit_faction)
-
-
-func _process_fortress_attacks(all_units: Array) -> void:
-	for u: SimUnit in all_units:
-		if not u.alive or u.faction_index < 0:
-			continue
-		# Annihilation doctrine: a castle can only take damage while its owner
-		# has no living character left on the battlefield (siege underway).
-		if not bool(_sieging[u.faction_index]):
-			continue
-		var enemy_fortress: int = 1 - u.faction_index
-		var dist: float = u.position.distance_to(_fortress_positions[enemy_fortress])
-		if dist <= FORTRESS_ATTACK_RANGE and u.attack_cooldown <= 0.0:
-			# Castle shield: a fortress only takes damage while its owner has
-			# no living unit near it. Fresh spawns defend their gate, so
-			# attackers must clear the defenders before breaking the walls.
-			if _is_fortress_shielded(enemy_fortress):
-				continue
-			u.attack_cooldown = u.attack_interval
-			_fortress_health[enemy_fortress] -= _effective_damage(u)
-			_events.append("fortress_damaged:%d" % enemy_fortress)
 
 
 ## True while the fortress owner still has a living unit within the shield

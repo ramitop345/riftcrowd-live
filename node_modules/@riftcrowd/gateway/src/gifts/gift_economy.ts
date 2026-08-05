@@ -72,7 +72,7 @@ export class GiftEconomy {
     this.mapper = new GiftMapper(config);
     this.streakAggregator = new StreakAggregator(config.streaks, clock);
     this.cooldownManager = new CooldownManager(config.cooldowns, clock);
-    this.overflowConverter = new OverflowConverter(config.bounds, config.overflow);
+    this.overflowConverter = new OverflowConverter(config.bounds, config.overflow, clock);
     this.getFaction = getFaction ?? (() => null);
     this.giftRule = new GiftRule(
       this.mapper,
@@ -155,7 +155,7 @@ export class GiftEconomy {
     this.mapper = new GiftMapper(newConfig);
     this.streakAggregator = new StreakAggregator(newConfig.streaks, clock);
     this.cooldownManager = new CooldownManager(newConfig.cooldowns, clock);
-    this.overflowConverter = new OverflowConverter(newConfig.bounds, newConfig.overflow);
+    this.overflowConverter = new OverflowConverter(newConfig.bounds, newConfig.overflow, clock);
     this.giftRule = new GiftRule(
       this.mapper,
       this.streakAggregator,

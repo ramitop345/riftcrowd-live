@@ -14,7 +14,7 @@
     "height": 1180,
     "captureZoneRadius": 190
   },
-  "fortressHealth": 500,
+  "fortressHealth": 600,
   "centerZone": {
     "flankMinRadius": 50.0,
     "flankRadiusFraction": 0.95,
@@ -32,40 +32,40 @@
   },
   "unitStats": {
     "champion": {
-      "maxHealth": 100,
-      "attackDamage": 12,
+      "maxHealth": 150,
+      "attackDamage": 10,
       "attackIntervalSeconds": 1.0,
       "moveSpeed": 46,
       "attackRange": 60,
       "retreatHealthFraction": 0.25
     },
     "guardian": {
-      "maxHealth": 160,
-      "attackDamage": 8,
+      "maxHealth": 150,
+      "attackDamage": 10,
       "attackIntervalSeconds": 1.2,
       "moveSpeed": 36,
       "attackRange": 50,
       "retreatHealthFraction": 0.25
     },
     "striker": {
-      "maxHealth": 70,
-      "attackDamage": 16,
+      "maxHealth": 150,
+      "attackDamage": 10,
       "attackIntervalSeconds": 0.8,
       "moveSpeed": 55,
       "attackRange": 55,
       "retreatHealthFraction": 0.25
     },
     "captain": {
-      "maxHealth": 400,
-      "attackDamage": 25,
+      "maxHealth": 150,
+      "attackDamage": 10,
       "attackIntervalSeconds": 1.4,
       "moveSpeed": 40,
       "attackRange": 80,
       "retreatHealthFraction": 0
     },
     "boss": {
-      "maxHealth": 1200,
-      "attackDamage": 30,
+      "maxHealth": 450,
+      "attackDamage": 10,
       "attackIntervalSeconds": 1.6,
       "moveSpeed": 30,
       "attackRange": 90,
@@ -79,8 +79,13 @@
     "projectile": 120
   },
   "bots": {
+    "enabled": false,
+    "initialSquadSize": 5,
     "spawnIntervalSeconds": 4.0,
     "unitCycle": ["champion", "guardian", "striker"]
+  },
+  "combat": {
+    "volleyIntervalSeconds": 20.0
   },
   "finalSurge": {
     "spawnIntervalMultiplier": 0.5
@@ -128,20 +133,13 @@
     "maxShips": 2
   },
   "technique": {
-    "tier1": {
-      "damageBuffFraction": 0.5,
-      "buffDurationSeconds": 3.0
-    },
+    "tier1": {},
     "tier2": {
-      "aoeRadius": 140,
-      "aoeDamage": 30
+      "aoeDamage": 60
     },
     "tier3": {
-      "aoeRadius": 240,
-      "aoeDamage": 60,
-      "teamDamageBuffFraction": 0.25,
-      "teamSpeedBuffFraction": 0.15,
-      "buffDurationSeconds": 6.0,
+      "fortressDamageFraction": 0.8,
+      "spawnLockSeconds": 5.0,
       "cinematic": true
     },
     "performDurationSeconds": 1.6,

@@ -1,9 +1,10 @@
 /**
  * Phase 13 — Test Events and Scenario Replay.
- * Buttons for 7 scenarios + start/stop/advance/record/replay.
+ * Buttons for 8 scenarios + start/stop/advance/record/replay, plus single-event
+ * injection (red/blue join comments, Finger Heart / Galaxy / Lion gifts).
  */
 import { useState, useEffect, type JSX } from 'react';
-import { mockStart, mockStop, mockAdvance, mockState, mockRecord, mockReplay, type MockStateResponse, type ApiResult } from '../api/client.js';
+import { mockStart, mockStop, mockAdvance, mockState, mockRecord, mockReplay, mockInjectEvent, type MockStateResponse, type ApiResult } from '../api/client.js';
 import { css } from '../styles.js';
 
 const SCENARIOS = [
@@ -14,12 +15,24 @@ const SCENARIOS = [
   'disconnect',
   'reconnect',
   'four_mode_round',
+  'technique_demo',
 ] as const;
+
+// Technique gifts matching gateway/config/gifts.json mappings:
+// Finger Heart → tier 1, Galaxy → tier 2, Lion → tier 3.
+const INJECT_GIFTS = [
+  { giftId: 'gift_021', name: 'Finger Heart', providerValue: 1 },
+  { giftId: 'gift_022', name: 'Galaxy', providerValue: 10 },
+  { giftId: 'gift_023', name: 'Lion', providerValue: 100 },
+] as const;
+
+const JOIN_COMMENTS = ['blue', 'red'] as const;
 
 export function TestEvents(): JSX.Element {
   const [state, setState] = useState<MockStateResponse | null>(null);
   const [advanceMs, setAdvanceMs] = useState('5000');
   const [replayPath, setReplayPath] = useState('');
+  const [viewerId, setViewerId] = useState('dashboard_tester');
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
@@ -80,6 +93,25 @@ export function TestEvents(): JSX.Element {
     void poll();
   };
 
+  const handleInject = async (
+    payload: { kind: 'comment'; comment: string } | { kind: 'gift'; giftId: string; giftName: string; providerValue: number },
+    label: string,
+  ): Promise<void> => {
+    setMessage(null);
+    const viewer = viewerId.trim() || 'dashboard_tester';
+    const res = await mockInjectEvent({ ...payload, viewerId: viewer, displayName: viewer });
+    if (!res.ok) {
+      setMessage({ text: res.error, type: 'error' });
+    } else if (res.data.dropped) {
+      setMessage({ text: `${label}: dropped (${res.data.reason ?? 'unknown'})`, type: 'error' });
+    } else if (res.data.commandTypes.length === 0) {
+      setMessage({ text: `${label}: processed, no commands produced`, type: 'success' });
+    } else {
+      setMessage({ text: `${label}: ${res.data.commandTypes.join(', ')}`, type: 'success' });
+    }
+    void poll();
+  };
+
   return (
     <div>
       <h2>Test Events & Scenarios</h2>
@@ -92,6 +124,51 @@ export function TestEvents(): JSX.Element {
               {s}
             </button>
           ))}
+        </div>
+      </div>
+
+      <div style={css.card}>
+        <div style={css.cardTitle}>Single Event Injection</div>
+        <div style={{ fontSize: '0.8rem', color: '#8a8fa3', marginBottom: '0.5rem' }}>
+          Sends one event through the live pipeline — no scenario needed. Comments
+          &quot;blue&quot;/&quot;red&quot; make the viewer join a team; gifts only fire techniques for
+          viewers who already joined a team, and gift cooldowns apply.
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <input
+              type="text"
+              style={{ ...css.input, width: '180px' }}
+              placeholder="Viewer username"
+              value={viewerId}
+              onChange={e => setViewerId(e.target.value)}
+              data-testid="inject-viewer"
+            />
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            {JOIN_COMMENTS.map(c => (
+              <button
+                key={c}
+                style={css.button('default')}
+                onClick={() => { void handleInject({ kind: 'comment', comment: c }, `Comment "${c}"`); }}
+                data-testid={`inject-comment-${c}`}
+              >
+                Comment &quot;{c}&quot;
+              </button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            {INJECT_GIFTS.map(g => (
+              <button
+                key={g.giftId}
+                style={css.button('primary')}
+                onClick={() => { void handleInject({ kind: 'gift', giftId: g.giftId, giftName: g.name, providerValue: g.providerValue }, g.name); }}
+                data-testid={`inject-gift-${g.giftId}`}
+              >
+                {g.name}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -152,7 +229,7 @@ export function TestEvents(): JSX.Element {
             <div>Connected: {state.connected ? 'Yes' : 'No'}</div>
             <div>Scenario: {state.scenario ?? '—'}</div>
             <div>Clock: {state.clockTimeMs}ms</div>
-            <div>Events: {state.eventsEmitted} | Commands: {state.commandsProduced}</div>
+            <div>Events: {state.eventsEmitted} | Commands: {state.commandsProduced} | Injected: {state.eventsInjected}</div>
             <div>Pending: {state.pendingEvents}</div>
           </div>
         ) : (

@@ -38,6 +38,8 @@ export interface GiftDecision {
   streak: boolean;
   cooldownBlocked: boolean;
   cooldownReason?: string;
+  /** True when the gift was skipped because the viewer never joined a team. */
+  notJoined?: boolean;
   overflowed: boolean;
   reserveAdded: number;
   commandsProduced: number;
@@ -85,7 +87,7 @@ export class GiftRule implements Rule {
   /** Logger callback — injected for testability. */
   private readonly logFn: (msg: string) => void;
 
-  /** Faction resolver — injected from ViewerRegistry; falls back to hash. */
+  /** Faction resolver — injected from ViewerRegistry (joined teams only). */
   private readonly getFaction: (viewerId: string) => string | null;
 
   constructor(
@@ -108,18 +110,34 @@ export class GiftRule implements Rule {
     return event.type === 'gift' && event.gift !== undefined;
   }
 
-  /** Hash-based fallback faction assignment when no registry lookup is available. */
-  private fallbackFaction(viewerId: string): string {
-    const viewerHash = viewerId.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-    return viewerHash % 2 === 0 ? 'faction_alpha' : 'faction_beta';
-  }
+  /** Hash-based fallback faction assignment — intentionally removed:
+   * techniques must only fire for the team a viewer actually joined. */
 
   execute(event: NormalizedLiveEvent, _context: RuleContext): GameCommand[] | null {
     const gift = event.gift!;
     const viewerId = event.user.id;
-    // Resolve faction: registry lookup first, hash fallback
-    const factionId = this.getFaction(viewerId) ?? this.fallbackFaction(viewerId);
     const giftId = gift.id;
+    // Techniques only make sense for viewers who joined a team (typed
+    // red/blue in chat). Gifts from viewers without a team are skipped.
+    const factionId = this.getFaction(viewerId);
+    if (factionId === null) {
+      const log = `${giftId} from ${viewerId} → viewer has not joined a team, skipping`;
+      this.logFn(`[GiftRule] ${log}`);
+      this.decisions.push({
+        eventId: event.id,
+        viewerId,
+        factionId: 'none',
+        giftId,
+        streak: false,
+        cooldownBlocked: false,
+        notJoined: true,
+        overflowed: false,
+        reserveAdded: 0,
+        commandsProduced: 0,
+        log,
+      });
+      return null;
+    }
     const count = gift.repeatCount;
 
     // 1. Map gift to impact

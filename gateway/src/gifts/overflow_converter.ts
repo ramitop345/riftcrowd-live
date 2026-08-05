@@ -7,6 +7,7 @@
  */
 
 import type { GiftBounds, GiftOverflow, GiftImpactType } from './gift_config.js';
+import type { Clock } from './streak_aggregator.js';
 
 // ---------------------------------------------------------------------------
 // Overflow result
@@ -30,26 +31,47 @@ const MAX_RESERVE = 1_000_000;
 export class OverflowConverter {
   private readonly bounds: GiftBounds;
   private readonly overflow: GiftOverflow;
+  private readonly clock: Clock;
 
-  /** Active champion counts per faction. */
-  private readonly championsPerFaction: Map<string, number> = new Map();
-  /** Active squad counts per faction. */
-  private readonly squadsPerFaction: Map<string, number> = new Map();
-  /** Active world event count. */
-  private activeWorldEvents: number = 0;
+  /** Active champion lease expiry timestamps per faction. */
+  private readonly championLeases: Map<string, number[]> = new Map();
+  /** Active squad lease expiry timestamps per faction. */
+  private readonly squadLeases: Map<string, number[]> = new Map();
+  /** Active world event lease expiry timestamps. */
+  private worldEventLeases: number[] = [];
   /** Accumulated reserve energy/score. */
   private reserve: number = 0;
   /** Total overflow conversions performed. */
   private overflowCount: number = 0;
 
-  constructor(bounds: GiftBounds, overflow: GiftOverflow) {
+  constructor(bounds: GiftBounds, overflow: GiftOverflow, clock?: Clock) {
     this.bounds = bounds;
     this.overflow = overflow;
+    this.clock = clock ?? { now: () => Date.now() };
+  }
+
+  /** Number of currently active (lease not expired) entries. */
+  private countActive(leases: number[]): number {
+    const now = this.clock.now();
+    return leases.filter((expiry) => expiry > now).length;
+  }
+
+  /** Adds a lease entry and returns the allowed/overflow decision. */
+  private leaseOrOverflow(leases: number[], max: number, magnitude: number): OverflowResult {
+    const now = this.clock.now();
+    const active = this.countActive(leases);
+    if (active >= max) {
+      return this.convertToReserve(magnitude);
+    }
+    leases.push(now + this.bounds.unitLeaseMs);
+    return { allowed: true, reserveAdded: 0, reserveType: this.overflow.type };
   }
 
   /**
    * Checks if an impact can be applied or should overflow to reserve.
-   * If allowed, increments the active count. If overflowed, adds reserve.
+   * If allowed, grants a bounded lease on the active count (auto-released
+   * after unitLeaseMs, since the game never reports deaths/endings).
+   * If overflowed, adds reserve.
    */
   applyOrOverflow(
     impactType: GiftImpactType,
@@ -58,30 +80,19 @@ export class OverflowConverter {
   ): OverflowResult {
     switch (impactType) {
       case 'spawn_champion': {
-        const current = this.championsPerFaction.get(factionId) ?? 0;
-        if (current >= this.bounds.maxActiveChampionsPerFaction) {
-          return this.convertToReserve(magnitude);
-        }
-        this.championsPerFaction.set(factionId, current + 1);
-        return { allowed: true, reserveAdded: 0, reserveType: this.overflow.type };
+        const leases = this.championLeases.get(factionId) ?? [];
+        this.championLeases.set(factionId, leases);
+        return this.leaseOrOverflow(leases, this.bounds.maxActiveChampionsPerFaction, magnitude);
       }
 
       case 'spawn_squad': {
-        const current = this.squadsPerFaction.get(factionId) ?? 0;
-        if (current >= this.bounds.maxActiveSquadsPerFaction) {
-          return this.convertToReserve(magnitude);
-        }
-        this.squadsPerFaction.set(factionId, current + 1);
-        return { allowed: true, reserveAdded: 0, reserveType: this.overflow.type };
+        const leases = this.squadLeases.get(factionId) ?? [];
+        this.squadLeases.set(factionId, leases);
+        return this.leaseOrOverflow(leases, this.bounds.maxActiveSquadsPerFaction, magnitude);
       }
 
-      case 'start_world_event': {
-        if (this.activeWorldEvents >= this.bounds.maxActiveWorldEvents) {
-          return this.convertToReserve(magnitude);
-        }
-        this.activeWorldEvents++;
-        return { allowed: true, reserveAdded: 0, reserveType: this.overflow.type };
-      }
+      case 'start_world_event':
+        return this.leaseOrOverflow(this.worldEventLeases, this.bounds.maxActiveWorldEvents, magnitude);
 
       // Non-spawning impacts always pass through
       case 'add_energy':
@@ -110,17 +121,17 @@ export class OverflowConverter {
 
   /** Returns current active champion count for a faction. */
   getActiveChampions(factionId: string): number {
-    return this.championsPerFaction.get(factionId) ?? 0;
+    return this.countActive(this.championLeases.get(factionId) ?? []);
   }
 
   /** Returns current active squad count for a faction. */
   getActiveSquads(factionId: string): number {
-    return this.squadsPerFaction.get(factionId) ?? 0;
+    return this.countActive(this.squadLeases.get(factionId) ?? []);
   }
 
   /** Returns current active world event count. */
   getActiveWorldEvents(): number {
-    return this.activeWorldEvents;
+    return this.countActive(this.worldEventLeases);
   }
 
   /** Returns accumulated reserve. */
@@ -135,29 +146,27 @@ export class OverflowConverter {
 
   /** Decrements an active unit (call when unit dies or event ends). */
   releaseUnit(impactType: GiftImpactType, factionId: string): void {
+    const releaseOne = (leases: number[]): void => {
+      if (leases.length > 0) leases.shift();
+    };
     switch (impactType) {
-      case 'spawn_champion': {
-        const current = this.championsPerFaction.get(factionId) ?? 0;
-        if (current > 0) this.championsPerFaction.set(factionId, current - 1);
+      case 'spawn_champion':
+        releaseOne(this.championLeases.get(factionId) ?? []);
         break;
-      }
-      case 'spawn_squad': {
-        const current = this.squadsPerFaction.get(factionId) ?? 0;
-        if (current > 0) this.squadsPerFaction.set(factionId, current - 1);
+      case 'spawn_squad':
+        releaseOne(this.squadLeases.get(factionId) ?? []);
         break;
-      }
-      case 'start_world_event': {
-        if (this.activeWorldEvents > 0) this.activeWorldEvents--;
+      case 'start_world_event':
+        releaseOne(this.worldEventLeases);
         break;
-      }
     }
   }
 
   /** Resets all tracking state. */
   reset(): void {
-    this.championsPerFaction.clear();
-    this.squadsPerFaction.clear();
-    this.activeWorldEvents = 0;
+    this.championLeases.clear();
+    this.squadLeases.clear();
+    this.worldEventLeases = [];
     this.reserve = 0;
     this.overflowCount = 0;
   }

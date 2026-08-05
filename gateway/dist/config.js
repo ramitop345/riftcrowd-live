@@ -1,4 +1,22 @@
-import 'dotenv/config';
+import { config as loadDotenv } from 'dotenv';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
+// Load .env from the repo root. When running via tsx the source file is in
+// gateway/src/; when compiled it's in gateway/dist/. Walk up until we find .env.
+const _dirname = typeof __dirname !== 'undefined'
+    ? __dirname
+    : dirname(fileURLToPath(import.meta.url));
+for (const candidate of [
+    resolve(_dirname, '../../.env'), // gateway/src/ → repo root
+    resolve(_dirname, '../.env'), // gateway/ → repo root
+    resolve(_dirname, '../../../.env'), // gateway/dist/ → repo root
+]) {
+    if (existsSync(candidate)) {
+        loadDotenv({ path: candidate, override: true });
+        break;
+    }
+}
 import { z } from 'zod';
 /**
  * Environment contract for the gateway. Every value has a safe localhost default so the

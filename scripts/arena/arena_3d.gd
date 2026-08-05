@@ -5,6 +5,7 @@ extends Node3D
 
 const MeshyLod := preload("res://scripts/units/meshy_lod.gd")
 const SpaceBackdropScript := preload("res://scripts/vfx/space_backdrop.gd")
+const CinematicDirectorScript := preload("res://scripts/arena/cinematic_director.gd")
 
 const UNIT_SCENE_PATHS: Dictionary = {
 	"champion": "res://scenes/units/3d/Champion3D.tscn",
@@ -30,6 +31,10 @@ const GROUND_Y: float = 1.0  # objects sit on the flat arena ground
 signal round_ended(victory_type: String, winner: int)
 ## New characters walked out of a castle gate (drives the 5s PIP cameras).
 signal arrivals_at_gate(faction: int)
+## Gift technique cutscenes: battle.gd pauses the sandbox while a cinematic
+## owns the camera and resumes it once the scene is over.
+signal cinematic_started()
+signal cinematic_finished()
 
 ## Fallen units stay on the battlefield as corpses for this long before the
 ## arena sweeps them, so kills are visible instead of units vanishing instantly.
@@ -103,6 +108,11 @@ var _faction_a: Dictionary = {}
 var _faction_b: Dictionary = {}
 var _victory_emitted: bool = false
 var _space_backdrop: Node = null
+## Gift technique cutscene player (galaxy meteor rain / lion supreme art).
+var _cinematic: CinematicDirector = null
+## While true the arena hands the camera to the cinematic director and
+## freezes its own shot selection.
+var _cinematic_active: bool = false
 
 
 func _ready() -> void:
@@ -139,6 +149,14 @@ func _ready() -> void:
 		_camera.position = _cam_pos
 		_camera.look_at(_cam_look, Vector3.UP)
 		_camera.fov = _master_fov
+	# Gift technique cutscene director shares the arena camera.
+	if _cinematic == null:
+		_cinematic = CinematicDirectorScript.new()
+		_cinematic.name = "CinematicDirector"
+		add_child(_cinematic)
+		_cinematic.setup(self, _camera)
+		_cinematic.finished.connect(_on_cinematic_finished)
+		print("[Cinematic] director created (camera=%s)" % ("ok" if _camera != null else "NULL"))
 
 
 ## Shadowless directional fill shining from the camera side onto the fronts of
@@ -215,6 +233,10 @@ func setup(config: Dictionary, faction_a: Dictionary, faction_b: Dictionary) -> 
 
 func _process(delta: float) -> void:
 	_cam_time += delta
+	# A gift cinematic owns the camera and the battlefield presentation:
+	# no shot switching, no corpse sweeps, no camera writes underneath it.
+	if _cinematic_active:
+		return
 	_sweep_corpses()
 	_update_shot_selection(delta)
 	# Shot targets: wide master framing the whole center arena, or wing shots.
@@ -541,11 +563,30 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 					round_ended.emit(vtype, winner)
 
 
-## Gift technique visuals: every living unit of the performing faction plays
-## its tier animation, staggered by id order so the squad ripples instead of
-## snapping in unison. Tier 2+ shakes the camera; tier 3 also pushes the
-## camera in on the performers' centroid (cinematic).
+## Gift technique visuals. Tier 1: every living unit of the performing
+## faction plays its tier animation, staggered by id order so the squad
+## ripples instead of snapping in unison. Tier 2+ hand the presentation to
+## the cinematic director (galaxy meteor rain / lion supreme art).
 func _perform_technique_visuals(faction: int, tier: int) -> void:
+	print("[Cinematic] technique event: faction=%d tier=%d cinematic=%s playing=%s units=%d" % [
+		faction, tier,
+		"null" if _cinematic == null else "ok",
+		str(_cinematic.is_playing()) if _cinematic != null else "-",
+		_unit_visuals.size(),
+	])
+	if tier >= 2 and _cinematic != null and not _cinematic.is_playing():
+		_cinematic_active = true
+		cinematic_started.emit()
+		if tier == 2:
+			_cinematic.play_galaxy(faction, _unit_visuals)
+		else:
+			_cinematic.play_lion(faction, _unit_visuals)
+		return
+	if tier >= 2:
+		print("[Cinematic] FALLBACK PATH (no cutscene): cinematic=%s playing=%s" % [
+			"null" if _cinematic == null else "ok",
+			str(_cinematic.is_playing()) if _cinematic != null else "-",
+		])
 	var tech_v: Variant = _config.get("technique", {})
 	var tech_cfg: Dictionary = tech_v if typeof(tech_v) == TYPE_DICTIONARY else {}
 	var stagger: float = float(tech_cfg.get("staggerStepSeconds", 0.08))
@@ -575,6 +616,14 @@ func _perform_technique_visuals(faction: int, tier: int) -> void:
 		shake_camera(0.3 + 0.25 * float(tier), 0.5)
 	if tier >= 3:
 		focus_on(centroid, float(tech_cfg.get("performDurationSeconds", 1.6)))
+
+
+## A gift cutscene finished — hand the camera back to the arena director
+## (its smoothing eases the shot back to the master framing) and let the
+## battle screen resume the sandbox.
+func _on_cinematic_finished() -> void:
+	_cinematic_active = false
+	cinematic_finished.emit()
 
 
 ## Fortress victory beat: hard-cut to the loser's gate, run the collapse

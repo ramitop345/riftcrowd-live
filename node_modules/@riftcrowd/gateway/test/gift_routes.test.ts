@@ -55,7 +55,7 @@ describe('Gift Economy HTTP endpoints', () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.payload);
     expect(body.tiers).toHaveLength(3);
-    expect(body.mappings).toHaveLength(20);
+    expect(body.mappings).toHaveLength(23);
   });
 
   it('GET /gifts/config rejects without token', async () => {
@@ -83,7 +83,7 @@ describe('Gift Economy HTTP endpoints', () => {
     });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.payload);
-    expect(body.mappings).toHaveLength(20);
+    expect(body.mappings).toHaveLength(23);
     expect(body.mappings[0]).toHaveProperty('giftId');
     expect(body.mappings[0]).toHaveProperty('tierId');
     expect(body.mappings[0]).toHaveProperty('impactType');

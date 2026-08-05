@@ -139,6 +139,14 @@ export const GiftBoundsSchema = z
     maxActiveSquadsPerFaction: z.number().int().min(1),
     maxActiveWorldEvents: z.number().int().min(1),
     maxQueueSize: z.number().int().min(1),
+    /**
+     * Auto-release lease (ms) for spawned units / world events. The game
+     * never reports unit deaths or event endings back to the gateway, so
+     * without a lease the active counters would saturate permanently and
+     * every matching gift would silently overflow to reserve. Defaults to
+     * 60 s when omitted.
+     */
+    unitLeaseMs: z.number().int().min(1000).default(60000),
   })
   .strict();
 

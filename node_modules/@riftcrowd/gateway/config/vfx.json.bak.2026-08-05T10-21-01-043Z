@@ -1,0 +1,18 @@
+{
+  "pool": {
+    "maxParticles": 100,
+    "maxFlashes": 20,
+    "maxTrails": 50,
+    "maxOverlays": 30
+  },
+  "quality": "high",
+  "frameRateBudget": 60,
+  "motionReduction": false,
+  "colorBlindMode": false,
+  "safeZone": {
+    "topPx": 80,
+    "bottomPx": 120,
+    "leftPx": 20,
+    "rightPx": 20
+  }
+}

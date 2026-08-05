@@ -299,8 +299,8 @@ describe('CommandRulesEngine', () => {
     engine = new CommandRulesEngine();
   });
 
-  it('has 5 built-in rules', () => {
-    expect(engine.getRules().length).toBe(5);
+  it('has 6 built-in rules', () => {
+    expect(engine.getRules().length).toBe(6);
   });
 
   it('ModeVoteRule: chat "countries" matches but produces no command', () => {
@@ -358,9 +358,9 @@ describe('CommandRulesEngine', () => {
     engine.registerRule({
       name: 'CustomRule',
       applies: (e) => e.type === 'chat',
-      execute: () => [{ ...makeEvent(), schemaVersion: 1 as const, id: 'custom-1', type: 'DISPLAY_SPOTLIGHT' as const, createdAt: new Date().toISOString(), sourceEventIds: ['x'] }],
+      execute: () => [{ ...makeEvent(), schemaVersion: 7 as const, id: 'custom-1', type: 'DISPLAY_SPOTLIGHT' as const, createdAt: new Date().toISOString(), sourceEventIds: ['x'] }],
     });
-    expect(engine.getRules().length).toBe(6);
+    expect(engine.getRules().length).toBe(7);
   });
 
   it('clearRules removes all rules', () => {
@@ -389,7 +389,7 @@ describe('CommandRulesEngine', () => {
 
   it('rule ordering: built-in rules applied in order', () => {
     const names = engine.getRules().map((r) => r.name);
-    expect(names).toEqual(['ModeVoteRule', 'JoinFactionRule', 'EndRoundRule', 'PauseRule', 'KickRule']);
+    expect(names).toEqual(['ModeVoteRule', 'JoinFactionRule', 'GiftApplyRule', 'EndRoundRule', 'PauseRule', 'KickRule']);
   });
 });
 
@@ -400,8 +400,8 @@ describe('CommandRulesEngine', () => {
 describe('CommandQueue', () => {
   it('FIFO order: dequeue returns oldest first', () => {
     const q = new CommandQueue();
-    const cmd1 = { schemaVersion: 1 as const, id: 'c1', type: 'END_ROUND' as const, createdAt: new Date().toISOString(), sourceEventIds: [] };
-    const cmd2 = { schemaVersion: 1 as const, id: 'c2', type: 'PAUSE_EVENTS' as const, createdAt: new Date().toISOString(), sourceEventIds: [] };
+    const cmd1 = { schemaVersion: 7 as const, id: 'c1', type: 'END_ROUND' as const, createdAt: new Date().toISOString(), sourceEventIds: [] };
+    const cmd2 = { schemaVersion: 7 as const, id: 'c2', type: 'PAUSE_EVENTS' as const, createdAt: new Date().toISOString(), sourceEventIds: [] };
     q.enqueue(cmd1);
     q.enqueue(cmd2);
     expect(q.dequeue()!.id).toBe('c1');
@@ -410,7 +410,7 @@ describe('CommandQueue', () => {
 
   it('capacity rejection: returns false when full', () => {
     const q = new CommandQueue(1);
-    const cmd = { schemaVersion: 1 as const, id: 'c1', type: 'END_ROUND' as const, createdAt: new Date().toISOString(), sourceEventIds: [] };
+    const cmd = { schemaVersion: 7 as const, id: 'c1', type: 'END_ROUND' as const, createdAt: new Date().toISOString(), sourceEventIds: [] };
     expect(q.enqueue(cmd)).toBe(true);
     expect(q.enqueue(cmd)).toBe(false);
   });
@@ -422,7 +422,7 @@ describe('CommandQueue', () => {
 
   it('clear returns count and empties queue', () => {
     const q = new CommandQueue();
-    const cmd = { schemaVersion: 1 as const, id: 'c1', type: 'END_ROUND' as const, createdAt: new Date().toISOString(), sourceEventIds: [] };
+    const cmd = { schemaVersion: 7 as const, id: 'c1', type: 'END_ROUND' as const, createdAt: new Date().toISOString(), sourceEventIds: [] };
     q.enqueue(cmd);
     q.enqueue(cmd);
     const dropped = q.clear();
@@ -432,7 +432,7 @@ describe('CommandQueue', () => {
 
   it('peek returns oldest without removing', () => {
     const q = new CommandQueue();
-    const cmd = { schemaVersion: 1 as const, id: 'c1', type: 'END_ROUND' as const, createdAt: new Date().toISOString(), sourceEventIds: [] };
+    const cmd = { schemaVersion: 7 as const, id: 'c1', type: 'END_ROUND' as const, createdAt: new Date().toISOString(), sourceEventIds: [] };
     q.enqueue(cmd);
     expect(q.peek()!.id).toBe('c1');
     expect(q.size).toBe(1);
@@ -440,7 +440,7 @@ describe('CommandQueue', () => {
 
   it('drain returns all and empties', () => {
     const q = new CommandQueue();
-    const cmd = { schemaVersion: 1 as const, id: 'c1', type: 'END_ROUND' as const, createdAt: new Date().toISOString(), sourceEventIds: [] };
+    const cmd = { schemaVersion: 7 as const, id: 'c1', type: 'END_ROUND' as const, createdAt: new Date().toISOString(), sourceEventIds: [] };
     q.enqueue(cmd);
     q.enqueue(cmd);
     const items = q.drain();
@@ -814,7 +814,21 @@ describe('Config', () => {
         commandQueueCapacity: 500,
         eventBusCapacity: 1000,
       },
-    };
+      ws: {
+        heartbeatIntervalMs: 5000,
+        heartbeatTimeoutMs: 15000,
+        retryBufferCapacity: 1000,
+        maxReconnectBackoffMs: 30000,
+        idempotencyWindowSize: 500,
+      },
+      tikfinity: {
+        url: 'ws://127.0.0.1:23184/ws',
+        token: undefined,
+        reconnectMs: 5000,
+        heartbeatMs: 30000,
+        enabled: false,
+      },
+    } as const;
     const sanitized = sanitizeConfig(cfg);
     expect(sanitized.localSessionToken).toBe('***REDACTED***');
     expect(sanitized.host).toBe('127.0.0.1');
@@ -1236,7 +1250,7 @@ describe('FIX 7: Shutdown drain behavior', () => {
     // Enqueue 5 commands via the pipeline
     for (let i = 0; i < 5; i++) {
       app.pipeline!.commandQueue.enqueue({
-        schemaVersion: 1 as const,
+        schemaVersion: 7 as const,
         id: `cmd-drain-${i}`,
         type: 'END_ROUND' as const,
         createdAt: new Date().toISOString(),
@@ -1262,7 +1276,7 @@ describe('FIX 7: Shutdown drain behavior', () => {
     // Enqueue commands
     for (let i = 0; i < 3; i++) {
       app.pipeline!.commandQueue.enqueue({
-        schemaVersion: 1 as const,
+        schemaVersion: 7 as const,
         id: `cmd-shutdown-${i}`,
         type: 'PAUSE_EVENTS' as const,
         createdAt: new Date().toISOString(),

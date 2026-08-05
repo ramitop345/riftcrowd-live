@@ -21,14 +21,15 @@ const TOP_LEVEL_KEYS: PackedStringArray = [
 	"schemaVersion", "tickRate", "battleDurationSeconds", "maxUnitsPerSide",
 	"stages", "arena", "fortressHealth",
 	"centerZone", "capturePressureWeights", "dominion", "unitStats", "pools",
-	"bots", "finalSurge", "suddenDeath", "crisis", "projectile",
+	"bots", "combat", "finalSurge", "suddenDeath", "crisis", "projectile",
 	"camera", "spaceBackdrop", "technique", "celebration",
 ]
 const ARENA_KEYS: PackedStringArray = ["width", "height", "captureZoneRadius"]
 const CENTER_ZONE_KEYS: PackedStringArray = ["flankMinRadius", "flankRadiusFraction", "fortressShieldRadius"]
 const DOMINION_KEYS: PackedStringArray = ["ratePerSecondAtFullAdvantage", "smoothing"]
 const POOL_KEYS: PackedStringArray = ["champion", "guardian", "striker", "projectile"]
-const BOTS_KEYS: PackedStringArray = ["spawnIntervalSeconds", "unitCycle"]
+const BOTS_KEYS: PackedStringArray = ["enabled", "initialSquadSize", "spawnIntervalSeconds", "unitCycle"]
+const COMBAT_KEYS: PackedStringArray = ["volleyIntervalSeconds"]
 const FINAL_SURGE_KEYS: PackedStringArray = ["spawnIntervalMultiplier"]
 const SUDDEN_DEATH_KEYS: PackedStringArray = ["dominionRateMultiplier", "healingAllowed"]
 const CRISIS_KEYS: PackedStringArray = ["bossEnabled", "bossCaptureBonus", "bossCaptureBonusSeconds"]
@@ -45,11 +46,10 @@ const SPACE_BACKDROP_KEYS: PackedStringArray = [
 	"shipSpeedMin", "shipSpeedMax", "maxShips",
 ]
 const TECHNIQUE_KEYS: PackedStringArray = ["tier1", "tier2", "tier3", "performDurationSeconds", "staggerStepSeconds"]
-const TECHNIQUE_TIER1_KEYS: PackedStringArray = ["damageBuffFraction", "buffDurationSeconds"]
-const TECHNIQUE_TIER2_KEYS: PackedStringArray = ["aoeRadius", "aoeDamage"]
+const TECHNIQUE_TIER1_KEYS: PackedStringArray = []
+const TECHNIQUE_TIER2_KEYS: PackedStringArray = ["aoeDamage"]
 const TECHNIQUE_TIER3_KEYS: PackedStringArray = [
-	"aoeRadius", "aoeDamage", "teamDamageBuffFraction", "teamSpeedBuffFraction",
-	"buffDurationSeconds", "cinematic",
+	"fortressDamageFraction", "spawnLockSeconds", "cinematic",
 ]
 const CELEBRATION_KEYS: PackedStringArray = ["durationSeconds", "staggerStepSeconds", "cameraPushIn"]
 const CAPTURE_WEIGHT_KEYS: PackedStringArray = ["champion", "guardian", "striker", "captain"]
@@ -89,6 +89,7 @@ static func parse(data: Variant) -> Dictionary:
 	_validate_unit_stats(cfg, errors)
 	_validate_pools(cfg, errors)
 	_validate_bots(cfg, errors)
+	_validate_combat(cfg, errors)
 	_validate_final_surge(cfg, errors)
 	_validate_sudden_death(cfg, errors)
 	_validate_crisis(cfg, errors)
@@ -233,6 +234,10 @@ static func _validate_bots(cfg: Dictionary, errors: Array[String]) -> void:
 		return
 	var bots: Dictionary = cfg["bots"]
 	_check_unknown_keys(bots, BOTS_KEYS, path, errors)
+	if bots.has("enabled"):
+		_check_bool(bots, "enabled", path, errors)
+	if bots.has("initialSquadSize"):
+		_check_positive_int(bots, "initialSquadSize", 1.0, 200.0, path, errors)
 	_check_positive_number(bots, "spawnIntervalSeconds", 0.1, path, errors)
 	var cycle_path := path + ".unitCycle"
 	if not bots.has("unitCycle"):
@@ -245,6 +250,19 @@ static func _validate_bots(cfg: Dictionary, errors: Array[String]) -> void:
 			var v: Variant = cycle[i]
 			if typeof(v) != TYPE_STRING or not BOT_UNIT_CYCLE.has(v):
 				errors.append(cycle_path + "[%d]: not an allowed unit type" % i)
+
+
+## Optional volley combat section (global attack cadence).
+static func _validate_combat(cfg: Dictionary, errors: Array[String]) -> void:
+	var path := "combat"
+	if not cfg.has("combat"):
+		return
+	if typeof(cfg["combat"]) != TYPE_DICTIONARY:
+		errors.append(path + ": expected an object")
+		return
+	var combat: Dictionary = cfg["combat"]
+	_check_unknown_keys(combat, COMBAT_KEYS, path, errors)
+	_check_positive_number(combat, "volleyIntervalSeconds", 0.1, path, errors)
 
 
 static func _validate_final_surge(cfg: Dictionary, errors: Array[String]) -> void:
@@ -372,8 +390,7 @@ static func _validate_technique(cfg: Dictionary, errors: Array[String]) -> void:
 		else:
 			var t1: Dictionary = tech["tier1"]
 			_check_unknown_keys(t1, TECHNIQUE_TIER1_KEYS, t1_path, errors)
-			for key: String in TECHNIQUE_TIER1_KEYS:
-				_check_positive_number(t1, key, 0.01, t1_path, errors)
+			# tier1 (finger heart) triggers an instant team volley — no tunables.
 	if tech.has("tier2"):
 		var t2_path := path + ".tier2"
 		if typeof(tech["tier2"]) != TYPE_DICTIONARY:
@@ -381,8 +398,7 @@ static func _validate_technique(cfg: Dictionary, errors: Array[String]) -> void:
 		else:
 			var t2: Dictionary = tech["tier2"]
 			_check_unknown_keys(t2, TECHNIQUE_TIER2_KEYS, t2_path, errors)
-			for key: String in TECHNIQUE_TIER2_KEYS:
-				_check_positive_number(t2, key, 0.01, t2_path, errors)
+			_check_positive_number(t2, "aoeDamage", 0.01, t2_path, errors)
 	if tech.has("tier3"):
 		var t3_path := path + ".tier3"
 		if typeof(tech["tier3"]) != TYPE_DICTIONARY:
@@ -390,16 +406,12 @@ static func _validate_technique(cfg: Dictionary, errors: Array[String]) -> void:
 		else:
 			var t3: Dictionary = tech["tier3"]
 			_check_unknown_keys(t3, TECHNIQUE_TIER3_KEYS, t3_path, errors)
-			if t3.has("aoeRadius"):
-				_check_positive_number(t3, "aoeRadius", 0.01, t3_path, errors)
-			if t3.has("aoeDamage"):
-				_check_positive_number(t3, "aoeDamage", 0.01, t3_path, errors)
-			if t3.has("teamDamageBuffFraction"):
-				_check_non_negative_number(t3, "teamDamageBuffFraction", t3_path, errors)
-			if t3.has("teamSpeedBuffFraction"):
-				_check_non_negative_number(t3, "teamSpeedBuffFraction", t3_path, errors)
-			if t3.has("buffDurationSeconds"):
-				_check_positive_number(t3, "buffDurationSeconds", 0.01, t3_path, errors)
+			if t3.has("fortressDamageFraction"):
+				_check_positive_number(t3, "fortressDamageFraction", 0.01, t3_path, errors)
+				if _is_finite_number(t3.get("fortressDamageFraction")) and float(t3["fortressDamageFraction"]) > 1.0:
+					errors.append(t3_path + ".fortressDamageFraction: above maximum (1.0)")
+			if t3.has("spawnLockSeconds"):
+				_check_non_negative_number(t3, "spawnLockSeconds", t3_path, errors)
 			if t3.has("cinematic"):
 				_check_bool(t3, "cinematic", t3_path, errors)
 

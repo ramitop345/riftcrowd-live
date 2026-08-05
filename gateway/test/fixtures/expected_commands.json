@@ -38,8 +38,8 @@
   {
     "eventId": "p8-evt-007",
     "label": "gift event",
-    "expectedCommands": [],
-    "expectedRulesTriggered": []
+    "expectedCommands": ["GIFT_APPLY"],
+    "expectedRulesTriggered": ["GiftApplyRule"]
   },
   {
     "eventId": "p8-evt-008",

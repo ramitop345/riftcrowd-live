@@ -24,6 +24,7 @@ const mockState = {
   commandsProduced: 0,
   pendingEvents: 0,
   directorStates: [],
+  eventsInjected: 0,
 };
 
 describe('TestEvents', () => {
@@ -34,7 +35,7 @@ describe('TestEvents', () => {
   });
   afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
 
-  it('renders 7 scenario buttons', () => {
+  it('renders 8 scenario buttons', () => {
     render(<TestEvents />);
     expect(screen.getByTestId('scenario-normal_traffic')).toBeInTheDocument();
     expect(screen.getByTestId('scenario-gift_streak')).toBeInTheDocument();
@@ -43,6 +44,61 @@ describe('TestEvents', () => {
     expect(screen.getByTestId('scenario-disconnect')).toBeInTheDocument();
     expect(screen.getByTestId('scenario-reconnect')).toBeInTheDocument();
     expect(screen.getByTestId('scenario-four_mode_round')).toBeInTheDocument();
+    expect(screen.getByTestId('scenario-technique_demo')).toBeInTheDocument();
+  });
+
+  it('renders single event injection controls', () => {
+    render(<TestEvents />);
+    expect(screen.getByTestId('inject-viewer')).toBeInTheDocument();
+    expect(screen.getByTestId('inject-comment-blue')).toBeInTheDocument();
+    expect(screen.getByTestId('inject-comment-red')).toBeInTheDocument();
+    expect(screen.getByTestId('inject-gift-gift_021')).toBeInTheDocument();
+    expect(screen.getByTestId('inject-gift-gift_022')).toBeInTheDocument();
+    expect(screen.getByTestId('inject-gift-gift_023')).toBeInTheDocument();
+  });
+
+  it('inject comment button posts to /mock/inject and shows commands', async () => {
+    render(<TestEvents />);
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, eventId: 'e1', commandTypes: ['JOIN_FACTION'], dropped: false, reason: null }),
+      text: async () => '{}',
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    fireEvent.click(screen.getByTestId('inject-comment-blue'));
+    await waitFor(() => { expect(screen.getByTestId('test-message')).toHaveTextContent('Comment "blue": JOIN_FACTION'); });
+    const call = fetchMock.mock.calls.find((c: unknown[]) => String(c[0]).includes('/mock/inject'));
+    expect(call).toBeTruthy();
+    const body = JSON.parse((call![1] as RequestInit).body as string) as Record<string, unknown>;
+    expect(body.kind).toBe('comment');
+    expect(body.comment).toBe('blue');
+    expect(body.viewerId).toBe('dashboard_tester');
+  });
+
+  it('inject gift button sends gift payload', async () => {
+    render(<TestEvents />);
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, eventId: 'e2', commandTypes: ['GIFT_APPLY', 'CAST_TECHNIQUE'], dropped: false, reason: null }),
+      text: async () => '{}',
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    fireEvent.click(screen.getByTestId('inject-gift-gift_023'));
+    await waitFor(() => { expect(screen.getByTestId('test-message')).toHaveTextContent('Lion: GIFT_APPLY, CAST_TECHNIQUE'); });
+    const call = fetchMock.mock.calls.find((c: unknown[]) => String(c[0]).includes('/mock/inject'));
+    const body = JSON.parse((call![1] as RequestInit).body as string) as Record<string, unknown>;
+    expect(body.kind).toBe('gift');
+    expect(body.giftId).toBe('gift_023');
+    expect(body.providerValue).toBe(100);
+  });
+
+  it('inject shows drop reason when pipeline drops the event', async () => {
+    render(<TestEvents />);
+    mockFetchOk({ ok: true, eventId: 'e3', commandTypes: [], dropped: true, reason: 'rate limited' });
+    fireEvent.click(screen.getByTestId('inject-gift-gift_022'));
+    await waitFor(() => { expect(screen.getByTestId('test-message')).toHaveTextContent('dropped (rate limited)'); });
   });
 
   it('calls mock start on scenario click', async () => {

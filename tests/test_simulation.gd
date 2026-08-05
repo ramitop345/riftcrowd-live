@@ -58,7 +58,7 @@ func _make_config() -> Dictionary:
 			"boss": {"maxHealth": 1200, "attackDamage": 30, "attackIntervalSeconds": 1.6, "moveSpeed": 80, "attackRange": 90, "retreatHealthFraction": 0},
 		},
 		"pools": {"champion": 60, "guardian": 60, "striker": 60, "projectile": 120},
-		"bots": {"spawnIntervalSeconds": 4.0, "unitCycle": ["champion", "guardian", "striker"]},
+		"bots": {"spawnIntervalSeconds": 4.0, "initialSquadSize": 1, "unitCycle": ["champion", "guardian", "striker"]},
 		"finalSurge": {"spawnIntervalMultiplier": 0.5},
 		"suddenDeath": {"dominionRateMultiplier": 2.0, "healingAllowed": false},
 		"crisis": {"bossEnabled": true, "bossCaptureBonus": 0.5, "bossCaptureBonusSeconds": 10},
@@ -154,6 +154,8 @@ func _test_determinism() -> void:
 
 func _test_state_machine() -> void:
 	var cfg: Dictionary = _make_config()
+	# Fast volleys so the ATTACK pose shows up inside the tick budget.
+	cfg["combat"] = {"volleyIntervalSeconds": 1.0}
 	var w := _create_world(cfg, 7)
 	# Tick 0: captains just spawned, should be SPAWNING
 	var snap0: Dictionary = w.get_snapshot()
@@ -199,8 +201,9 @@ func _test_state_machine() -> void:
 
 func _test_combat() -> void:
 	var cfg: Dictionary = _make_config()
+	cfg["combat"] = {"volleyIntervalSeconds": 1.0}
 	var w := _create_world(cfg, 13)
-	# Run enough ticks for units to spawn, move, fight, and kill. Under the
+	# Run enough ticks for units to spawn, trade volleys and die. Under the
 	# center-dominion doctrine fortress sieges are gated on holding the center
 	# zone, so fortress coverage lives in _test_center_doctrine instead.
 	var death_seen: bool = false
@@ -522,6 +525,7 @@ func _test_boss_spawn() -> void:
 	# fortress wins need real sieges and dominion never accrues (rate 0).
 	cfg["fortressHealth"] = 5000
 	cfg["dominion"] = {"ratePerSecondAtFullAdvantage": 0.0, "smoothing": 0.15}
+	cfg["combat"] = {"volleyIntervalSeconds": 1.0}
 	var w := _create_world(cfg, 42)
 	# Run through opening (9s = 180 ticks at 20Hz) plus a few crisis ticks.
 	w.run_ticks(180)
@@ -588,13 +592,9 @@ func _test_projectile_pool_exhaustion() -> void:
 
 func _technique_config() -> Dictionary:
 	return {
-		"tier1": {"damageBuffFraction": 0.5, "buffDurationSeconds": 3.0},
-		"tier2": {"aoeRadius": 10000.0, "aoeDamage": 5.0},
-		"tier3": {
-			"aoeRadius": 10000.0, "aoeDamage": 5.0,
-			"teamDamageBuffFraction": 0.25, "teamSpeedBuffFraction": 0.15,
-			"buffDurationSeconds": 6.0, "cinematic": true,
-		},
+		"tier1": {},
+		"tier2": {"aoeDamage": 5.0},
+		"tier3": {"fortressDamageFraction": 0.5, "spawnLockSeconds": 2.0, "cinematic": true},
 		"performDurationSeconds": 1.6,
 		"staggerStepSeconds": 0.08,
 	}
@@ -632,46 +632,43 @@ func _test_technique_effects() -> void:
 	_check(w.trigger_technique(2, 1) == false, "technique: rejects faction index 2")
 	_check(w.trigger_technique(0, 0) == false, "technique: rejects tier 0")
 	_check(w.trigger_technique(0, 4) == false, "technique: rejects tier 4")
-	# Tier 1: damage buff + sim event.
+	# Tier 1 (finger heart): the casting team immediately launches one volley.
 	_check(w.trigger_technique(0, 1) == true, "technique: tier 1 accepted")
 	var s1: Dictionary = w.get_snapshot()
 	_check(_events_contain(s1, "technique:0:1"), "technique: tier 1 sim event emitted")
-	var buffed: bool = false
+	var attacking: bool = false
 	for uid: int in w._unit_registry:
 		var u: SimUnit = w._unit_registry[uid]
-		if u.alive and u.faction_index == 0 and u.damage_buff_timer > 0.0:
-			buffed = true
-	_check(buffed, "technique: tier 1 applies damage buff to faction 0 units")
-	# Buff expires after its duration (3s = 60 ticks).
-	w.run_ticks(61)
-	var still_buffed: bool = false
+		if u.alive and u.faction_index == 0 and u.state == SimUnit.State.ATTACK:
+			attacking = true
+	_check(attacking, "technique: tier 1 makes faction 0 units strike immediately")
+	# Volley pose ends and units go back to advancing (1s = 20 ticks).
+	w.run_ticks(21)
+	var still_attacking: bool = false
 	for uid: int in w._unit_registry:
 		var u: SimUnit = w._unit_registry[uid]
-		if u.alive and u.faction_index == 0 and u.damage_buff_timer > 0.0:
-			still_buffed = true
-	_check(not still_buffed, "technique: tier 1 buff expires after duration")
-	# Tier 2: arena-wide AoE (radius 10000) damages every enemy.
+		if u.alive and u.faction_index == 0 and u.state == SimUnit.State.ATTACK:
+			still_attacking = true
+	_check(not still_attacking, "technique: tier 1 volley pose ends after 1 second")
+	# Tier 2 (galaxy): meteorites damage every enemy of the casting team.
 	var enemy_hp_before: float = _total_health(w, 1)
 	_check(w.trigger_technique(0, 2) == true, "technique: tier 2 accepted")
 	var s2: Dictionary = w.get_snapshot()
 	_check(_events_contain(s2, "technique:0:2"), "technique: tier 2 sim event emitted")
 	var enemy_hp_after: float = _total_health(w, 1)
-	_check(enemy_hp_after < enemy_hp_before, "technique: tier 2 AoE damages enemy faction")
-	# Tier 3: AoE + team damage/speed buffs + cinematic event.
+	_check(enemy_hp_after < enemy_hp_before, "technique: tier 2 meteorites damage enemy faction")
+	# Tier 3 (lion): wipes the enemy team, cripples the enemy fortress and
+	# locks the enemy out of adding new characters for spawnLockSeconds.
+	var fortress_before: float = float(w._fortress_health[0])
 	_check(w.trigger_technique(1, 3) == true, "technique: tier 3 accepted")
 	var s3: Dictionary = w.get_snapshot()
 	_check(_events_contain(s3, "technique:1:3"), "technique: tier 3 sim event emitted")
-	var speed_buffed: bool = false
-	var damage_buffed: bool = false
-	for uid: int in w._unit_registry:
-		var u: SimUnit = w._unit_registry[uid]
-		if u.alive and u.faction_index == 1:
-			if u.speed_buff_timer > 0.0:
-				speed_buffed = true
-			if u.damage_buff_timer > 0.0:
-				damage_buffed = true
-	_check(speed_buffed, "technique: tier 3 applies team speed buff")
-	_check(damage_buffed, "technique: tier 3 applies team damage buff")
+	_check(_total_health(w, 0) <= 0.0, "technique: tier 3 wipes every faction 0 unit")
+	_check(float(w._fortress_health[0]) < fortress_before, "technique: tier 3 damages the enemy fortress")
+	_check(not w.add_viewer_unit(0, "Locked"), "technique: tier 3 spawn lock blocks enemy joins")
+	# Lock expires after spawnLockSeconds (2s = 40 ticks).
+	w.run_ticks(41)
+	_check(w.add_viewer_unit(0, "BackIn"), "technique: tier 3 spawn lock expires")
 	# World without technique config refuses to trigger.
 	var bare := _create_world(_make_config(), 123)
 	bare.run_ticks(60)
@@ -753,7 +750,7 @@ func _test_victory_event_emitted() -> void:
 func _test_roster_cap_and_viewer_join() -> void:
 	var cfg: Dictionary = _make_config()
 	cfg["maxUnitsPerSide"] = 3
-	cfg["bots"] = {"spawnIntervalSeconds": 0.1, "unitCycle": ["champion"]}
+	cfg["bots"] = {"spawnIntervalSeconds": 0.1, "initialSquadSize": 1, "unitCycle": ["champion"]}
 	cfg["stages"] = {"opening": 30, "crisis": 30, "finalSurge": 30, "suddenDeath": 30}
 	var w := _create_world(cfg, 101)
 	# Viewer join before the cap is hit succeeds and emits unit_joined.
@@ -823,8 +820,8 @@ func _test_timer_victory() -> void:
 
 func _test_battle_duration() -> void:
 	var cfg: Dictionary = _make_config()
-	# Stages sum to 30s; battleDurationSeconds stretches sudden death so the
-	# whole battle lasts 60s.
+	# battleDurationSeconds scales all four stages proportionally (1:1:1:2) so
+	# the whole battle lasts exactly 60s, regardless of the stage values.
 	cfg["battleDurationSeconds"] = 60
 	var w := _create_world(cfg, 11)
 	var snap0: Dictionary = w.get_snapshot()
@@ -833,6 +830,13 @@ func _test_battle_duration() -> void:
 	var snap1: Dictionary = w.get_snapshot()
 	_check(absf(float(snap1["battle_time_left"]) - 50.0) < 0.2, "duration: countdown tracks elapsed time")
 	_check(not w.is_round_over(), "duration: battle still running before timer end")
+	# Sub-minute runs: 20s total splits into 4/4/4/8s stages.
+	cfg["battleDurationSeconds"] = 20
+	var w2 := _create_world(cfg, 12)
+	_check(absf(float(w2._stage_durations[SimWorld.STAGE_OPENING]) - 4.0) < 0.01, "duration: short opening stage")
+	_check(absf(float(w2._stage_durations[SimWorld.STAGE_SUDDEN_DEATH]) - 8.0) < 0.01, "duration: short sudden death stage")
+	var snap2: Dictionary = w2.get_snapshot()
+	_check(absf(float(snap2["battle_time_left"]) - 20.0) < 0.01, "duration: sub-minute battle starts with full 20s")
 
 
 func _total_health(w: SimWorld, faction: int) -> float:

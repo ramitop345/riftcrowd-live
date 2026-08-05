@@ -66,6 +66,7 @@ Deterministic clock for reproducible scenarios:
 | `disconnect` | 6 | 15 s | Connection drop mid-stream |
 | `reconnect` | 10 | 25 s | Disconnect + reconnect + resume |
 | `four_mode_round` | 70+ | ~6 min | Full round: mode vote → lobby → battle → results → next vote |
+| `technique_demo` | 6 | 22 s | 3 viewers join red/blue, then send Finger Heart / Galaxy / Lion gifts |
 
 ### Disconnect/Reconnect Markers
 
@@ -166,15 +167,18 @@ All endpoints require `Authorization: Bearer <LOCAL_SESSION_TOKEN>`.
 | POST | `/mock/start` | `{ scenario }` | Start a scenario |
 | POST | `/mock/stop` | — | Stop running adapter |
 | POST | `/mock/advance` | `{ ms }` | Advance TestClock manually |
-| GET | `/mock/state` | — | Adapter state and stats |
+| POST | `/mock/inject` | `{ kind: 'comment', viewerId?, comment }` or `{ kind: 'gift', viewerId?, giftId, giftName?, providerValue? }` | Inject a single event through the pipeline (no scenario needed); returns `commandTypes`, `dropped`, `reason` |
+| GET | `/mock/state` | — | Adapter state and stats (includes `eventsInjected`) |
 | POST | `/mock/record` | `{ scenario }` | Run + save RecordedSession |
 | POST | `/mock/replay` | `{ sessionPath }` | Replay a saved session |
 
 > **Security:** `/mock/replay` confines `sessionPath` to the recordings directory
 > (`gateway/data/recordings`). Path traversal attempts return 400.
 
-> **Note:** Dashboard UI buttons are not yet implemented. Endpoints are available
-> for programmatic use; a UI layer will be added in a later phase.
+> **Note:** Injected events get unique `evt_inject_<uuid>` ids so they never
+> collide with scenario event ids in the dedupe store. Gifts only produce
+> `CAST_TECHNIQUE` for viewers who already joined a team (comment `red`/`blue`
+> while the director is in lobby/battle states); gift cooldowns still apply.
 
 ## Known Limitations
 

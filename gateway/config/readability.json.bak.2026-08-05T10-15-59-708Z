@@ -1,0 +1,12 @@
+{
+  "colorBlindMode": false,
+  "motionReduction": false,
+  "safeZone": {
+    "topPx": 80,
+    "bottomPx": 120,
+    "leftPx": 20,
+    "rightPx": 20
+  },
+  "fontSize": "medium",
+  "contrastBoost": false
+}

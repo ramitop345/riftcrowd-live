@@ -4,8 +4,8 @@
  * Each scenario exports a name, duration, and array of ScheduledEvent objects
  * (timeMs + NormalizedLiveEvent). Scenarios are deterministic: same input → same output.
  *
- * Seven scenarios: normal_traffic, gift_streak, viral_burst, malformed_payloads,
- * disconnect, reconnect, four_mode_round.
+ * Eight scenarios: normal_traffic, gift_streak, viral_burst, malformed_payloads,
+ * disconnect, reconnect, four_mode_round, technique_demo.
  */
 // ---------------------------------------------------------------------------
 // Builder helpers — create valid NormalizedLiveEvent objects
@@ -496,6 +496,26 @@ export function fourModeRound() {
     return { name: 'four_mode_round', events, durationMs };
 }
 // ---------------------------------------------------------------------------
+// Scenario 8: technique_demo
+// Three viewers join a team by typing a color in chat, then each sends one
+// technique gift (Finger Heart / Galaxy / Lion). Gifts only fire for viewers
+// who joined a team, so the join comment always precedes the gift, spaced
+// well beyond all gift cooldowns. Lets the game demo all three technique
+// tiers in mock mode.
+// ---------------------------------------------------------------------------
+export function techniqueDemo() {
+    resetEventCounter();
+    const events = [
+        makeChatEvent({ timeMs: 1000, viewerId: 'tech_viewer_1', comment: 'blue' }),
+        makeChatEvent({ timeMs: 1500, viewerId: 'tech_viewer_2', comment: 'red' }),
+        makeChatEvent({ timeMs: 2000, viewerId: 'tech_viewer_3', comment: 'blue' }),
+        makeGiftEvent({ timeMs: 4000, viewerId: 'tech_viewer_1', giftId: 'gift_021', giftName: 'Finger Heart', providerValue: 1 }),
+        makeGiftEvent({ timeMs: 10000, viewerId: 'tech_viewer_2', giftId: 'gift_022', giftName: 'Galaxy', providerValue: 10 }),
+        makeGiftEvent({ timeMs: 16000, viewerId: 'tech_viewer_3', giftId: 'gift_023', giftName: 'Lion', providerValue: 100 }),
+    ];
+    return { name: 'technique_demo', events, durationMs: 22_000 };
+}
+// ---------------------------------------------------------------------------
 // Scenario registry
 // ---------------------------------------------------------------------------
 export const SCENARIO_REGISTRY = {
@@ -506,6 +526,7 @@ export const SCENARIO_REGISTRY = {
     disconnect,
     reconnect,
     four_mode_round: fourModeRound,
+    technique_demo: techniqueDemo,
 };
 /** Returns a scenario by name, or throws if not found. */
 export function getScenario(name) {

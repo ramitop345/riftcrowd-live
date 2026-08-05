@@ -154,6 +154,25 @@ export interface MockStateResponse {
   commandsProduced: number;
   pendingEvents: number;
   directorStates: string[];
+  eventsInjected: number;
+}
+
+export interface MockInjectPayload {
+  kind: 'comment' | 'gift';
+  viewerId?: string;
+  displayName?: string;
+  comment?: string;
+  giftId?: string;
+  giftName?: string;
+  providerValue?: number;
+}
+
+export interface MockInjectResponse {
+  ok: boolean;
+  eventId: string;
+  commandTypes: string[];
+  dropped: boolean;
+  reason: string | null;
 }
 
 export interface OkResponse {
@@ -315,6 +334,10 @@ export function mockRecord(scenario: string): Promise<ApiResult<OkResponse>> {
 
 export function mockReplay(sessionPath: string): Promise<ApiResult<OkResponse>> {
   return post<OkResponse>('/mock/replay', { sessionPath });
+}
+
+export function mockInjectEvent(payload: MockInjectPayload): Promise<ApiResult<MockInjectResponse>> {
+  return post<MockInjectResponse>('/mock/inject', payload);
 }
 
 // Viewer moderation

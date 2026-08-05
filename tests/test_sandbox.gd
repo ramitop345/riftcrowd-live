@@ -50,7 +50,7 @@ func _make_config() -> Dictionary:
 			"boss": {"maxHealth": 1200, "attackDamage": 30, "attackIntervalSeconds": 1.6, "moveSpeed": 80, "attackRange": 90, "retreatHealthFraction": 0},
 		},
 		"pools": {"champion": 60, "guardian": 60, "striker": 60, "projectile": 120},
-		"bots": {"spawnIntervalSeconds": 4.0, "unitCycle": ["champion", "guardian", "striker"]},
+		"bots": {"spawnIntervalSeconds": 4.0, "initialSquadSize": 1, "unitCycle": ["champion", "guardian", "striker"]},
 		"finalSurge": {"spawnIntervalMultiplier": 0.5},
 		"suddenDeath": {"dominionRateMultiplier": 2.0, "healingAllowed": false},
 		"crisis": {"bossEnabled": true, "bossCaptureBonus": 0.5, "bossCaptureBonusSeconds": 10},

@@ -84,11 +84,18 @@ Lists the 4 installed content packs with metadata (mode, label, faction count).
 Pack preview depends on Phase 4 asset-validation tooling.
 
 ### Test Events & Scenarios
-- 7 scenario buttons: `normal_traffic`, `gift_streak`, `viral_burst`,
-  `malformed_payloads`, `disconnect`, `reconnect`, `four_mode_round`
+- 8 scenario buttons: `normal_traffic`, `gift_streak`, `viral_burst`,
+  `malformed_payloads`, `disconnect`, `reconnect`, `four_mode_round`,
+  `technique_demo` (red/blue joins + Finger Heart / Galaxy / Lion gifts)
+- **Single Event Injection**: viewer username input plus buttons for
+  `Comment "blue"` / `Comment "red"` (team join) and the three technique
+  gifts (Finger Heart, Galaxy, Lion). Each click sends one event through the
+  live pipeline via `POST /mock/inject` — no scenario required. The toast
+  shows the produced commands or the drop reason (e.g. rate limit, cooldown).
+  Gifts only fire techniques for viewers who already joined a team.
 - Start/Stop/Advance Clock controls
 - Record and Replay session management
-- Real-time mock state display (running, connected, scenario, clock, events, commands)
+- Real-time mock state display (running, connected, scenario, clock, events, commands, injected)
 
 ### Emergency Actions
 All actions require browser `confirm()` dialog before executing:
@@ -119,7 +126,7 @@ The typed fetch wrapper (`dashboard/src/api/client.ts`) provides:
 | `shutdown()` | `POST /control/shutdown` |
 | `getGiftConfig()` / `updateGiftConfig()` / `getGiftPreview()` / `getGiftStats()` | `/gifts/*` |
 | `getEngagementConfig()` / `updateEngagementConfig()` / `getEngagementStats()` / `getTopContributors()` | `/engagement/*` |
-| `mockStart()` / `mockStop()` / `mockAdvance()` / `mockState()` / `mockRecord()` / `mockReplay()` | `/mock/*` |
+| `mockStart()` / `mockStop()` / `mockAdvance()` / `mockState()` / `mockRecord()` / `mockReplay()` / `mockInjectEvent()` | `/mock/*` |
 | `hideUser(viewerId)` | `POST /viewer/hide` |
 
 All mutations return `ApiResult<T>`: `{ ok: true, data, status }` or `{ ok: false, error, status }`.
@@ -147,14 +154,14 @@ cd dashboard
 npx vitest run
 ```
 
-74 tests across 8 files:
-- API client: 20 tests (auth header, error handling, all endpoints)
-- StatusCards: 8 tests (each card, stale indicator)
+89 tests across 8 files:
+- API client: 26 tests (auth header, error handling, all endpoints)
+- StatusCards: 10 tests (each card, stale indicator)
 - Config screens: 12 tests (forms, validation, submit, error)
-- TestEvents: 9 tests (scenarios, controls, state display)
+- TestEvents: 14 tests (scenarios, controls, state display, single event injection)
 - EmergencyActions: 10 tests (confirm, each action, hide user)
-- AuthSettings: 7 tests (token, save, test connection, clear)
-- App/Layout: 7 tests (navigation, header, pages)
+- AuthSettings: 8 tests (token, save, test connection, clear)
+- App/Layout: 8 tests (navigation, header, pages)
 - E2E: 1 test with 24 assertions (complete mock stream workflow)
 
 ## Known Limitations

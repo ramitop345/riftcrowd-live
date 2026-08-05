@@ -489,7 +489,9 @@ func die() -> void:
 
 
 ## Plays a gift-tier technique animation (tier 1 = minor, 2 = average, 3 = major).
-## Returns true if a technique clip was found and started.
+## Returns true if a technique clip was found and started. Models without a
+## dedicated tech clip fall back to the celebrate clip (hands-in-air pose),
+## so the "team raises their hands" beat still reads on screen.
 func play_technique(tier: int) -> bool:
 	var key: String
 	match tier:
@@ -497,11 +499,17 @@ func play_technique(tier: int) -> bool:
 		2: key = ANIM_TECH2
 		3: key = ANIM_TECH3
 		_: key = ANIM_TECH1
-	if not _anim_map.has(key):
-		return false
-	_current_anim = ""  # force replay even if the same clip is current
-	_play_anim(key)
-	return true
+	if _anim_map.has(key):
+		_current_anim = ""  # force replay even if the same clip is current
+		_play_anim(key)
+		return true
+	if tier >= 2 and _anim_map.has(ANIM_CELEBRATE):
+		print("[Technique] %s: no tech%d clip — falling back to celebrate" % [_class_name, tier])
+		_current_anim = ""
+		_play_anim(ANIM_CELEBRATE)
+		return true
+	print("[Technique] %s: no tech%d or celebrate clip available" % [_class_name, tier])
+	return false
 
 
 ## Plays one of the celebration clips, selected deterministically by seed.

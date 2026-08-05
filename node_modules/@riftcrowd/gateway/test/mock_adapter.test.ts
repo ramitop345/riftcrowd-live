@@ -674,13 +674,19 @@ describe('Dashboard mock endpoints', () => {
 
   it('POST /mock/advance → 200', async () => {
     await app.inject({ method: 'POST', url: '/mock/start', headers: auth, payload: { scenario: 'normal_traffic' } });
+    // /mock/start auto-plays the scenario to the end (runToEnd), so the clock
+    // already sits past the 120s duration. advancing adds exactly `ms` on top.
+    const stateRes = await app.inject({ method: 'GET', url: '/mock/state', headers: auth });
+    const before: number = stateRes.json().clockTimeMs;
+    expect(before).toBeGreaterThanOrEqual(125000);
     const res = await app.inject({
       method: 'POST', url: '/mock/advance',
       headers: auth,
       payload: { ms: 10000 },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json().currentTimeMs).toBe(10000);
+    expect(res.json().currentTimeMs).toBe(before + 10000);
+    expect(res.json().currentTimeMs).toBeGreaterThanOrEqual(135000);
   });
 
   it('POST /mock/advance without adapter → 409', async () => {
@@ -727,6 +733,101 @@ describe('Dashboard mock endpoints', () => {
       payload: { sessionPath: 'nonexistent_file.json' },
     });
     expect(res.statusCode).toBe(404);
+  });
+
+  it('POST /mock/inject without token → 401', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/mock/inject',
+      payload: { kind: 'comment', comment: 'blue' },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('POST /mock/inject with invalid kind → 400', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/mock/inject',
+      headers: auth,
+      payload: { kind: 'follow' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('POST /mock/inject comment without text → 400', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/mock/inject',
+      headers: auth,
+      payload: { kind: 'comment', viewerId: 'viewer_x' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('POST /mock/inject chat "blue" → JOIN_FACTION command', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/mock/inject',
+      headers: auth,
+      payload: { kind: 'comment', viewerId: 'inject_viewer', comment: 'blue' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.ok).toBe(true);
+    expect(body.dropped).toBe(false);
+    expect(body.commandTypes).toContain('JOIN_FACTION');
+    expect(body.eventId).toMatch(/^evt_inject_/);
+  });
+
+  it('POST /mock/inject gift → GIFT_APPLY command', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/mock/inject',
+      headers: auth,
+      payload: { kind: 'gift', viewerId: 'inject_viewer', giftId: 'gift_023', giftName: 'Lion', providerValue: 100 },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.ok).toBe(true);
+    expect(body.commandTypes).toContain('GIFT_APPLY');
+  });
+
+  it('POST /mock/inject gift after join → CAST_TECHNIQUE without a running scenario', async () => {
+    // Rebuild with the gift economy enabled so GiftRule (technique tiers)
+    // is part of the pipeline, matching the live gateway configuration.
+    await app.close();
+    app = buildApp({
+      logger: false,
+      enableDirector: true,
+      enablePipeline: true,
+      enableMockRoutes: true,
+      enableGiftEconomy: true,
+    });
+    await app.ready();
+    const joinRes = await app.inject({
+      method: 'POST', url: '/mock/inject',
+      headers: auth,
+      payload: { kind: 'comment', viewerId: 'tech_viewer', displayName: 'TechViewer', comment: 'blue' },
+    });
+    expect(joinRes.statusCode).toBe(200);
+    expect(joinRes.json().commandTypes).toContain('JOIN_FACTION');
+    // The director stays IDLE without a scenario; the inject route must
+    // still register the team so the gift produces a technique command.
+    const giftRes = await app.inject({
+      method: 'POST', url: '/mock/inject',
+      headers: auth,
+      payload: { kind: 'gift', viewerId: 'tech_viewer', giftId: 'gift_022', giftName: 'Galaxy', providerValue: 10 },
+    });
+    expect(giftRes.statusCode).toBe(200);
+    const body = giftRes.json();
+    expect(body.ok).toBe(true);
+    expect(body.commandTypes).toContain('CAST_TECHNIQUE');
+  });
+
+  it('GET /mock/state reports eventsInjected after injection', async () => {
+    await app.inject({
+      method: 'POST', url: '/mock/inject',
+      headers: auth,
+      payload: { kind: 'comment', viewerId: 'inject_viewer', comment: 'red' },
+    });
+    const res = await app.inject({ method: 'GET', url: '/mock/state', headers: auth });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().eventsInjected).toBe(1);
   });
 });
 

@@ -28,6 +28,8 @@ function impactToCommandType(impactType) {
             return 'START_WORLD_EVENT';
         case 'display_spotlight':
             return 'DISPLAY_SPOTLIGHT';
+        case 'trigger_technique':
+            return 'CAST_TECHNIQUE';
     }
 }
 // ---------------------------------------------------------------------------
@@ -42,7 +44,7 @@ export class GiftRule {
     decisions = [];
     /** Logger callback — injected for testability. */
     logFn;
-    /** Faction resolver — injected from ViewerRegistry; falls back to hash. */
+    /** Faction resolver — injected from ViewerRegistry (joined teams only). */
     getFaction;
     constructor(mapper, streakAggregator, cooldownManager, overflowConverter, logFn, getFaction) {
         this.mapper = mapper;
@@ -55,17 +57,33 @@ export class GiftRule {
     applies(event) {
         return event.type === 'gift' && event.gift !== undefined;
     }
-    /** Hash-based fallback faction assignment when no registry lookup is available. */
-    fallbackFaction(viewerId) {
-        const viewerHash = viewerId.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-        return viewerHash % 2 === 0 ? 'faction_alpha' : 'faction_beta';
-    }
+    /** Hash-based fallback faction assignment — intentionally removed:
+     * techniques must only fire for the team a viewer actually joined. */
     execute(event, _context) {
         const gift = event.gift;
         const viewerId = event.user.id;
-        // Resolve faction: registry lookup first, hash fallback
-        const factionId = this.getFaction(viewerId) ?? this.fallbackFaction(viewerId);
         const giftId = gift.id;
+        // Techniques only make sense for viewers who joined a team (typed
+        // red/blue in chat). Gifts from viewers without a team are skipped.
+        const factionId = this.getFaction(viewerId);
+        if (factionId === null) {
+            const log = `${giftId} from ${viewerId} → viewer has not joined a team, skipping`;
+            this.logFn(`[GiftRule] ${log}`);
+            this.decisions.push({
+                eventId: event.id,
+                viewerId,
+                factionId: 'none',
+                giftId,
+                streak: false,
+                cooldownBlocked: false,
+                notJoined: true,
+                overflowed: false,
+                reserveAdded: 0,
+                commandsProduced: 0,
+                log,
+            });
+            return null;
+        }
         const count = gift.repeatCount;
         // 1. Map gift to impact
         const impact = this.mapper.resolve(giftId, count);
@@ -163,6 +181,25 @@ export class GiftRule {
                 ...(impact.cinematic !== undefined ? { cinematic: impact.cinematic } : {}),
             },
         });
+        // Gift tiers with a technique block also produce CAST_TECHNIQUE
+        if (impact.techniqueTier !== undefined) {
+            commands.push({
+                schemaVersion: COMMAND_SCHEMA_VERSION,
+                id: `cmd_${randomUUID()}`,
+                type: 'CAST_TECHNIQUE',
+                createdAt: new Date().toISOString(),
+                factionId,
+                viewerId,
+                displayName: impact.displayName,
+                sourceEventIds: [event.id],
+                metadata: {
+                    giftTier: impact.tierId,
+                    giftName: impact.displayName ?? giftId,
+                    techniqueTier: impact.techniqueTier,
+                    ...(impact.techniqueCinematic !== undefined ? { cinematic: impact.techniqueCinematic } : {}),
+                },
+            });
+        }
         // Cinematic impacts also produce DISPLAY_SPOTLIGHT
         if (impact.cinematic) {
             commands.push({

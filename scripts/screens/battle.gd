@@ -77,6 +77,11 @@ var _pip_timers: Array = [0.0, 0.0]
 ## Alternates technique factions for commands with an unknown factionId (mock mode).
 var _next_technique_faction: int = 0
 
+## Viewer join bookkeeping: each viewer may add at most MAX_JOINS_PER_VIEWER
+## characters per game by typing red/blue in chat.
+const MAX_JOINS_PER_VIEWER: int = 10
+var _join_counts: Dictionary = {}  ## viewerId -> characters added this game
+
 ## Last-play timestamps (seconds) for throttled audio keys (Revision 10).
 var _audio_last: Dictionary = {}
 
@@ -153,6 +158,10 @@ func _ready() -> void:
 		_create_pip_cameras(sv)
 		if _arena_node.has_signal("arrivals_at_gate"):
 			_arena_node.connect("arrivals_at_gate", _on_arrivals_at_gate)
+		# Gift cutscenes (galaxy/lion): freeze the sim while the cinematic plays.
+		if _arena_node.has_signal("cinematic_started"):
+			_arena_node.connect("cinematic_started", _on_cinematic_started)
+			_arena_node.connect("cinematic_finished", _on_cinematic_finished)
 	# Set up presenter.
 	_presenter = BattlePresenter.new()
 	_presenter.setup(_config, randi(), _faction_a, _faction_b, _arena_node)
@@ -327,6 +336,7 @@ func _on_restart_pressed() -> void:
 	_victory_phase = ""
 	_results_timer = -1.0
 	_pip_timers = [0.0, 0.0]
+	_join_counts.clear()
 	for fac in 2:
 		var pip: SubViewportContainer = _pip_cams[fac]
 		if pip != null:
@@ -341,6 +351,18 @@ func _on_end_battle_pressed() -> void:
 	if _presenter != null and _presenter.sandbox != null:
 		_presenter.sandbox.paused = true
 	AppState.goto(AppState.Screen.RESULTS)
+
+
+## Gift cutscene (galaxy/lion) started — freeze the sandbox so the cinematic
+## plays over a still battlefield; the sim resumes when the scene ends.
+func _on_cinematic_started() -> void:
+	if _presenter != null and _presenter.sandbox != null:
+		_presenter.sandbox.paused = true
+
+
+func _on_cinematic_finished() -> void:
+	if _presenter != null and _presenter.sandbox != null:
+		_presenter.sandbox.paused = false
 
 
 # ---------------------------------------------------------------------------
@@ -625,23 +647,29 @@ func _star_points(radius: float) -> PackedVector2Array:
 # Picture-in-picture gate cameras (new character entries from the castles)
 # ===========================================================================
 
-## Two small cameras over the left/right castle gates. They share the arena's
-## 3D world and stay hidden until new characters walk out of a castle — then
-## the matching camera pops up for PIP_SHOW_SECONDS.
+## Two small cameras over the castle gates. They share the arena's 3D world
+## and stay hidden until new characters walk out of a castle — then the
+## matching camera pops up for PIP_SHOW_SECONDS. Each PIP sits on the SAME
+## screen side as its fortress appears in the main view (the master camera
+## looks from -Z toward +Z, so the west fortress renders screen-right).
 func _create_pip_cameras(main_viewport: SubViewport) -> void:
-	_pip_cams[0] = _create_pip_camera(main_viewport.world_3d, true)
-	_pip_cams[1] = _create_pip_camera(main_viewport.world_3d, false)
+	_pip_cams[0] = _create_pip_camera(main_viewport.world_3d, 0)
+	_pip_cams[1] = _create_pip_camera(main_viewport.world_3d, 1)
 
 
-func _create_pip_camera(world: World3D, left_side: bool) -> SubViewportContainer:
+func _create_pip_camera(world: World3D, faction_index: int) -> SubViewportContainer:
 	var pip_w := 300.0
 	var pip_h := 190.0
 	var svc := SubViewportContainer.new()
-	svc.name = "PipCamLeft" if left_side else "PipCamRight"
+	# Fortress world side: faction 0 is west (x=-21), faction 1 east (x=+21).
+	var world_side: float = -1.0 if faction_index == 0 else 1.0
+	# Screen placement mirrors the main view: west fortress = screen right.
+	var screen_left: bool = faction_index == 1
+	svc.name = "PipCamLeft" if screen_left else "PipCamRight"
 	svc.stretch = true
 	svc.visible = false
 	svc.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if left_side:
+	if screen_left:
 		svc.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		svc.position = Vector2(18, 18)
 	else:
@@ -658,15 +686,14 @@ func _create_pip_camera(world: World3D, left_side: bool) -> SubViewportContainer
 	# Camera sits between the arena and its castle, framing the gate so
 	# fresh characters walking out are front and center.
 	var cam := Camera3D.new()
-	var side: float = -1.0 if left_side else 1.0
-	cam.position = Vector3(side * 13.5, 6.0, -8.5)
-	cam.look_at_from_position(cam.position, Vector3(side * 21.0, 2.5, 0.0), Vector3.UP)
+	cam.position = Vector3(world_side * 13.5, 6.0, -8.5)
+	cam.look_at_from_position(cam.position, Vector3(world_side * 21.0, 2.5, 0.0), Vector3.UP)
 	cam.fov = 50.0
 	cam.current = true  # current inside the PIP viewport only
 	svp.add_child(cam)
 	svc.add_child(svp)
 	var tag := Label.new()
-	tag.text = "BLUE GATE" if left_side else "RED GATE"
+	tag.text = "BLUE GATE" if faction_index == 0 else "RED GATE"
 	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	tag.add_theme_font_size_override("font_size", 15)
 	tag.add_theme_color_override("font_color", Color(0.85, 0.9, 1.0))
@@ -1108,6 +1135,7 @@ func _on_gift_apply(cmd: Dictionary) -> void:
 
 func _on_faction_join(cmd: Dictionary) -> void:
 	var viewer: String = str(cmd.get("displayName", cmd.get("viewerId", "Viewer")))
+	var viewer_id: String = str(cmd.get("viewerId", viewer))
 	var metadata: Dictionary = cmd.get("metadata", {}) if typeof(cmd.get("metadata", {})) == TYPE_DICTIONARY else {}
 	var token: String = str(metadata.get("faction", str(cmd.get("factionId", "")))).to_lower()
 	# Resolve the requested side: blue = faction A (index 0), red = faction B (index 1).
@@ -1122,11 +1150,19 @@ func _on_faction_join(cmd: Dictionary) -> void:
 		# Unknown keyword (mock mode) — alternate between sides.
 		faction_index = _next_technique_faction
 		_next_technique_faction = 1 - _next_technique_faction
+	# Per-viewer cap: the same user may add at most MAX_JOINS_PER_VIEWER
+	# characters per game (every red/blue comment spawns one new character).
+	var joins: int = int(_join_counts.get(viewer_id, 0))
+	if joins >= MAX_JOINS_PER_VIEWER:
+		_spotlight_label.text = "%s already fields %d fighters — cap reached!" % [viewer, MAX_JOINS_PER_VIEWER]
+		return
 	_spotlight_label.text = "%s joined the %s army!" % [viewer, "BLUE" if faction_index == 0 else "RED"]
 	# Spawn the viewer's fighter into the deterministic world (capped per side).
 	if _presenter != null and _presenter.sandbox != null and _presenter.sandbox.world != null:
 		var added: bool = _presenter.sandbox.world.add_viewer_unit(faction_index, viewer)
-		if not added:
+		if added:
+			_join_counts[viewer_id] = joins + 1
+		else:
 			_show_full_banner(faction_index)
 	# Spawn a faction-colored VFX burst.
 	if _vfx_pool != null:
@@ -1187,6 +1223,7 @@ func _on_cast_technique(cmd: Dictionary) -> void:
 		_next_technique_faction = 1 - _next_technique_faction
 	var viewer: String = str(cmd.get("displayName", cmd.get("viewerId", "Viewer")))
 	var gift_name: String = str(metadata.get("giftName", "a gift"))
+	print("[Technique] CAST_TECHNIQUE received: tier=%d faction_id='%s' -> sim faction %d (%s by %s)" % [tier, faction_id, faction_index, gift_name, viewer])
 	_spotlight_label.text = "%s unleashed a tier %d technique (%s)!" % [viewer, tier, gift_name]
 	if _presenter != null and _presenter.sandbox != null and _presenter.sandbox.world != null:
 		_presenter.sandbox.world.trigger_technique(faction_index, tier)

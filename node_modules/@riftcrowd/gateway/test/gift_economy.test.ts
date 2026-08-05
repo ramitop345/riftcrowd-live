@@ -106,7 +106,7 @@ describe('GiftEconomyConfigSchema', () => {
 
   it('validates the default gifts.json config', () => {
     expect(config.tiers).toHaveLength(3);
-    expect(config.mappings).toHaveLength(20);
+    expect(config.mappings).toHaveLength(23);
     expect(config.cooldowns.perUserMs).toBe(3000);
     expect(config.streaks.minCount).toBe(3);
     expect(config.bounds.maxActiveChampionsPerFaction).toBe(5);
@@ -209,9 +209,9 @@ describe('GiftMapper', () => {
     expect(impact!.magnitude).toBe(10); // min(1, 0) = 1
   });
 
-  it('previewMappings returns all 20 rows', () => {
+  it('previewMappings returns all 23 rows', () => {
     const preview = mapper.previewMappings();
-    expect(preview).toHaveLength(20);
+    expect(preview).toHaveLength(23);
     expect(preview[0]!.giftId).toBe('gift_001');
     expect(preview[0]!.tierName).toBe('Spark');
   });
@@ -449,6 +449,7 @@ describe('OverflowConverter', () => {
         maxActiveSquadsPerFaction: 2,
         maxActiveWorldEvents: 1,
         maxQueueSize: 500,
+        unitLeaseMs: 60000,
       },
       { type: 'reserve_energy', conversionRate: 5 },
     );
@@ -533,6 +534,39 @@ describe('OverflowConverter', () => {
     expect(result.reserveAdded).toBeLessThanOrEqual(10); // net, not 50 (gross)
     expect(converter.getReserve()).toBeLessThanOrEqual(1_000_000);
   });
+
+  it('leases auto-expire after unitLeaseMs so gifts keep working (regression)', () => {
+    // The game never reports unit deaths or world-event endings back to the
+    // gateway. Without auto-expiry the counters saturate permanently and
+    // every later Galaxy/Lion gift silently overflows — leaving only the
+    // camera shake visible. With an injectable clock the lease must free
+    // the slot again after unitLeaseMs.
+    const clock = new TestClock(1000);
+    const leased = new OverflowConverter(
+      {
+        maxActiveChampionsPerFaction: 1,
+        maxActiveSquadsPerFaction: 1,
+        maxActiveWorldEvents: 1,
+        maxQueueSize: 500,
+        unitLeaseMs: 60000,
+      },
+      { type: 'reserve_energy', conversionRate: 5 },
+      clock,
+    );
+
+    expect(leased.applyOrOverflow('spawn_champion', 'blue', 1).allowed).toBe(true);
+    expect(leased.applyOrOverflow('start_world_event', 'blue', 1).allowed).toBe(true);
+    // At capacity → overflow while leases are live.
+    expect(leased.applyOrOverflow('spawn_champion', 'blue', 1).allowed).toBe(false);
+    expect(leased.applyOrOverflow('start_world_event', 'blue', 1).allowed).toBe(false);
+
+    // After the lease expires the slots are free again.
+    clock.advance(61000);
+    expect(leased.getActiveChampions('blue')).toBe(0);
+    expect(leased.getActiveWorldEvents()).toBe(0);
+    expect(leased.applyOrOverflow('spawn_champion', 'blue', 1).allowed).toBe(true);
+    expect(leased.applyOrOverflow('start_world_event', 'blue', 1).allowed).toBe(true);
+  });
 });
 
 // ===================================================================
@@ -553,7 +587,9 @@ describe('GiftRule', () => {
     const streak = new StreakAggregator(config.streaks, clock);
     const cooldown = new CooldownManager(config.cooldowns, clock);
     const overflow = new OverflowConverter(config.bounds, config.overflow);
-    rule = new GiftRule(mapper, streak, cooldown, overflow, (msg) => logs.push(msg));
+    // Round 12: gifts only fire for viewers who joined a team. The default
+    // test resolver puts every viewer on faction_alpha.
+    rule = new GiftRule(mapper, streak, cooldown, overflow, (msg) => logs.push(msg), () => 'faction_alpha');
   });
 
   it('applies to gift events', () => {
@@ -620,15 +656,15 @@ describe('GiftRule', () => {
   });
 
   it('overflow converts when champions exceed bound', () => {
-    // Use viewers that deterministically hash to the same faction (even char sum → faction_alpha)
-    // "aa"=194 (even), "ac"=196 (even), "ae"=198 (even), "ag"=200 (even), "ai"=202 (even)
+    // All viewers resolve to faction_alpha via the test faction resolver, so
+    // repeated spawn gifts overflow once the faction bound is reached.
     const sameFactionViewers = ['aa', 'ac', 'ae', 'ag', 'ai'];
     for (let i = 0; i < 5; i++) {
       rule.execute(makeGiftEvent('gift_008', sameFactionViewers[i]!), {});
       clock.advance(4000); // avoid cooldown between different viewers
     }
     // 6th should overflow (same faction)
-    const cmds = rule.execute(makeGiftEvent('gift_008', 'ak'), {}); // "ak"=212 (even)
+    const cmds = rule.execute(makeGiftEvent('gift_008', 'ak'), {});
     expect(cmds).toBeNull();
     const decisions = rule.getDecisions();
     const lastDecision = decisions[decisions.length - 1];
@@ -688,7 +724,7 @@ describe('GiftRule', () => {
     const streak = new StreakAggregator(config.streaks, clock);
     const cooldown = new CooldownManager(config.cooldowns, clock);
     const overflow = new OverflowConverter(config.bounds, config.overflow);
-    // v2 has charsum 168 (even) → hash fallback = faction_alpha, but registry says faction_beta
+    // Registry resolver says v2 joined faction_beta → gift fires for that team.
     const registryRule = new GiftRule(
       mapper, streak, cooldown, overflow,
       () => {},
@@ -697,10 +733,13 @@ describe('GiftRule', () => {
     const cmds = registryRule.execute(makeGiftEvent('gift_001', 'v2'), {});
     expect(cmds).not.toBeNull();
     expect(cmds![0]!.factionId).toBe('faction_beta');
-    // Without registry, v2 (even hash) would go to faction_alpha
-    const hashCmds = rule.execute(makeGiftEvent('gift_001', 'v2'), {});
-    expect(hashCmds).not.toBeNull();
-    expect(hashCmds![0]!.factionId).toBe('faction_alpha');
+    // Round 12: no hash fallback — viewers who never joined a team get their
+    // gifts skipped with a notJoined decision.
+    const skipped = registryRule.execute(makeGiftEvent('gift_001', 'v9'), {});
+    expect(skipped).toBeNull();
+    const decisions = registryRule.drainDecisions();
+    expect(decisions[1]!.notJoined).toBe(true);
+    expect(decisions[1]!.factionId).toBe('none');
   });
 
   it('streak not consumed by cooldown-blocked gifts (FIX 5)', () => {
@@ -732,7 +771,7 @@ describe('GiftEconomy', () => {
 
   beforeEach(() => {
     clock = new TestClock(1000);
-    economy = new GiftEconomy(loadTestConfig(), clock);
+    economy = new GiftEconomy(loadTestConfig(), clock, undefined, () => 'faction_alpha');
   });
 
   it('processGiftEvent returns decisions', () => {
@@ -754,9 +793,9 @@ describe('GiftEconomy', () => {
     expect(decisions).toHaveLength(0);
   });
 
-  it('previewMappings returns 20 rows', () => {
+  it('previewMappings returns 23 rows', () => {
     const preview = economy.previewMappings();
-    expect(preview).toHaveLength(20);
+    expect(preview).toHaveLength(23);
   });
 
   it('getConfig returns the config', () => {
@@ -809,6 +848,6 @@ describe('GiftEconomy', () => {
   it('loadDefaultConfig loads from gifts.json', () => {
     const config = GiftEconomy.loadDefaultConfig();
     expect(config.tiers).toHaveLength(3);
-    expect(config.mappings).toHaveLength(20);
+    expect(config.mappings).toHaveLength(23);
   });
 });

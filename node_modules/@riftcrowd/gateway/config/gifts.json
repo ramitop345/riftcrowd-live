@@ -67,7 +67,10 @@
     { "giftId": "gift_017", "tierId": "tier_nova", "displayName": "Titan" },
     { "giftId": "gift_018", "tierId": "tier_nova", "displayName": "Aurora" },
     { "giftId": "gift_019", "tierId": "tier_nova", "displayName": "Eclipse" },
-    { "giftId": "gift_020", "tierId": "tier_nova", "displayName": "Supernova" }
+    { "giftId": "gift_020", "tierId": "tier_nova", "displayName": "Supernova" },
+    { "giftId": "gift_021", "tierId": "tier_spark", "displayName": "Finger Heart" },
+    { "giftId": "gift_022", "tierId": "tier_flare", "displayName": "Galaxy" },
+    { "giftId": "gift_023", "tierId": "tier_nova", "displayName": "Lion" }
   ],
   "cooldowns": {
     "perUserMs": 3000,
@@ -89,6 +92,7 @@
     "maxActiveChampionsPerFaction": 5,
     "maxActiveSquadsPerFaction": 3,
     "maxActiveWorldEvents": 2,
-    "maxQueueSize": 500
+    "maxQueueSize": 500,
+    "unitLeaseMs": 60000
   }
 }

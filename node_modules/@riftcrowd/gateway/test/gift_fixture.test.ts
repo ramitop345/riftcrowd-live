@@ -147,7 +147,17 @@ describe('1,000-Event Fixture Test (Acceptance Gate)', () => {
     config.cooldowns.abilityMs = 0;
     config.cooldowns.cinematicMs = 0;
 
-    economy = new GiftEconomy(config);
+    economy = new GiftEconomy(
+      config,
+      undefined,
+      undefined,
+      // Round 12: gifts only fire for joined viewers. Treat every fixture
+      // viewer as joined, split deterministically across both factions.
+      (viewerId) => {
+        const last = viewerId.charCodeAt(viewerId.length - 1);
+        return last % 2 === 0 ? 'faction_beta' : 'faction_alpha';
+      },
+    );
     pipeline = new Pipeline({
       commandQueueCapacity: config.bounds.maxQueueSize,
     });

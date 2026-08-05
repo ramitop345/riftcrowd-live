@@ -5,18 +5,19 @@
  *   POST /mock/start     — start a scenario by name
  *   POST /mock/stop      — stop the running adapter
  *   POST /mock/advance   — advance TestClock manually
+ *   POST /mock/inject    — inject a single chat/gift event (works without a scenario)
  *   GET  /mock/state     — adapter state and stats
  *   POST /mock/record    — run a scenario and save RecordedSession
  *   POST /mock/replay    — replay a saved session
  */
-import { timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual, randomUUID } from 'node:crypto';
 import { join, dirname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import { MockLiveAdapter } from '../adapters/mock_live_adapter.js';
 import { ReplayAdapter } from '../adapters/replay.js';
 import { TestClock } from '../adapters/test_clock.js';
-import { getScenario, listScenarios } from '../adapters/scenarios.js';
+import { getScenario, listScenarios, makeChatEvent, makeGiftEvent } from '../adapters/scenarios.js';
 import { SessionBuilder, saveSession, loadSession } from '../adapters/recording.js';
 // ---------------------------------------------------------------------------
 // Token validation (mirrors gateway_routes.ts pattern)
@@ -52,6 +53,7 @@ export function registerMockRoutes(app, opts) {
         scenario: null,
         eventsEmitted: 0,
         commandsProduced: 0,
+        eventsInjected: 0,
     };
     // Data directory for recordings
     const dataDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'data', 'recordings');
@@ -80,11 +82,13 @@ export function registerMockRoutes(app, opts) {
                 state.eventsEmitted++;
             });
             await adapter.start();
+            // Auto-play: advance the TestClock through the entire scenario so events
+            // fire immediately. Without this the clock sits at 0 and nothing happens.
+            adapter.runToEnd();
             state.adapter = adapter;
             state.clock = clock;
             state.scenario = scenario;
-            state.eventsEmitted = 0;
-            state.commandsProduced = 0;
+            // eventsEmitted and commandsProduced already updated by onEvent callback during runToEnd
             reply.send({
                 ok: true,
                 scenario: scenario.name,
@@ -134,6 +138,81 @@ export function registerMockRoutes(app, opts) {
         });
     });
     // -------------------------------------------------------------------------
+    // POST /mock/inject
+    // -------------------------------------------------------------------------
+    app.post('/mock/inject', (request, reply) => {
+        if (!validateToken(request, reply))
+            return;
+        const body = (request.body ?? {});
+        const kind = body.kind;
+        if (kind !== 'comment' && kind !== 'gift') {
+            reply.status(400).send({ error: "Missing or invalid kind (expected 'comment' or 'gift')" });
+            return;
+        }
+        // Untrusted input: coerce and bound every field before building the event.
+        const viewerId = typeof body.viewerId === 'string' && body.viewerId.trim().length > 0
+            ? body.viewerId.trim().slice(0, 64)
+            : 'dashboard_tester';
+        const displayName = typeof body.displayName === 'string' && body.displayName.trim().length > 0
+            ? body.displayName.trim().slice(0, 64)
+            : viewerId;
+        const timeMs = state.clock?.now() ?? Date.now();
+        let scheduled;
+        if (kind === 'comment') {
+            const comment = typeof body.comment === 'string' ? body.comment.trim().slice(0, 200) : '';
+            if (comment.length === 0) {
+                reply.status(400).send({ error: 'Missing or empty comment' });
+                return;
+            }
+            scheduled = makeChatEvent({ timeMs, viewerId, displayName, comment });
+        }
+        else {
+            const giftId = typeof body.giftId === 'string' && body.giftId.trim().length > 0
+                ? body.giftId.trim().slice(0, 64)
+                : '';
+            if (giftId.length === 0) {
+                reply.status(400).send({ error: 'Missing or empty giftId' });
+                return;
+            }
+            const providerValue = typeof body.providerValue === 'number' && Number.isFinite(body.providerValue)
+                ? Math.max(0, Math.floor(body.providerValue))
+                : 1;
+            scheduled = makeGiftEvent({
+                timeMs,
+                viewerId,
+                giftId,
+                giftName: typeof body.giftName === 'string' && body.giftName.trim().length > 0
+                    ? body.giftName.trim().slice(0, 64)
+                    : giftId,
+                providerValue,
+            });
+        }
+        // Scenario builders share a module-level ID counter that gets reset by
+        // resetEventCounter() — overwrite the id so injected events never collide
+        // with (or get deduped against) scenario events.
+        const event = scheduled.event;
+        event.id = `evt_inject_${randomUUID()}`;
+        const result = pipeline.process(event);
+        // Chat also feeds the director (mode votes, faction joins bookkeeping),
+        // mirroring MockLiveAdapter.onClockAdvance behavior.
+        if (kind === 'comment' && director) {
+            try {
+                director.handleChatEvent(event);
+            }
+            catch {
+                // Malformed for the director — pipeline result still stands.
+            }
+        }
+        state.eventsInjected++;
+        reply.send({
+            ok: true,
+            eventId: event.id,
+            commandTypes: result.commands.map((c) => c.type),
+            dropped: result.dropped,
+            reason: result.reason ?? null,
+        });
+    });
+    // -------------------------------------------------------------------------
     // GET /mock/state
     // -------------------------------------------------------------------------
     app.get('/mock/state', (request, reply) => {
@@ -150,6 +229,7 @@ export function registerMockRoutes(app, opts) {
             commandsProduced: adapter instanceof MockLiveAdapter ? adapter.commands.length : (adapter instanceof ReplayAdapter ? adapter.commands.length : 0),
             pendingEvents: adapter instanceof MockLiveAdapter ? adapter.pendingCount : (adapter instanceof ReplayAdapter ? adapter.pendingCount : 0),
             directorStates: adapter instanceof MockLiveAdapter ? adapter.directorStates : [],
+            eventsInjected: state.eventsInjected,
         });
     });
     // -------------------------------------------------------------------------

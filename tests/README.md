@@ -14,7 +14,7 @@ cd "c:\Program Files\Developper\riftcrowd-live\game"
 & "C:\path\to\Godot_v4.3-stable_win64.exe" --headless --script res://tests/test_protocol.gd
 ```
 
-Expected output: `PROTOCOL TESTS: 30 passed, 0 failed`.
+Expected output: `PROTOCOL TESTS: 33 passed, 0 failed`.
 
 ## Content pack test
 
@@ -90,7 +90,26 @@ Or from the repository root:
 & "C:\path\to\Godot_v4.3-stable_win64.exe" --headless --path game --script tests/test_simulation.gd
 ```
 
-Expected output: `SIMULATION TESTS: 137 passed, 0 failed`.
+Expected output: `SIMULATION TESTS: 215 passed, 0 failed`.
+
+## Cinematic test
+
+Headless frame-driven test for the gift-technique cutscene director
+(`scripts/arena/cinematic_director.gd`). It pumps real SceneTree frames so the
+director's scheduled marks, camera tweens and FX spawns run exactly as in-game
+(no GPU rendering needed), then asserts for both the tier 2 galaxy scene
+(~5.6 s) and the tier 3 lion scene (~6.4 s) that: the scene starts and stops
+playing, `finished` is emitted exactly once, FX nodes spawn mid-scene and are
+all freed afterwards, the camera leaves the master framing and returns to it,
+the fov animates, and the right units receive `play_technique`. Also checks
+that overlapping plays are ignored and that empty/all-dead teams finish
+immediately without playing. Exit code 0 on success, 1 on any failure.
+
+```powershell
+& "C:\path\to\Godot.exe" --headless --path . --script res://tests/test_cinematic.gd
+```
+
+Expected output: `CINEMATIC TESTS: 24 passed, 0 failed`.
 
 ## Sandbox test
 
