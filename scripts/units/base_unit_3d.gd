@@ -45,6 +45,14 @@ const FACTION_TINT_STRENGTH: float = 0.9  # blend toward faction hue (0 = origin
 # still read as the team color instead of brown/steel (two-color rule).
 const FACTION_BASE_EMISSION: float = 0.25
 
+# -- Health bar (Sprite3D billboard above the head) --
+# Sized to stay readable at broadcast distance: ~1.25 world units wide,
+# 0.13 units tall (was 0.45 x 0.03 — too thin to track damage at a glance).
+const HEALTH_BAR_PIXEL_SIZE: float = 0.013
+const HEALTH_BAR_TEX_W: int = 96
+const HEALTH_BAR_TEX_H: int = 10
+const HEALTH_BAR_HEIGHT: float = 2.9
+
 # -- Logical animation keys (resolved to actual GLB clip names at load) --
 const ANIM_IDLE: String = "idle"
 const ANIM_WALK: String = "walk"
@@ -96,6 +104,14 @@ var _has_prev_pos: bool = false
 var _prev_snapshot_usec: int = 0
 var _ground_speed: float = 0.0
 var _last_move_usec: int = 0
+# Sliding-window speed measurement: sim ticks (20 Hz) don't align with render
+# frames, so per-frame displacement/time ratios swing wildly (a single sim
+# tick's move divided by one render frame reads ~3x too fast, pinning
+# speed_scale at max). Accumulating distance + time over a short window
+# yields the true average ground speed.
+const SPEED_WINDOW_SEC: float = 0.25
+var _speed_win_dist: float = 0.0
+var _speed_win_time: float = 0.0
 var _target_yaw: float = 0.0
 
 ## Grayscale versions of baked albedo textures (shared across all units).
@@ -139,22 +155,28 @@ func update_visual(unit_snapshot: Dictionary) -> void:
 		GROUND_Y,
 		-((sy / SIM_H) * ARENA_H - ARENA_H * 0.5)
 	)
-	# Ground speed from snapshot deltas (presentation-side gait detection).
-	# Measured against real time between update_visual calls, not render delta,
-	# because snapshot cadence differs from frame rate (and playback speed).
+	# Ground speed from snapshot deltas (presentation-side gait detection),
+	# averaged over a short sliding window. Sim ticks (20 Hz) don't line up
+	# with render frames, so instantaneous displacement/time ratios spike when
+	# several frames' worth of movement lands in one call — the window evens
+	# that out and never reads a moving unit as faster than it really is.
 	var now_usec: int = Time.get_ticks_usec()
 	if _has_prev_pos:
-		var dt_snapshot: float = clampf(float(now_usec - _prev_snapshot_usec) / 1000000.0, 0.001, 0.25)
+		var dt_snapshot: float = clampf(float(now_usec - _prev_snapshot_usec) / 1000000.0, 0.001, 0.5)
 		var move_delta := Vector2(new_pos.x, new_pos.z) - Vector2(_prev_world_pos.x, _prev_world_pos.z)
-		if move_delta.length() > 0.0005:
-			var raw_speed: float = move_delta.length() / dt_snapshot
-			_ground_speed = lerpf(_ground_speed, raw_speed, 0.5)
-			_last_move_usec = now_usec
-		elif float(now_usec - _last_move_usec) / 1000000.0 > 0.18:
-			# Sim ticks (20 Hz) are coarser than render frames, so positions
-			# repeat across several frames; hold the measured speed briefly
-			# instead of reading those repeats as "stopped" (levitation fix).
-			_ground_speed = lerpf(_ground_speed, 0.0, 0.3)
+		_speed_win_time += dt_snapshot
+		_speed_win_dist += move_delta.length()
+		if _speed_win_time > SPEED_WINDOW_SEC:
+			_ground_speed = _speed_win_dist / _speed_win_time
+			_speed_win_dist = 0.0
+			_speed_win_time = 0.0
+			if _ground_speed > GLIDE_FIX_MIN:
+				_last_move_usec = now_usec
+		if move_delta.length() < 0.0005 and float(now_usec - _last_move_usec) / 1000000.0 > SPEED_WINDOW_SEC:
+			# No displacement for a full window: the unit genuinely stopped
+			# (hold the last reading briefly first, since sim ticks repeat
+			# positions across several render frames).
+			_ground_speed = 0.0
 		# Re-aim only while actually travelling so idle/attacking units keep
 		# their last bearing instead of snapping to a stale direction.
 		if move_delta.length() > FACING_MIN_MOVE:
@@ -592,6 +614,31 @@ func _build_anim_map() -> void:
 					break
 		if found != "":
 			_anim_map[key] = found
+	_force_locomotion_loops()
+
+
+## Sustained-pose clips must loop: Meshy GLBs import their animations as
+## one-shot, so a run/idle clip finishing froze the legs while the unit kept
+## travelling (the classic "soldier sliding without stepping" bug — _play_anim
+## never restarts the clip it believes is already current). Force looping on
+## every locomotion/sustained track so it can never run out mid-move. One-shot
+## clips (attack, hit, death, spawn) are left untouched on purpose.
+func _force_locomotion_loops() -> void:
+	if _anim_player == null:
+		return
+	var lib: AnimationLibrary = _anim_player.get_animation_library("")
+	if lib == null:
+		return
+	var loop_keys: Array = [
+		ANIM_IDLE, ANIM_WALK, ANIM_RUN, ANIM_RETREAT, ANIM_SHIELD,
+		ANIM_CELEBRATE, ANIM_CELEBRATE_2, ANIM_CELEBRATE_3, ANIM_CELEBRATE_4,
+		ANIM_CELEBRATE_5,
+	]
+	for key in loop_keys:
+		var clip_name: String = str(_anim_map.get(key, ""))
+		if clip_name.is_empty() or not lib.has_animation(clip_name):
+			continue
+		lib.get_animation(clip_name).loop_mode = Animation.LOOP_LINEAR
 
 
 # ---------------------------------------------------------------------------
@@ -618,12 +665,12 @@ func _create_health_bar() -> void:
 	_health_bar = Sprite3D.new()
 	_health_bar.name = "HealthBar"
 	_health_bar.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	_health_bar.pixel_size = 0.007
+	_health_bar.pixel_size = HEALTH_BAR_PIXEL_SIZE
 	_health_bar.no_depth_test = true
 	_health_bar.transparent = true
-	_health_bar.position = Vector3(0, 2.6, 0)
+	_health_bar.position = Vector3(0, HEALTH_BAR_HEIGHT, 0)
 	# Create a simple 1x1 white texture for the bar
-	var img: Image = Image.create(64, 4, false, Image.FORMAT_RGBA8)
+	var img: Image = Image.create(HEALTH_BAR_TEX_W, HEALTH_BAR_TEX_H, false, Image.FORMAT_RGBA8)
 	img.fill(Color.WHITE)
 	var tex: ImageTexture = ImageTexture.create_from_image(img)
 	_health_bar.texture = tex
@@ -634,11 +681,11 @@ func _create_health_bar() -> void:
 	var bg := Sprite3D.new()
 	bg.name = "HealthBarBg"
 	bg.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	bg.pixel_size = 0.007
+	bg.pixel_size = HEALTH_BAR_PIXEL_SIZE
 	bg.no_depth_test = true
 	bg.transparent = true
-	bg.position = Vector3(0, 2.6, -0.01)
-	var bg_img: Image = Image.create(64, 4, false, Image.FORMAT_RGBA8)
+	bg.position = Vector3(0, HEALTH_BAR_HEIGHT, -0.01)
+	var bg_img: Image = Image.create(HEALTH_BAR_TEX_W, HEALTH_BAR_TEX_H, false, Image.FORMAT_RGBA8)
 	bg_img.fill(Color(0.15, 0.15, 0.15, 0.7))
 	bg.texture = ImageTexture.create_from_image(bg_img)
 	bg.scale = Vector3(1.0, 1.0, 1.0)

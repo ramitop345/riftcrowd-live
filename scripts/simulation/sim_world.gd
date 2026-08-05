@@ -31,6 +31,13 @@ const SPAWN_DELAY: float = 0.2
 const RETREAT_DURATION: float = 3.0
 const PROJECTILE_HIT_RADIUS: float = 12.0
 const FORTRESS_ATTACK_RANGE: float = 80.0
+## Fraction of normal unit damage that lands on the fortress per siege hit.
+## Keeps the "5x harder than troops" promise while the siege still visibly
+## chews the gauge down (full damage would melt the castle in seconds).
+const FORTRESS_DAMAGE_FACTOR: float = 0.25
+## Minimum gap between fortress_damaged events (camera/audio would choke on
+## 30 events per second while a full squad hammers the gate).
+const FORTRESS_DAMAGE_EVENT_CD: float = 0.5
 ## Volley combat: one strike pose per unit, then back to the march.
 const ATTACK_POSE_SECONDS: float = 1.0
 const DEFEND_PULL_RANGE: float = 150.0
@@ -109,6 +116,8 @@ var _volley_interval: float = 20.0
 var _volley_timer: float = 20.0
 ## Lion technique locks the enemy out of adding new characters for a moment.
 var _spawn_lock: Array = [0.0, 0.0]
+## Throttle for fortress_damaged events per fortress side.
+var _fort_damage_cd: Array = [0.0, 0.0]
 
 # Cached config values
 var _tick_rate: int = 20
@@ -206,6 +215,7 @@ func _init_world(config: Dictionary, seed_value: int, faction_a: Dictionary, fac
 	_volley_interval = maxf(float(combat_cfg.get("volleyIntervalSeconds", 20.0)), 1.0)
 	_volley_timer = _volley_interval
 	_spawn_lock = [0.0, 0.0]
+	_fort_damage_cd = [0.0, 0.0]
 	# Opening deployment: a small starting squad per side (default 5).
 	# Everything else only arrives through viewer joins (red/blue comments).
 	_spawn_initial_squads()
@@ -309,6 +319,7 @@ func reset(seed_value: int) -> void:
 	_deployment_done = [false, false]
 	_volley_timer = _volley_interval
 	_spawn_lock = [0.0, 0.0]
+	_fort_damage_cd = [0.0, 0.0]
 	_spawn_initial_squads()
 
 
@@ -349,7 +360,7 @@ func trigger_technique(faction: int, tier: int) -> bool:
 			var enemy: int = 1 - faction
 			_wipe_faction(enemy, faction)
 			var frac: float = float(t3.get("fortressDamageFraction", 0.8))
-			_fortress_health[enemy] -= _max_fortress_health * frac
+			_fortress_health[enemy] = maxf(_fortress_health[enemy] - _max_fortress_health * frac, 0.0)
 			_events.append("fortress_damaged:%d" % enemy)
 			_spawn_lock[enemy] = float(t3.get("spawnLockSeconds", 5.0))
 	_events.append("technique:%d:%d" % [faction, tier])
@@ -651,9 +662,29 @@ func _update_doctrine_state() -> void:
 		var wants_siege: bool = _count_alive(faction) > 0 and _count_alive(1 - faction) == 0
 		if wants_siege and not bool(_sieging[faction]):
 			_events.append("siege_started:%d" % faction)
+			# Rally EVERY survivor onto the march: nobody keeps retreating or
+			# defending an empty field — the whole army converges on the castle.
+			_rally_faction_to_siege(faction)
 		elif not wants_siege and bool(_sieging[faction]):
 			_events.append("siege_recalled:%d" % faction)
 		_sieging[faction] = wants_siege
+
+
+## On siege start, pull every living unit of the faction out of stationary
+## states (retreat/defend/attack pose) and clear wander targets so the entire
+## remaining army marches on the enemy fortress together.
+func _rally_faction_to_siege(faction: int) -> void:
+	for pool in [_champion_pool, _guardian_pool, _striker_pool, _captain_pool]:
+		for u: SimUnit in pool.active_units():
+			if not u.alive or u.faction_index != faction:
+				continue
+			if u.state == SimUnit.State.SPAWNING or u.state == SimUnit.State.DEAD:
+				continue
+			u.state = SimUnit.State.ADVANCE
+			u.state_time = 0.0
+			u.target_id = -1
+			u.wander_target = Vector2.ZERO
+			u.wander_timer = 0.0
 
 
 ## Counts down lion-technique spawn locks once per tick.
@@ -718,11 +749,27 @@ func _perform_single_attack(u: SimUnit) -> void:
 		if dist <= FORTRESS_ATTACK_RANGE and not _is_fortress_shielded(enemy_fortress):
 			u.state = SimUnit.State.ATTACK
 			u.state_time = 0.0
-			_fortress_health[enemy_fortress] -= _effective_damage(u)
-			_events.append("fortress_damaged:%d" % enemy_fortress)
+			_damage_fortress(enemy_fortress, _effective_damage(u) * FORTRESS_DAMAGE_FACTOR)
+
+
+## Applies damage to a fortress, clamped at zero, and emits a throttled
+## fortress_damaged event so the HUD gauge drains in lockstep with the sim —
+## the gauge can never still show health when the fortress actually falls.
+func _damage_fortress(fortress_index: int, damage: float) -> void:
+	if fortress_index < 0 or fortress_index > 1 or damage <= 0.0:
+		return
+	if _is_fortress_shielded(fortress_index):
+		return
+	_fortress_health[fortress_index] = maxf(_fortress_health[fortress_index] - damage, 0.0)
+	if float(_fort_damage_cd[fortress_index]) <= 0.0:
+		_fort_damage_cd[fortress_index] = FORTRESS_DAMAGE_EVENT_CD
+		_events.append("fortress_damaged:%d" % fortress_index)
 
 
 func _tick_units() -> void:
+	# Fortress damage event cooldowns tick down with the world.
+	for i in 2:
+		_fort_damage_cd[i] = maxf(float(_fort_damage_cd[i]) - _dt, 0.0)
 	# Collect all active units for deterministic id-ordered processing
 	var all: Array = []
 	for pool in [_champion_pool, _guardian_pool, _striker_pool, _captain_pool]:
@@ -741,8 +788,8 @@ func _tick_units() -> void:
 	# Process AI
 	for u: SimUnit in all:
 		_unit_ai(u)
-	# Fortress damage is now volley-driven (see _perform_single_attack) — no
-	# continuous siege pass.
+	# Fortress damage is applied per-unit inside _unit_ai (continuous siege)
+	# and by volleys in _perform_single_attack, both through _damage_fortress.
 
 
 func _unit_ai(u: SimUnit) -> void:
@@ -750,6 +797,17 @@ func _unit_ai(u: SimUnit) -> void:
 		return
 	u.state_time += _dt
 	u.attack_cooldown = maxf(u.attack_cooldown - _dt, 0.0)
+	# Siege pressure: while the army is on the enemy gates, every unit in
+	# weapon range strikes the fortress on its OWN attack cadence (instead of
+	# waiting for the 20s army volley), so the whole squad visibly hammers the
+	# walls and the fortress gauge drains smoothly all the way to zero.
+	if u.faction_index >= 0 and bool(_sieging[u.faction_index]) and u.state == SimUnit.State.ADVANCE:
+		var enemy_fortress: int = 1 - u.faction_index
+		if u.attack_cooldown <= 0.0 and not _is_fortress_shielded(enemy_fortress) and u.position.distance_to(_fortress_positions[enemy_fortress]) <= FORTRESS_ATTACK_RANGE:
+			u.attack_cooldown = u.attack_interval
+			u.state = SimUnit.State.ATTACK
+			u.state_time = 0.0
+			_damage_fortress(enemy_fortress, _effective_damage(u) * FORTRESS_DAMAGE_FACTOR)
 	# Technique buff timers tick down each frame; expiry keeps the fraction
 	# at 0 influence since _effective_* checks the timer first.
 	if u.damage_buff_timer > 0.0:

@@ -465,6 +465,15 @@ func _on_round_completed(snapshot: Dictionary) -> void:
 		_show_fall_banner()
 		_play_sfx("explosion.mp3")
 		_play_voice("voice_fortress_fallen.mp3")
+		# The fallen fortress gauge must read exactly 0% the moment the
+		# destruction is announced — never a stale percentage above zero.
+		var fallen_index: int = 1 - _winner_index
+		if fallen_index == 0:
+			_fort_bar_fill_a.offset_right = 0.0
+			_fort_label_a.text = "0%"
+		else:
+			_fort_bar_fill_b.offset_right = 0.0
+			_fort_label_b.text = "0%"
 	else:
 		# Phase 1 — the winners march back to the arena to celebrate (arena-side
 		# tweens); no overlay yet so the march stays fully visible.
@@ -1259,6 +1268,14 @@ func _on_cast_technique(cmd: Dictionary) -> void:
 	var gift_name: String = str(metadata.get("giftName", "a gift"))
 	print("[Technique] CAST_TECHNIQUE received: tier=%d faction_id='%s' -> sim faction %d (%s by %s)" % [tier, faction_id, faction_index, gift_name, viewer])
 	_spotlight_label.text = "%s unleashed a tier %d technique (%s)!" % [viewer, tier, gift_name]
+	# Announcer callouts for the big techniques (throttled so gift spam
+	# never stacks voice lines).
+	if tier == 2:
+		_play_voice("voice_galaxy.mp3", 6.0)
+		_play_sfx("laser_burst.mp3")
+	elif tier >= 3:
+		_play_voice("voice_lion.mp3", 6.0)
+		_play_sfx("explosion.mp3", 1.5)
 	if _presenter != null and _presenter.sandbox != null and _presenter.sandbox.world != null:
 		_presenter.sandbox.world.trigger_technique(faction_index, tier)
 	# Gold burst VFX at the performing faction's side of the arena.
