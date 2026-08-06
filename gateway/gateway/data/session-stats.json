@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
-  "roundsPlayed": 36,
+  "roundsPlayed": 40,
   "modeCounts": {
-    "animals": 8,
-    "cities": 8,
-    "countries": 12,
-    "fan_crews_original": 8
+    "animals": 9,
+    "cities": 9,
+    "countries": 13,
+    "fan_crews_original": 9
   },
   "factionWinCounts": {
-    "faction_alpha": 19,
-    "faction_beta": 17
+    "faction_alpha": 20,
+    "faction_beta": 20
   },
   "recentModes": [
     "fan_crews_original",
@@ -23,5 +23,5 @@
     "fan_crews_original",
     "countries"
   ],
-  "lastSavedAt": "2026-08-05T16:11:43.149Z"
+  "lastSavedAt": "2026-08-06T20:40:24.235Z"
 }

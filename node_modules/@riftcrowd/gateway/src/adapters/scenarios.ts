@@ -588,10 +588,10 @@ export function fourModeRound(): Scenario {
 
 // ---------------------------------------------------------------------------
 // Scenario 8: technique_demo
-// Three viewers join a team by typing a color in chat, then each sends one
-// technique gift (Finger Heart / Galaxy / Lion). Gifts only fire for viewers
-// who joined a team, so the join comment always precedes the gift, spaced
-// well beyond all gift cooldowns. Lets the game demo all three technique
+// Four viewers join a team by typing a color in chat, then each sends one
+// technique gift (Finger Heart / Galaxy / Lion / Hand Heart). Gifts only fire
+// for viewers who joined a team, so the join comment always precedes the gift, spaced
+// well beyond all gift cooldowns. Lets the game demo all four technique
 // tiers in mock mode.
 // ---------------------------------------------------------------------------
 
@@ -601,9 +601,11 @@ export function techniqueDemo(): Scenario {
     makeChatEvent({ timeMs: 1000, viewerId: 'tech_viewer_1', comment: 'blue' }),
     makeChatEvent({ timeMs: 1500, viewerId: 'tech_viewer_2', comment: 'red' }),
     makeChatEvent({ timeMs: 2000, viewerId: 'tech_viewer_3', comment: 'blue' }),
+    makeChatEvent({ timeMs: 3000, viewerId: 'tech_viewer_4', comment: 'red' }),
     makeGiftEvent({ timeMs: 4000, viewerId: 'tech_viewer_1', giftId: 'gift_021', giftName: 'Finger Heart', providerValue: 1 }),
     makeGiftEvent({ timeMs: 10000, viewerId: 'tech_viewer_2', giftId: 'gift_022', giftName: 'Galaxy', providerValue: 10 }),
     makeGiftEvent({ timeMs: 16000, viewerId: 'tech_viewer_3', giftId: 'gift_023', giftName: 'Lion', providerValue: 100 }),
+    makeGiftEvent({ timeMs: 19000, viewerId: 'tech_viewer_4', giftId: 'gift_024', giftName: 'Hand Heart', providerValue: 1 }),
   ];
   return { name: 'technique_demo', events, durationMs: 22_000 };
 }

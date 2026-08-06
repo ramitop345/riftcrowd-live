@@ -14,7 +14,7 @@
     "height": 1180,
     "captureZoneRadius": 190
   },
-  "fortressHealth": 750,
+  "fortressHealth": 5000,
   "centerZone": {
     "flankMinRadius": 50.0,
     "flankRadiusFraction": 0.95,
@@ -32,43 +32,35 @@
   },
   "unitStats": {
     "champion": {
-      "maxHealth": 150,
-      "attackDamage": 10,
+      "maxHealth": 1200,
+      "attackDamage": 100,
       "attackIntervalSeconds": 1.0,
       "moveSpeed": 46,
       "attackRange": 60,
       "retreatHealthFraction": 0.25
     },
     "guardian": {
-      "maxHealth": 150,
-      "attackDamage": 10,
+      "maxHealth": 1100,
+      "attackDamage": 100,
       "attackIntervalSeconds": 1.2,
       "moveSpeed": 36,
       "attackRange": 50,
       "retreatHealthFraction": 0.25
     },
     "striker": {
-      "maxHealth": 150,
-      "attackDamage": 10,
+      "maxHealth": 1000,
+      "attackDamage": 100,
       "attackIntervalSeconds": 0.8,
       "moveSpeed": 55,
       "attackRange": 55,
       "retreatHealthFraction": 0.25
     },
     "captain": {
-      "maxHealth": 150,
-      "attackDamage": 10,
+      "maxHealth": 1300,
+      "attackDamage": 100,
       "attackIntervalSeconds": 1.4,
       "moveSpeed": 40,
       "attackRange": 80,
-      "retreatHealthFraction": 0
-    },
-    "boss": {
-      "maxHealth": 450,
-      "attackDamage": 10,
-      "attackIntervalSeconds": 1.6,
-      "moveSpeed": 30,
-      "attackRange": 90,
       "retreatHealthFraction": 0
     }
   },
@@ -85,7 +77,8 @@
     "unitCycle": ["champion", "guardian", "striker"]
   },
   "combat": {
-    "volleyIntervalSeconds": 20.0
+    "volleyIntervalSeconds": 20.0,
+    "attackRadius": 70
   },
   "finalSurge": {
     "spawnIntervalMultiplier": 0.5
@@ -93,11 +86,6 @@
   "suddenDeath": {
     "dominionRateMultiplier": 2.0,
     "healingAllowed": false
-  },
-  "crisis": {
-    "bossEnabled": true,
-    "bossCaptureBonus": 0.5,
-    "bossCaptureBonusSeconds": 10
   },
   "projectile": {
     "speed": 420
@@ -135,12 +123,16 @@
   "technique": {
     "tier1": {},
     "tier2": {
-      "aoeDamage": 80
+      "totalDamage": 3000
     },
     "tier3": {
-      "fortressDamageFraction": 0.8,
-      "spawnLockSeconds": 5.0,
+      "fortressDamage": 2500,
+      "fortressDamageFractionLow": 0.8,
+      "lowCountThreshold": 5,
       "cinematic": true
+    },
+    "tier4": {
+      "fortressDamage": 1000
     },
     "performDurationSeconds": 1.6,
     "staggerStepSeconds": 0.08

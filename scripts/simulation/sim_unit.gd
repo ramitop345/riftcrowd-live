@@ -16,8 +16,8 @@ enum State {
 }
 
 var id: int = -1
-var unit_type: String = ""          ## "champion"|"guardian"|"striker"|"captain"|"boss"
-var faction_index: int = -1         ## 0 or 1, boss = -1
+var unit_type: String = ""          ## "champion"|"guardian"|"striker"|"captain"
+var faction_index: int = -1         ## 0 or 1
 var display_name: String = ""
 var position: Vector2 = Vector2.ZERO
 var health: float = 0.0
@@ -42,9 +42,12 @@ var uses_projectiles: bool = false
 ## Retreat timer (seconds remaining in RETREAT state before returning to ADVANCE).
 var retreat_timer: float = 0.0
 
-## Boss contribution reward: faction that dealt killing blow gets capture bonus.
-var boss_killer_faction: int = -1
-var boss_bonus_time_left: float = 0.0
+## Triggered-attack bookkeeping: a unit picked for a basic attack (periodic
+## cadence or finger-heart gift) chases its target until it is inside the
+## attack radius (pending_attack), or closes to weapon range on the enemy
+## fortress when no enemy character is left (pending_fortress).
+var pending_attack: bool = false
+var pending_fortress: bool = false
 
 ## Last projectile faction to hit this unit (used by two-pass projectile
 ## resolution to attribute the kill to the correct striker/captain).
@@ -89,8 +92,8 @@ func reset() -> void:
 	retreat_health_fraction = 0.25
 	uses_projectiles = false
 	retreat_timer = 0.0
-	boss_killer_faction = -1
-	boss_bonus_time_left = 0.0
+	pending_attack = false
+	pending_fortress = false
 	last_hit_faction = -1
 	flank_offset = Vector2.ZERO
 	wander_target = Vector2.ZERO

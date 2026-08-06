@@ -45,6 +45,13 @@ const FACTION_TINT_STRENGTH: float = 0.9  # blend toward faction hue (0 = origin
 # still read as the team color instead of brown/steel (two-color rule).
 const FACTION_BASE_EMISSION: float = 0.25
 
+# -- Damage glow (God-of-War style hit feedback) --
+# Every character that takes a hit burns with a strong RED emissive glow for
+# a full second so viewers always see who just got struck, on either team.
+const HIT_GLOW_COLOR: Color = Color(1.0, 0.12, 0.08)
+const HIT_GLOW_SECONDS: float = 1.0
+const HIT_GLOW_BOOST: float = 2.6
+
 # -- Health bar (Sprite3D billboard above the head) --
 # Sized to stay readable at broadcast distance: ~1.25 world units wide,
 # 0.13 units tall (was 0.45 x 0.03 — too thin to track damage at a glance).
@@ -129,7 +136,7 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	if _hit_flash > 0.0:
-		_hit_flash = maxf(_hit_flash - delta * 4.0, 0.0)
+		_hit_flash = maxf(_hit_flash - delta / HIT_GLOW_SECONDS, 0.0)
 		_update_flash_tint()
 	_update_facing(delta)
 
@@ -567,6 +574,29 @@ func face_toward(target: Vector3) -> void:
 		_model.rotation.y = _target_yaw
 
 
+## Basic attack presentation: turn toward the victim and play the strike
+## clip (sword swing / shot pose) from the very first frame, regardless of
+## whatever the unit was doing. Called per "strike:" sim event, so any
+## number of characters can swing at the same time.
+func play_strike(toward: Vector3) -> void:
+	if _dead:
+		return
+	face_toward(toward)
+	_current_anim = ""  # force replay even if the attack clip is current
+	_play_anim(_attack_anim)
+
+
+## God-of-War style damage feedback: the whole character burns with a red
+## emissive glow for HIT_GLOW_SECONDS (driven by _process/_update_flash_tint).
+## Called when a strike lands; the health-drop detector in update_visual
+## re-arms the same glow, so the two paths simply refresh each other.
+func play_hit_glow() -> void:
+	if _dead:
+		return
+	_hit_flash = 1.0
+	_update_flash_tint()
+
+
 ## Maps logical animation keys to whichever clips the loaded GLB actually contains.
 func _build_anim_map() -> void:
 	_anim_map.clear()
@@ -710,9 +740,8 @@ func _update_health_bar() -> void:
 func _update_flash_tint() -> void:
 	if _model == null or not is_instance_valid(_model):
 		return
-	var flash_amount: float = _hit_flash * 0.4
 	# Apply emissive boost to all MeshInstance3D children as flash effect.
-	_apply_mesh_flash(_model, flash_amount)
+	_apply_mesh_flash(_model, _hit_flash)
 
 
 func _apply_mesh_flash(node: Node, flash: float) -> void:
@@ -731,12 +760,12 @@ func _apply_mesh_flash(node: Node, flash: float) -> void:
 							mi.set_surface_override_material(surface, mat)
 					if mat is BaseMaterial3D:
 						var bm: BaseMaterial3D = mat as BaseMaterial3D
-						# Flash in the unit's OWN faction hue: red emission made
-						# blue units read as the enemy camp, white emission washed
-						# them grey — both broke the two-color rule mid-fight.
-						# The base glow keeps the team hue readable at all times.
+						# Damage glow: strong RED emission for a full second on
+						# whichever character just took a hit (explicit user
+						# request, God-of-War style), on both teams. The energy
+						# spike keeps red-faction units readable while glowing.
 						bm.emission_enabled = true
-						bm.emission = _faction_color
-						bm.emission_energy_multiplier = FACTION_BASE_EMISSION + flash * 0.6
+						bm.emission = HIT_GLOW_COLOR if flash > 0.01 else _faction_color
+						bm.emission_energy_multiplier = FACTION_BASE_EMISSION + flash * HIT_GLOW_BOOST
 		elif child is Node3D:
 			_apply_mesh_flash(child, flash)

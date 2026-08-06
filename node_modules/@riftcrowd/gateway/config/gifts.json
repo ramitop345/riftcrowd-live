@@ -45,6 +45,21 @@
         "magnitude": 3,
         "cinematic": true
       }
+    },
+    {
+      "id": "tier_beam",
+      "name": "Beam",
+      "minValue": 1,
+      "maxValue": 9,
+      "impact": {
+        "type": "add_energy",
+        "magnitude": 10
+      },
+      "technique": {
+        "type": "trigger_technique",
+        "magnitude": 4,
+        "cinematic": true
+      }
     }
   ],
   "mappings": [
@@ -70,14 +85,15 @@
     { "giftId": "gift_020", "tierId": "tier_nova", "displayName": "Supernova" },
     { "giftId": "gift_021", "tierId": "tier_spark", "displayName": "Finger Heart" },
     { "giftId": "gift_022", "tierId": "tier_flare", "displayName": "Galaxy" },
-    { "giftId": "gift_023", "tierId": "tier_nova", "displayName": "Lion" }
+    { "giftId": "gift_023", "tierId": "tier_nova", "displayName": "Lion" },
+    { "giftId": "gift_024", "tierId": "tier_beam", "displayName": "Hand Heart" }
   ],
   "cooldowns": {
-    "perUserMs": 3000,
-    "perFactionMs": 2000,
+    "perUserMs": 1200,
+    "perFactionMs": 400,
     "abilityMs": 10000,
     "cinematicMs": 8000,
-    "globalMs": 1000
+    "globalMs": 250
   },
   "overflow": {
     "type": "reserve_energy",

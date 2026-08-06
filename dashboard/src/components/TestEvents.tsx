@@ -19,11 +19,12 @@ const SCENARIOS = [
 ] as const;
 
 // Technique gifts matching gateway/config/gifts.json mappings:
-// Finger Heart → tier 1, Galaxy → tier 2, Lion → tier 3.
+// Finger Heart → tier 1, Galaxy → tier 2, Lion → tier 3, Hand Heart → tier 4 (laser).
 const INJECT_GIFTS = [
   { giftId: 'gift_021', name: 'Finger Heart', providerValue: 1 },
   { giftId: 'gift_022', name: 'Galaxy', providerValue: 10 },
   { giftId: 'gift_023', name: 'Lion', providerValue: 100 },
+  { giftId: 'gift_024', name: 'Hand Heart', providerValue: 1 },
 ] as const;
 
 const JOIN_COMMENTS = ['blue', 'red'] as const;

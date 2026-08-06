@@ -47,7 +47,7 @@ export type TierImpact = z.infer<typeof TierImpactSchema>;
 export const TechniqueImpactSchema = z
   .object({
     type: z.literal('trigger_technique'),
-    /** Technique tier performed by the faction: 1 (minor), 2 (average), 3 (major), 4 (lion, reserved). */
+    /** Technique tier performed by the faction: 1 (basic attack), 2 (galaxy), 3 (lion), 4 (laser). */
     magnitude: z.number().int().min(1).max(4),
     cinematic: z.boolean().optional(),
   })

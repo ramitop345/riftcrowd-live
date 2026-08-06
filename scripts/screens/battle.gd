@@ -1292,6 +1292,9 @@ func _on_cast_technique(cmd: Dictionary) -> void:
 	if tier == 2:
 		_play_voice("voice_galaxy.mp3", 6.0)
 		_play_sfx("laser_burst.mp3")
+	elif tier == 4:
+		# Laser (hand heart): short beam takeover, Star-Wars style blaster zap.
+		_play_sfx("laser_beam.mp3", 0.5)
 	elif tier >= 3:
 		_play_voice("voice_lion.mp3", 6.0)
 		_play_sfx("explosion.mp3", 1.5)

@@ -25,7 +25,7 @@ func _initialize() -> void:
 	_test_sudden_death()
 	_test_full_round()
 	_test_snapshot_shape()
-	_test_boss_spawn()
+	_test_no_neutral_units()
 	_test_projectile_pool_exhaustion()
 	_test_technique_config()
 	_test_technique_effects()
@@ -55,13 +55,11 @@ func _make_config() -> Dictionary:
 			"guardian": {"maxHealth": 160, "attackDamage": 8, "attackIntervalSeconds": 1.2, "moveSpeed": 100, "attackRange": 50, "retreatHealthFraction": 0.25},
 			"striker": {"maxHealth": 70, "attackDamage": 16, "attackIntervalSeconds": 0.8, "moveSpeed": 190, "attackRange": 55, "retreatHealthFraction": 0.25},
 			"captain": {"maxHealth": 400, "attackDamage": 25, "attackIntervalSeconds": 1.4, "moveSpeed": 110, "attackRange": 80, "retreatHealthFraction": 0},
-			"boss": {"maxHealth": 1200, "attackDamage": 30, "attackIntervalSeconds": 1.6, "moveSpeed": 80, "attackRange": 90, "retreatHealthFraction": 0},
 		},
 		"pools": {"champion": 60, "guardian": 60, "striker": 60, "projectile": 120},
 		"bots": {"spawnIntervalSeconds": 4.0, "initialSquadSize": 1, "unitCycle": ["champion", "guardian", "striker"]},
 		"finalSurge": {"spawnIntervalMultiplier": 0.5},
 		"suddenDeath": {"dominionRateMultiplier": 2.0, "healingAllowed": false},
-		"crisis": {"bossEnabled": true, "bossCaptureBonus": 0.5, "bossCaptureBonusSeconds": 10},
 		"projectile": {"speed": 420},
 	}
 
@@ -201,13 +199,17 @@ func _test_state_machine() -> void:
 
 func _test_combat() -> void:
 	var cfg: Dictionary = _make_config()
+	# Long stages so the round timer never cuts the fight short, and a fast
+	# cadence: with one triggered attacker per side per volley, damage
+	# accumulates slower than under the old mass-volley system.
+	cfg["stages"] = {"opening": 60, "crisis": 60, "finalSurge": 60, "suddenDeath": 60}
 	cfg["combat"] = {"volleyIntervalSeconds": 1.0}
 	var w := _create_world(cfg, 13)
 	# Run enough ticks for units to spawn, trade volleys and die. Under the
 	# center-dominion doctrine fortress sieges are gated on holding the center
 	# zone, so fortress coverage lives in _test_center_doctrine instead.
 	var death_seen: bool = false
-	for batch in 80:
+	for batch in 180:
 		w.run_ticks(10)
 		var snap: Dictionary = w.get_snapshot()
 		var events: Array = snap["events"]
@@ -232,6 +234,9 @@ func _test_annihilation_doctrine() -> void:
 	var cfg: Dictionary = _make_config()
 	cfg["stages"] = {"opening": 60, "crisis": 60, "finalSurge": 60, "suddenDeath": 60}
 	cfg["fortressHealth"] = 1000
+	# Fast cadence so the post-wipe triggered attacks reach the fortress
+	# inside the test budget (fortress damage only comes from triggered hits).
+	cfg["combat"] = {"volleyIntervalSeconds": 1.0}
 	var w := _create_world(cfg, 21)
 	var siege_or_damage_seen: bool = false
 	for batch in 30:  # 15 seconds of two-sided battle
@@ -380,6 +385,7 @@ func _test_fortress_victory() -> void:
 	cfg["fortressHealth"] = 10
 	cfg["bots"] = {"spawnIntervalSeconds": 1.0, "unitCycle": ["champion"]}
 	cfg["stages"] = {"opening": 12, "crisis": 6, "finalSurge": 6, "suddenDeath": 90}
+	cfg["combat"] = {"volleyIntervalSeconds": 1.0}
 	var w := _create_world(cfg, 55)
 	w.run_ticks(20 * 8)  # let both sides field several units
 	# Faction 0 loses every character and can no longer deploy.
@@ -513,51 +519,35 @@ func _test_snapshot_shape() -> void:
 	_check(int(snap2["tick"]) == int(snap["tick"]), "snapshot: tick unchanged on second call")
 
 
-# --- (k) Boss spawn (crisis stage) ---
+# --- (k) No neutral units (boss removed) ---
 
-func _test_boss_spawn() -> void:
-	# Use a config where opening=9s, crisis=5s so we reach crisis quickly.
-	# A long sudden_death stage keeps the round alive while the boss is killed.
+func _test_no_neutral_units() -> void:
+	# The neutral boss was removed: every character on the field belongs to
+	# faction 0 or 1, and no boss_spawned event is ever emitted.
 	var cfg: Dictionary = _make_config()
 	cfg["stages"] = {"opening": 9, "crisis": 5, "finalSurge": 6, "suddenDeath": 60}
-	cfg["crisis"] = {"bossEnabled": true, "bossCaptureBonus": 0.5, "bossCaptureBonusSeconds": 10}
-	# Keep the round alive long enough for the boss to spawn and die:
-	# fortress wins need real sieges and dominion never accrues (rate 0).
 	cfg["fortressHealth"] = 5000
 	cfg["dominion"] = {"ratePerSecondAtFullAdvantage": 0.0, "smoothing": 0.15}
 	cfg["combat"] = {"volleyIntervalSeconds": 1.0}
 	var w := _create_world(cfg, 42)
-	# Run through opening (9s = 180 ticks at 20Hz) plus a few crisis ticks.
+	# Run through opening (9s = 180 ticks at 20Hz) into the crisis stage.
 	w.run_ticks(180)
 	var snap_pre: Dictionary = w.get_snapshot()
-	_check(str(snap_pre["stage"]) == "crisis", "boss_spawn: stage is crisis after opening")
-	# Run a few more ticks for the boss to spawn.
-	w.run_ticks(5)
-	var snap: Dictionary = w.get_snapshot()
-	var boss_found: bool = false
-	var boss_alive: bool = false
-	for u: Variant in snap["units"]:
-		var ud: Dictionary = u
-		if str(ud.get("type", "")) == "boss":
-			boss_found = true
-			if int(ud.get("faction", -99)) == -1:
-				boss_alive = true
-	_check(boss_found, "boss_spawn: boss unit appears in snapshot")
-	_check(boss_alive, "boss_spawn: boss has faction_index == -1")
-	# Run further ticks to try to kill the boss (lots of combat ticks). The
-	# center-dominion doctrine clusters the brawl where the boss roams, but the
-	# boss soaks a lot of damage before going down, so allow a generous budget.
-	var boss_death_event: bool = false
-	for batch in 120:
+	_check(str(snap_pre["stage"]) == "crisis", "no_boss: stage is crisis after opening")
+	var boss_event_seen: bool = false
+	var neutral_seen: bool = false
+	for batch in 60:
 		w.run_ticks(10)
 		var s: Dictionary = w.get_snapshot()
 		for e: Variant in s["events"]:
-			var ev: String = str(e)
-			if ev.begins_with("unit_died:boss"):
-				boss_death_event = true
-		if boss_death_event:
-			break
-	_check(boss_death_event, "boss_spawn: boss death event emitted (unit_died:boss:*)")
+			if str(e) == "boss_spawned":
+				boss_event_seen = true
+		for u: Variant in s["units"]:
+			var f: int = int((u as Dictionary).get("faction", -99))
+			if f != 0 and f != 1:
+				neutral_seen = true
+	_check(not boss_event_seen, "no_boss: boss_spawned event never emitted")
+	_check(not neutral_seen, "no_boss: every unit belongs to faction 0 or 1")
 
 
 # --- (l) ProjectilePool exhaustion ---
@@ -593,8 +583,9 @@ func _test_projectile_pool_exhaustion() -> void:
 func _technique_config() -> Dictionary:
 	return {
 		"tier1": {},
-		"tier2": {"aoeDamage": 5.0},
-		"tier3": {"fortressDamageFraction": 0.5, "spawnLockSeconds": 2.0, "cinematic": true},
+		"tier2": {"totalDamage": 300.0},
+		"tier3": {"fortressDamage": 100.0, "fortressDamageFractionLow": 0.8, "lowCountThreshold": 5, "cinematic": true},
+		"tier4": {"fortressDamage": 50.0},
 		"performDurationSeconds": 1.6,
 		"staggerStepSeconds": 0.08,
 	}
@@ -631,44 +622,97 @@ func _test_technique_effects() -> void:
 	_check(w.trigger_technique(-1, 1) == false, "technique: rejects invalid faction")
 	_check(w.trigger_technique(2, 1) == false, "technique: rejects faction index 2")
 	_check(w.trigger_technique(0, 0) == false, "technique: rejects tier 0")
-	_check(w.trigger_technique(0, 4) == false, "technique: rejects tier 4")
-	# Tier 1 (finger heart): the casting team immediately launches one volley.
+	_check(w.trigger_technique(0, 5) == false, "technique: rejects tier 5")
+	# Tier 1 (finger heart): exactly ONE fighter of the casting team attacks —
+	# chasing the nearest enemy into the attack radius first if needed.
 	_check(w.trigger_technique(0, 1) == true, "technique: tier 1 accepted")
 	var s1: Dictionary = w.get_snapshot()
 	_check(_events_contain(s1, "technique:0:1"), "technique: tier 1 sim event emitted")
-	var attacking: bool = false
+	# The strike event may arrive in the very same snapshot when the picked
+	# fighter is already inside the attack radius (blow lands at trigger time).
+	var strike_seen: bool = false
+	for e1: Variant in s1["events"]:
+		if str(e1).begins_with("strike:"):
+			strike_seen = true
+	var picked: int = 0
+	var chase_target: SimUnit = null
 	for uid: int in w._unit_registry:
 		var u: SimUnit = w._unit_registry[uid]
-		if u.alive and u.faction_index == 0 and u.state == SimUnit.State.ATTACK:
-			attacking = true
-	_check(attacking, "technique: tier 1 makes faction 0 units strike immediately")
-	# Volley pose ends and units go back to advancing (1s = 20 ticks).
-	w.run_ticks(21)
-	var still_attacking: bool = false
-	for uid: int in w._unit_registry:
-		var u: SimUnit = w._unit_registry[uid]
-		if u.alive and u.faction_index == 0 and u.state == SimUnit.State.ATTACK:
-			still_attacking = true
-	_check(not still_attacking, "technique: tier 1 volley pose ends after 1 second")
-	# Tier 2 (galaxy): meteorites damage every enemy of the casting team.
-	var enemy_hp_before: float = _total_health(w, 1)
+		if u.alive and u.faction_index == 0 and (u.pending_attack or u.state == SimUnit.State.ATTACK):
+			picked += 1
+			chase_target = w._find_unit(u.target_id)
+	_check(picked == 1, "technique: tier 1 picks exactly one attacker")
+	_check(chase_target != null, "technique: tier 1 attacker locks a target")
+	# The chase lands: within a few seconds the locked target loses health
+	# (checked on the unit itself so bot spawns don't pollute the total),
+	# and the arena receives a "strike:<attacker>:<target>" event so it can
+	# stage the swing + the victim's red hit glow.
+	w.run_ticks(20 * 6)
+	var target_hit: bool = chase_target != null and (
+		not chase_target.alive or chase_target.health < chase_target.max_health
+	)
+	_check(target_hit, "technique: tier 1 attacker deals damage after closing the distance")
+	for batch in 20:
+		w.run_ticks(10)
+		var s_strike: Dictionary = w.get_snapshot()
+		for e: Variant in s_strike["events"]:
+			if str(e).begins_with("strike:"):
+				strike_seen = true
+		if strike_seen:
+			break
+	_check(strike_seen, "technique: tier 1 strike event emitted for the arena")
+	# Tier 2 (galaxy): the gift's points split equally among all enemies.
+	var enemy_hp_pre_galaxy: float = _total_health(w, 1)
+	var enemy_count: int = w.count_alive(1)
 	_check(w.trigger_technique(0, 2) == true, "technique: tier 2 accepted")
 	var s2: Dictionary = w.get_snapshot()
 	_check(_events_contain(s2, "technique:0:2"), "technique: tier 2 sim event emitted")
 	var enemy_hp_after: float = _total_health(w, 1)
-	_check(enemy_hp_after < enemy_hp_before, "technique: tier 2 meteorites damage enemy faction")
-	# Tier 3 (lion): wipes the enemy team, cripples the enemy fortress and
-	# locks the enemy out of adding new characters for spawnLockSeconds.
+	_check(enemy_hp_after < enemy_hp_pre_galaxy, "technique: tier 2 damages enemy faction")
+	var expected: float = maxf(enemy_hp_pre_galaxy - 300.0, 0.0)
+	_check(absf(enemy_hp_after - expected) < 0.5 or enemy_hp_after == 0.0, "technique: tier 2 splits 300 points among enemies")
+	_check(enemy_count > 0, "technique: tier 2 had living enemies")
+	# Tier 4 (laser / hand heart): a random caster instantly kills one enemy;
+	# the sim event carries the caster's unit id.
+	var f1_before: int = w.count_alive(1)
+	_check(w.trigger_technique(0, 4) == true, "technique: tier 4 accepted")
+	var s4: Dictionary = w.get_snapshot()
+	var laser_event: String = ""
+	for e: Variant in (s4.get("events", []) as Array):
+		if str(e).begins_with("technique:0:4:"):
+			laser_event = str(e)
+	_check(laser_event != "", "technique: tier 4 event carries the caster id")
+	var caster_id: int = int(laser_event.split(":")[3]) if laser_event != "" else -1
+	_check(caster_id >= 0, "technique: tier 4 caster id is valid")
+	_check(w.count_alive(1) == f1_before - 1, "technique: tier 4 kills exactly one enemy")
+	# Tier 3 (lion): wipes the enemy team and damages the enemy fortress —
+	# with no spawn lock, the wiped side can rejoin immediately.
 	var fortress_before: float = float(w._fortress_health[0])
 	_check(w.trigger_technique(1, 3) == true, "technique: tier 3 accepted")
 	var s3: Dictionary = w.get_snapshot()
 	_check(_events_contain(s3, "technique:1:3"), "technique: tier 3 sim event emitted")
 	_check(_total_health(w, 0) <= 0.0, "technique: tier 3 wipes every faction 0 unit")
 	_check(float(w._fortress_health[0]) < fortress_before, "technique: tier 3 damages the enemy fortress")
-	_check(not w.add_viewer_unit(0, "Locked"), "technique: tier 3 spawn lock blocks enemy joins")
-	# Lock expires after spawnLockSeconds (2s = 40 ticks).
-	w.run_ticks(41)
-	_check(w.add_viewer_unit(0, "BackIn"), "technique: tier 3 spawn lock expires")
+	_check(w.add_viewer_unit(0, "BackIn"), "technique: no spawn lock — wiped side rejoins immediately")
+	# Galaxy / laser / lion with no enemy characters hit the fortress instead.
+	var empty_cfg: Dictionary = _make_config()
+	empty_cfg["technique"] = _technique_config()
+	# Beefy fortress so the 300-point galaxy leaves enough gauge left for the
+	# laser and lion assertions that follow.
+	empty_cfg["fortressHealth"] = 1000
+	var w_empty := _create_world(empty_cfg, 5)
+	w_empty.run_ticks(60)
+	w_empty._deployment_done[1] = true
+	w_empty._wipe_faction(1, 0)
+	w_empty.run_ticks(2)  # release dead units, let the doctrine settle
+	var fort_a: float = float(w_empty._fortress_health[1])
+	_check(w_empty.trigger_technique(0, 2) == true, "technique: galaxy accepted with no enemies")
+	_check(float(w_empty._fortress_health[1]) < fort_a, "technique: galaxy hits the fortress when no enemies remain")
+	var fort_b: float = float(w_empty._fortress_health[1])
+	_check(w_empty.trigger_technique(0, 4) == true, "technique: laser accepted with no enemies")
+	_check(float(w_empty._fortress_health[1]) < fort_b, "technique: laser hits the fortress when no enemies remain")
+	_check(w_empty.trigger_technique(0, 3) == true, "technique: lion accepted with no enemies")
+	_check(float(w_empty._fortress_health[1]) <= 0.0, "technique: lion destroys a lone fortress outright")
 	# World without technique config refuses to trigger.
 	var bare := _create_world(_make_config(), 123)
 	bare.run_ticks(60)
@@ -727,6 +771,7 @@ func _test_victory_event_emitted() -> void:
 	# arena-side celebration.
 	var cfg: Dictionary = _make_config()
 	cfg["fortressHealth"] = 10
+	cfg["combat"] = {"volleyIntervalSeconds": 1.0}
 	var w := _create_world(cfg, 55)
 	w.run_ticks(20 * 5)
 	w._deployment_done[0] = true

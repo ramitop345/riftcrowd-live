@@ -543,7 +543,15 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 			if ev_str.begins_with("technique:"):
 				var parts: PackedStringArray = ev_str.split(":")
 				if parts.size() >= 3:
-					_perform_technique_visuals(int(parts[1]), int(parts[2]))
+					# Tier 4 appends the acting unit's id.
+					var caster_id: int = int(parts[3]) if parts.size() >= 4 else -1
+					_perform_technique_visuals(int(parts[1]), int(parts[2]), caster_id)
+			elif ev_str.begins_with("strike:"):
+				# A basic attack landed (periodic cadence or finger heart
+				# gift): stage the swing + victim glow right on the field.
+				var parts: PackedStringArray = ev_str.split(":")
+				if parts.size() >= 3:
+					_stage_basic_attack(int(parts[1]), int(parts[2]))
 			elif ev_str.begins_with("siege_started:"):
 				# Attackers march on castle <1 - faction>: cut to that wing
 				# immediately and lock the camera until the siege ends.
@@ -591,31 +599,93 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 					round_ended.emit(vtype, winner)
 
 
-## Gift technique visuals. Tier 1: every living unit of the performing
-## faction plays its tier animation, staggered by id order so the squad
-## ripples instead of snapping in unison. Tier 2+ hand the presentation to
-## the cinematic director (galaxy meteor rain / lion supreme art).
+## Basic attack presentation ("strike:<attacker>:<target>" sim events, the
+## finger heart gift and the periodic cadence alike). NO camera takeover and
+## NO queue: each strike plays in place on the battlefield, so any number of
+## gift-triggered attacks run concurrently. The attacker swings toward its
+## victim, the victim burns with a 1 s red hit glow, and a small spark pops
+## at the impact point so the exchange reads at broadcast distance.
+func _stage_basic_attack(attacker_id: int, target_id: int) -> void:
+	var attacker: Node = _unit_visuals.get(attacker_id, null)
+	if attacker == null or not is_instance_valid(attacker) or not (attacker is Node3D):
+		return
+	var attacker_pos: Vector3 = (attacker as Node3D).global_position
+	# Resolve where the blow lands: a character, or the enemy fortress.
+	var impact_pos: Vector3 = attacker_pos
+	var victim: Node = null
+	if target_id >= 0:
+		victim = _unit_visuals.get(target_id, null)
+		if victim != null and is_instance_valid(victim) and victim is Node3D:
+			impact_pos = (victim as Node3D).global_position + Vector3(0.0, 1.4, 0.0)
+	else:
+		var fort: Node = _fortress_b if attacker.has_method("get_faction_index") and int(attacker.call("get_faction_index")) == 0 else _fortress_a
+		if fort != null and is_instance_valid(fort) and fort is Node3D:
+			impact_pos = (fort as Node3D).global_position + Vector3(0.0, 3.0, 0.0)
+	# The attacker turns to its victim and plays the strike clip.
+	if attacker.has_method("play_strike"):
+		attacker.call("play_strike", impact_pos)
+	# The victim glows red for a second (God-of-War style hit feedback).
+	if victim != null and is_instance_valid(victim) and victim.has_method("play_hit_glow"):
+		victim.call("play_hit_glow")
+		_spawn_hit_spark(impact_pos)
+
+
+## Tiny short-lived spark at the impact point of a basic attack — cheap
+## enough to run many at once (additive sphere flash, no lights/particles).
+func _spawn_hit_spark(pos: Vector3) -> void:
+	var spark := MeshInstance3D.new()
+	spark.name = "HitSpark"
+	var mesh := SphereMesh.new()
+	mesh.radius = 0.35
+	mesh.height = 0.7
+	spark.mesh = mesh
+	var mat := StandardMaterial3D.new()
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.emission_enabled = true
+	mat.emission = Color(1.0, 0.35, 0.15)
+	mat.emission_energy_multiplier = 4.0
+	mat.albedo_color = Color(1.0, 0.55, 0.25, 0.9)
+	spark.material_override = mat
+	spark.position = pos
+	add_child(spark)
+	var tw := create_tween()
+	tw.tween_property(spark, "scale", Vector3.ONE * 2.2, 0.18)
+	tw.parallel().tween_property(mat, "albedo_color:a", 0.0, 0.3)
+	tw.tween_callback(spark.queue_free)
+
+
+## Gift technique visuals. Tier 1: no cinematic here — each strike is staged
+## in place by _stage_basic_attack via "strike:" sim events. Tiers 2+ hand
+## the presentation to the cinematic director (galaxy meteor rain /
+## lion supreme art / laser beam).
 ## If a cinematic is already playing, tier 2+ gifts are queued with priority:
-## tier 3 (lion) > tier 2 (galaxy). When the current cinematic finishes, the
-## highest-priority gift in the queue plays next.
-func _perform_technique_visuals(faction: int, tier: int) -> void:
-	print("[Cinematic] technique event: faction=%d tier=%d cinematic=%s playing=%s units=%d" % [
-		faction, tier,
+## tier 3 (lion) > tier 4 (laser) > tier 2 (galaxy). When the current
+## cinematic finishes, the highest-priority gift in the queue plays next.
+func _perform_technique_visuals(faction: int, tier: int, caster_id: int = -1) -> void:
+	print("[Cinematic] technique event: faction=%d tier=%d caster=%d cinematic=%s playing=%s units=%d" % [
+		faction, tier, caster_id,
 		"null" if _cinematic == null else "ok",
 		str(_cinematic.is_playing()) if _cinematic != null else "-",
 		_unit_visuals.size(),
 	])
+	if tier == 1:
+		# One basic attack: staged by "strike:" events (swing + red hit glow)
+		# — nothing to queue here, and never a camera takeover.
+		return
 	if tier >= 2 and _cinematic != null:
 		# If a cinematic is already playing, queue this gift instead of cutting it.
 		if _cinematic.is_playing():
 			print("[Cinematic] tier %d gift queued (cinematic playing)" % tier)
-			_gift_queue.append({"faction": faction, "tier": tier})
+			_gift_queue.append({"faction": faction, "tier": tier, "caster_id": caster_id})
 			return
 		# No cinematic playing — start this one immediately.
 		_cinematic_active = true
 		cinematic_started.emit()
 		if tier == 2:
 			_cinematic.play_galaxy(faction, _unit_visuals)
+		elif tier == 4:
+			_cinematic.play_laser(faction, _unit_visuals, caster_id)
 		else:
 			_cinematic.play_lion(faction, _unit_visuals)
 		return
@@ -658,7 +728,7 @@ func _perform_technique_visuals(faction: int, tier: int) -> void:
 ## A gift cutscene finished — hand the camera back to the arena director
 ## (its smoothing eases the shot back to the master framing) and let the
 ## battle screen resume the sandbox. If there are queued gifts, play the
-## highest-priority one next (tier 3 lion > tier 2 galaxy).
+## highest-priority one next (tier 3 lion > tier 4 laser > tier 2 galaxy).
 func _on_cinematic_finished() -> void:
 	_cinematic_active = false
 	cinematic_finished.emit()
@@ -666,7 +736,8 @@ func _on_cinematic_finished() -> void:
 	_play_next_queued_gift()
 
 
-## Plays the next gift from the queue, sorted by priority (tier 3 > tier 2).
+## Plays the next gift from the queue, sorted by priority
+## (tier 3 lion > tier 4 laser > tier 2 galaxy).
 ## Called when a cinematic finishes and there may be pending gifts.
 func _play_next_queued_gift() -> void:
 	if _gift_queue.is_empty():
@@ -678,22 +749,33 @@ func _play_next_queued_gift() -> void:
 	if _cinematic.is_playing():
 		print("[Cinematic] ERROR: cinematic still playing when trying to play queued gift")
 		return
-	# Sort by tier descending (tier 3 lion first, then tier 2 galaxy).
-	_gift_queue.sort_custom(func(a, b): return int(a["tier"]) > int(b["tier"]))
+	# Sort by priority (tier 3 lion first, then tier 4 laser, then tier 2 galaxy).
+	_gift_queue.sort_custom(func(a, b): return _gift_priority(int(a["tier"])) > _gift_priority(int(b["tier"])))
 	var next_gift: Dictionary = _gift_queue.pop_front()
 	var faction: int = int(next_gift["faction"])
 	var tier: int = int(next_gift["tier"])
+	var caster_id: int = int(next_gift.get("caster_id", -1))
 	print("[Cinematic] playing queued tier %d gift for faction %d (queue size: %d)" % [tier, faction, _gift_queue.size()])
 	# Play the gift directly (bypass the queue check since we know no cinematic is playing).
 	_cinematic_active = true
 	cinematic_started.emit()
 	if tier == 2:
 		_cinematic.play_galaxy(faction, _unit_visuals)
+	elif tier == 4:
+		_cinematic.play_laser(faction, _unit_visuals, caster_id)
 	else:
 		_cinematic.play_lion(faction, _unit_visuals)
 	# Verify the cinematic actually started.
 	if not _cinematic.is_playing():
-		print("[Cinematic] ERROR: cinematic failed to start after play_galaxy/play_lion call")
+		print("[Cinematic] ERROR: cinematic failed to start after play_galaxy/play_lion/play_laser call")
+
+
+## Queue priority for stacked gift cinematics.
+func _gift_priority(tier: int) -> int:
+	match tier:
+		3: return 3
+		4: return 2
+		_: return 1
 
 
 ## Fortress victory beat: hard-cut to the loser's gate, run the collapse

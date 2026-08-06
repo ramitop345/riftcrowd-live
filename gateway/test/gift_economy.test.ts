@@ -105,9 +105,9 @@ describe('GiftEconomyConfigSchema', () => {
   });
 
   it('validates the default gifts.json config', () => {
-    expect(config.tiers).toHaveLength(3);
-    expect(config.mappings).toHaveLength(23);
-    expect(config.cooldowns.perUserMs).toBe(3000);
+    expect(config.tiers).toHaveLength(4);
+    expect(config.mappings).toHaveLength(24);
+    expect(config.cooldowns.perUserMs).toBe(1200);
     expect(config.streaks.minCount).toBe(3);
     expect(config.bounds.maxActiveChampionsPerFaction).toBe(5);
   });
@@ -209,9 +209,9 @@ describe('GiftMapper', () => {
     expect(impact!.magnitude).toBe(10); // min(1, 0) = 1
   });
 
-  it('previewMappings returns all 23 rows', () => {
+  it('previewMappings returns all 24 rows', () => {
     const preview = mapper.previewMappings();
-    expect(preview).toHaveLength(23);
+    expect(preview).toHaveLength(24);
     expect(preview[0]!.giftId).toBe('gift_001');
     expect(preview[0]!.tierName).toBe('Spark');
   });
@@ -798,14 +798,14 @@ describe('GiftEconomy', () => {
     expect(decisions).toHaveLength(0);
   });
 
-  it('previewMappings returns 23 rows', () => {
+  it('previewMappings returns 24 rows', () => {
     const preview = economy.previewMappings();
-    expect(preview).toHaveLength(23);
+    expect(preview).toHaveLength(24);
   });
 
   it('getConfig returns the config', () => {
     const config = economy.getConfig();
-    expect(config.tiers).toHaveLength(3);
+    expect(config.tiers).toHaveLength(4);
   });
 
   it('reloadConfig replaces internals', () => {
@@ -852,7 +852,7 @@ describe('GiftEconomy', () => {
 
   it('loadDefaultConfig loads from gifts.json', () => {
     const config = GiftEconomy.loadDefaultConfig();
-    expect(config.tiers).toHaveLength(3);
-    expect(config.mappings).toHaveLength(23);
+    expect(config.tiers).toHaveLength(4);
+    expect(config.mappings).toHaveLength(24);
   });
 });

@@ -9,6 +9,10 @@
 ## Tier 3 (lion): the whole team raises their hands, energy streams up from
 ## every character into a massive crackling energy ball that drops onto the
 ## enemy position and detonates in a huge flash, shockwaves and spark burst.
+## Tier 4 (laser / hand heart): one character raises a hand, forms a
+## lightning ball and fires a thin Star-Wars-style laser bolt that instantly
+## strikes an opponent — a short (~2 s) low three-quarter shot that keeps
+## BOTH the shooter and the struck opponent in frame.
 ##
 ## All FX readability over camera cleverness: effects are oversized, lit and
 ## particle-backed so they read clearly on low-end GPUs and small captures.
@@ -316,6 +320,112 @@ func _lion_impact(impact: Vector3) -> void:
 	_spawn_impact_light(impact + Vector3(0.0, 2.0, 0.0), Color(1.0, 0.9, 0.6), 14.0, 22.0)
 	_shake_amount = 0.8
 	_shake_decay = 1.1
+
+
+# ===========================================================================
+# Tier 4 — Laser (hand heart): instant beam strike (~2.0 s)
+# ===========================================================================
+
+## Short beam cutscene (~2 s): the sim-picked character raises one hand,
+## forms a lightning ball and fires a THIN Star-Wars-style laser bolt that
+## instantly strikes an opponent (or the enemy fortress when the field is
+## clear). The camera sits low on the side at a three-quarter angle so BOTH
+## the soldier who launches it and the opponent who gets struck stay in
+## frame the whole time — never a tight close-up.
+func play_laser(faction: int, unit_visuals: Dictionary, caster_id: int = -1) -> void:
+	if _playing:
+		print("[Cinematic] play_laser IGNORED (already playing)")
+		return
+	# Prefer the caster picked by the sim so the beam visibly comes from
+	# the character that actually performed the attack.
+	var caster: Node3D = null
+	if caster_id >= 0 and unit_visuals.has(caster_id):
+		var node: Node = unit_visuals[caster_id]
+		if node != null and is_instance_valid(node) and node is Node3D:
+			if not (node.has_method("is_dead") and bool(node.call("is_dead"))):
+				caster = node
+	if caster == null:
+		caster = _pick_caster(faction, unit_visuals)
+	var caster_pos: Vector3 = _fortress_pos(faction)
+	if caster != null:
+		caster_pos = caster.global_position
+	var impact: Vector3 = _enemy_focus(1 - faction, unit_visuals)
+	print("[Cinematic] play_laser START faction=%d caster_id=%d camera=%s" % [faction, caster_id, "ok" if _camera != null else "NULL"])
+	_start(faction)
+	# Raised-hand channel pose (the TECH2 clip reads as a hand cast).
+	if caster != null and caster.has_method("play_technique"):
+		caster.call("play_technique", 2)
+	var color: Color = FACTION_COLORS[clampi(faction, 0, 1)]
+	var hand_pos: Vector3 = caster_pos + Vector3(0.0, 2.3, 0.0)
+	_spawn_channel_aura(hand_pos, color)
+	# Shot: low three-quarter side angle framing BOTH characters. Camera
+	# stays on the arena-front (-Z) side so the framing matches the master
+	# view and neither fighter is ever hidden behind the other.
+	var mid: Vector3 = (caster_pos + impact) * 0.5
+	var span: Vector3 = impact - caster_pos
+	var side: Vector3 = Vector3(-span.z, 0.0, span.x)
+	if side.length_squared() < 0.01:
+		side = Vector3(0.0, 0.0, -1.0)
+	else:
+		side = side.normalized()
+		if side.z > 0.0:
+			side = -side
+	var cam_dist: float = clampf(span.length() * 0.65 + 3.0, 7.0, 18.0)
+	_tween_cam(mid + side * cam_dist + Vector3(0.0, 2.2, 0.0), mid + Vector3(0.0, 1.3, 0.0), 42.0, 0.35)
+	_mark(0.55, _laser_fire.bind(hand_pos, impact, color, mid, side, cam_dist))
+	_mark(1.25, _return_to_master.bind(0.75))
+	_duration = 2.0
+
+
+## The lightning ball fires: a small muzzle flash, a THIN bright beam
+## (white-hot core + faint colored halo, Star-Wars bolt style), a compact
+## impact pop and a short bounded shake — then a slight camera push-in.
+func _laser_fire(hand_pos: Vector3, impact: Vector3, color: Color, mid: Vector3, side: Vector3, cam_dist: float) -> void:
+	var aim: Vector3 = impact + Vector3(0.0, 1.2, 0.0)
+	# Muzzle flash where the bolt leaves the hand.
+	_spawn_impact_flash(hand_pos, Color(0.9, 0.95, 1.0), 1.6)
+	# Thin beam: white-hot core + faint faction halo, gone in ~0.35 s.
+	_spawn_beam_between(hand_pos, aim, 0.05, Color(1.0, 1.0, 1.0), 0.35, 0.95)
+	_spawn_beam_between(hand_pos, aim, 0.13, color, 0.35, 0.3)
+	# Compact impact: small flash + spark pop, much smaller than galaxy/lion.
+	_spawn_impact_flash(aim, color, 2.2)
+	_spawn_burst(aim, color.lerp(Color.WHITE, 0.3), 16, 6.0)
+	_spawn_impact_light(aim + Vector3(0.0, 0.4, 0.0), color, 5.0, 9.0)
+	_shake_amount = maxf(_shake_amount, 0.08)
+	_shake_decay = 2.2
+	# Slight push-in sells the hit without losing either character.
+	_tween_cam(mid + side * (cam_dist * 0.85) + Vector3(0.0, 2.0, 0.0), mid + Vector3(0.0, 1.4, 0.0), 40.0, 0.45)
+
+
+## Beam connecting two points (cylinder aligned along a -> b) with a snappy
+## Star-Wars snap-in and fast fade. `alpha` controls how strong the bolt
+## reads (core ~0.95, halo ~0.3).
+func _spawn_beam_between(a: Vector3, b: Vector3, radius: float, color: Color, life: float, alpha: float = 0.75) -> void:
+	var beam := MeshInstance3D.new()
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = radius
+	mesh.bottom_radius = radius
+	mesh.height = maxf(a.distance_to(b), 0.1)
+	beam.mesh = mesh
+	var mat := _emit_mat(Color(color.r, color.g, color.b, alpha), color.lerp(Color.WHITE, 0.4), 5.0, true)
+	beam.material_override = mat
+	beam.position = (a + b) * 0.5
+	_fx_container.add_child(beam)
+	# Cylinder axis is Y; point it at the target (look_at aims -Z).
+	var dir: Vector3 = (b - a).normalized()
+	if absf(dir.dot(Vector3.UP)) < 0.999:
+		beam.look_at(beam.global_position + dir, Vector3.UP)
+		beam.rotate_object_local(Vector3.RIGHT, -PI / 2.0)
+	# Snap-in: the bolt appears at full length almost instantly.
+	beam.scale = Vector3(0.35, 1.0, 0.35)
+	var punch := create_tween()
+	punch.tween_property(beam, "scale", Vector3.ONE, 0.05)
+	_active_tweens.append(punch)
+	var tw := create_tween()
+	tw.tween_interval(life)
+	tw.tween_property(mat, "albedo_color:a", 0.0, 0.18)
+	tw.tween_callback(beam.queue_free)
+	_active_tweens.append(tw)
 
 
 # ===========================================================================
