@@ -283,15 +283,10 @@ export class VFXOrchestrator {
       );
     }
 
-    // Camera impulse (disabled if motion reduction)
-    if (!this.config.motionReduction) {
-      cmds.push(
-        this.makeCommand('CAMERA_IMPULSE', event, {
-          intensity: 0.8,
-          duration: 300,
-        }),
-      );
-    }
+    // No CAMERA_IMPULSE here: a blanket shake on every gift trembled the
+    // screen even when nothing launched. Camera shake is now produced by
+    // the game itself, only as failure feedback when a gift technique
+    // cannot fire because the sender's team has no living fighters.
 
     // If cinematic (gift with high value), add ability sequence
     const gift = event.gift;

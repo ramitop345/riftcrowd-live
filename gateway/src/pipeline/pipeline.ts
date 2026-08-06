@@ -150,30 +150,21 @@ export class Pipeline {
     }
 
     // 6. Enqueue commands
-    let allQueued = true;
+    // Real-time delivery to the game happens via the event bus and must
+    // never be blocked by the inspection queue (GET /commands) being full —
+    // nothing drains that queue during gameplay, so gating delivery on it
+    // filled it up and silently dropped every later gift ("command queue
+    // overflow"). The queue is now a bounded drop-oldest buffer of recent
+    // commands for inspection only.
     for (const cmd of commands) {
-      const ok = this.commandQueue.enqueue(cmd);
-      if (ok) {
+      this.eventBus.publish('command', cmd);
+      if (this.commandQueue.enqueue(cmd)) {
         this.stats.queued++;
-        this.eventBus.publish('command', cmd);
       } else {
-        allQueued = false;
+        this.commandQueue.dequeue();
+        this.commandQueue.enqueue(cmd);
         this.stats.queueOverflow++;
-        this.logger.warn('pipeline', `Command queue full, command ${cmd.id} dropped`, {
-          commandType: cmd.type,
-        });
-        this.onWarn(`Pipeline: command queue full, command ${cmd.id} dropped`, {
-          commandType: cmd.type,
-        });
       }
-    }
-
-    if (!allQueued && commands.length > 0) {
-      return {
-        commands,
-        dropped: true,
-        reason: 'command queue overflow (some commands dropped)',
-      };
     }
 
     return { commands, dropped: false };

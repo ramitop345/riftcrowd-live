@@ -819,6 +819,93 @@ describe('Dashboard mock endpoints', () => {
     expect(body.commandTypes).toContain('CAST_TECHNIQUE');
   });
 
+  it('POST /mock/inject gift from never-joined viewer → auto-joins a team and fires CAST_TECHNIQUE', async () => {
+    // A gateway restart wipes the in-memory join state; without auto-join the
+    // gift would be skipped ("not joined") and never produce a technique.
+    // Self-contained app: fresh gift economy with clean cooldown state.
+    await app.close();
+    app = buildApp({
+      logger: false,
+      enableDirector: true,
+      enablePipeline: true,
+      enableMockRoutes: true,
+      enableGiftEconomy: true,
+    });
+    await app.ready();
+    const giftRes = await app.inject({
+      method: 'POST', url: '/mock/inject',
+      headers: auth,
+      payload: { kind: 'gift', viewerId: 'fresh_gift_viewer', displayName: 'FreshViewer', giftId: 'gift_021', giftName: 'Finger Heart', providerValue: 1 },
+    });
+    expect(giftRes.statusCode).toBe(200);
+    const body = giftRes.json();
+    expect(body.ok).toBe(true);
+    expect(['blue', 'red']).toContain(body.autoJoined);
+    expect(body.commandTypes).toContain('CAST_TECHNIQUE');
+    // A second gift from the same viewer keeps the assigned team.
+    await new Promise((r) => setTimeout(r, 3100)); // per-user cooldown 3s
+    const again = await app.inject({
+      method: 'POST', url: '/mock/inject',
+      headers: auth,
+      payload: { kind: 'gift', viewerId: 'fresh_gift_viewer', displayName: 'FreshViewer', giftId: 'gift_021', giftName: 'Finger Heart', providerValue: 1 },
+    });
+    expect(again.statusCode).toBe(200);
+    expect(again.json().autoJoined).toBeNull();
+    expect(again.json().commandTypes).toContain('CAST_TECHNIQUE');
+  });
+
+  it('POST /mock/inject gifts always follow the last commented team (side switch)', async () => {
+    // A viewer's gifts go to the team they last typed in chat. Commenting the
+    // other color switches sides for all future gifts — even without adding a
+    // new character (the registry switch is independent of the game-side
+    // spawn cap). Random assignment only happens for never-commented viewers.
+    await app.close();
+    app = buildApp({
+      logger: false,
+      enableDirector: true,
+      enablePipeline: true,
+      enableMockRoutes: true,
+      enableGiftEconomy: true,
+    });
+    await app.ready();
+
+    // Join blue → gift targets blue.
+    await app.inject({
+      method: 'POST', url: '/mock/inject',
+      headers: auth,
+      payload: { kind: 'comment', viewerId: 'switch_viewer', displayName: 'Switcher', comment: 'blue' },
+    });
+    const giftBlue = await app.inject({
+      method: 'POST', url: '/mock/inject',
+      headers: auth,
+      payload: { kind: 'gift', viewerId: 'switch_viewer', displayName: 'Switcher', giftId: 'gift_021', giftName: 'Finger Heart', providerValue: 1 },
+    });
+    expect(giftBlue.statusCode).toBe(200);
+    expect(giftBlue.json().commandTypes).toContain('CAST_TECHNIQUE');
+    let decisions = app.giftEconomy!.getRule().drainDecisions();
+    let giftDecision = decisions.find((d) => d.viewerId === 'switch_viewer' && d.commandsProduced > 0);
+    expect(giftDecision?.factionId).toBe('blue');
+
+    // Comment red → switches sides; next gift targets red.
+    await new Promise((r) => setTimeout(r, 3100)); // clear per-user cooldown
+    await app.inject({
+      method: 'POST', url: '/mock/inject',
+      headers: auth,
+      payload: { kind: 'comment', viewerId: 'switch_viewer', displayName: 'Switcher', comment: 'red' },
+    });
+    const giftRed = await app.inject({
+      method: 'POST', url: '/mock/inject',
+      headers: auth,
+      payload: { kind: 'gift', viewerId: 'switch_viewer', displayName: 'Switcher', giftId: 'gift_021', giftName: 'Finger Heart', providerValue: 1 },
+    });
+    expect(giftRed.statusCode).toBe(200);
+    expect(giftRed.json().autoJoined).toBeNull();
+    expect(giftRed.json().commandTypes).toContain('CAST_TECHNIQUE');
+    decisions = app.giftEconomy!.getRule().drainDecisions();
+    giftDecision = decisions.find((d) => d.viewerId === 'switch_viewer' && d.commandsProduced > 0);
+    expect(giftDecision?.factionId).toBe('red');
+  });
+
   it('GET /mock/state reports eventsInjected after injection', async () => {
     await app.inject({
       method: 'POST', url: '/mock/inject',

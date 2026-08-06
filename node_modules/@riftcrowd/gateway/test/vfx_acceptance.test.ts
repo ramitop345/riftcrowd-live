@@ -158,7 +158,9 @@ describe('Acceptance: quality-level selection', () => {
 // ===================================================================
 
 describe('Acceptance: motion reduction', () => {
-  it('camera impulse completely disabled with motion reduction', () => {
+  it('gifts emit no camera impulse with or without motion reduction', () => {
+    // Camera shake moved to the game: it only plays there as failure
+    // feedback when a gift technique has no living casters.
     const normalOrch = new VFXOrchestrator(VFX_DEFAULTS);
     const motionOrch = new VFXOrchestrator({ ...VFX_DEFAULTS, motionReduction: true });
 
@@ -181,7 +183,7 @@ describe('Acceptance: motion reduction', () => {
     );
 
     // Assertion 16-18
-    expect(normalImpulse).toBeDefined();
+    expect(normalImpulse).toBeUndefined();
     expect(motionImpulse).toBeUndefined();
   });
 

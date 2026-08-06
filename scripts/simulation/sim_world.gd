@@ -340,6 +340,11 @@ func trigger_technique(faction: int, tier: int) -> bool:
 	var tech_cfg: Dictionary = _config.get("technique", {})
 	if tech_cfg.is_empty():
 		return false
+	# Every technique is performed by the team's fighters: without a living
+	# character on the casting side the gift cannot launch (battle.gd plays
+	# the camera-shake failure feedback instead). Checked at trigger time, so
+	# a character that joins AFTER a failed attempt makes the technique
+	# available again immediately.
 	if _count_alive(faction) == 0:
 		return false
 	match tier:
@@ -563,6 +568,14 @@ func _count_alive(faction: int) -> int:
 			if u.alive and u.faction_index == faction:
 				count += 1
 	return count
+
+
+## Public alive count so the battle screen can gate gift techniques on the
+## presence of living casters (real-time: reflects units added at any point).
+func count_alive(faction: int) -> int:
+	if faction < 0 or faction > 1:
+		return 0
+	return _count_alive(faction)
 
 
 func _spawn_captain(faction: int) -> void:

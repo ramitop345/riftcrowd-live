@@ -107,7 +107,8 @@ export function TestEvents(): JSX.Element {
     } else if (res.data.commandTypes.length === 0) {
       setMessage({ text: `${label}: processed, no commands produced`, type: 'success' });
     } else {
-      setMessage({ text: `${label}: ${res.data.commandTypes.join(', ')}`, type: 'success' });
+      const joined = res.data.autoJoined ? ` (auto-joined ${res.data.autoJoined})` : '';
+      setMessage({ text: `${label}: ${res.data.commandTypes.join(', ')}${joined}`, type: 'success' });
     }
     void poll();
   };
@@ -131,8 +132,11 @@ export function TestEvents(): JSX.Element {
         <div style={css.cardTitle}>Single Event Injection</div>
         <div style={{ fontSize: '0.8rem', color: '#8a8fa3', marginBottom: '0.5rem' }}>
           Sends one event through the live pipeline — no scenario needed. Comments
-          &quot;blue&quot;/&quot;red&quot; make the viewer join a team; gifts only fire techniques for
-          viewers who already joined a team, and gift cooldowns apply.
+          &quot;blue&quot;/&quot;red&quot; make the viewer join that team, and every gift they send
+          goes to the team they last commented (commenting the other color switches
+          sides). Senders without any team comment get one assigned and a fighter
+          spawned. Gift cooldowns apply; the game only shakes when a technique
+          cannot launch because the sender's team has no fighters left.
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center' }}>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>

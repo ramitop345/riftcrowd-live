@@ -244,11 +244,11 @@ describe('Tier 2: Gift event pipeline flow', () => {
     expect(audioCommands.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('gift event produces CAMERA_IMPULSE when motion reduction is off', () => {
+  it('gift event produces no CAMERA_IMPULSE (shake is game-side failure feedback)', () => {
     const event = makeGiftEvent();
     const commands = processAndCollectCommands(app, event);
     const impulseCommands = commands.filter((c) => c.type === 'CAMERA_IMPULSE');
-    expect(impulseCommands.length).toBeGreaterThanOrEqual(1);
+    expect(impulseCommands.length).toBe(0);
   });
 
   it('gift VFX commands have correct schema version', () => {

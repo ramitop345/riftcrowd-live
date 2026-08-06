@@ -510,7 +510,7 @@ describe('Pipeline', () => {
     expect(result.commands[0]!.type).toBe('JOIN_FACTION');
   });
 
-  it('queue overflow: returns dropped when queue is full', () => {
+  it('queue overflow: inspection buffer is drop-oldest, delivery never blocked', () => {
     const small = new Pipeline({
       commandQueueCapacity: 1,
       rateLimitPerViewer: 100,
@@ -519,8 +519,12 @@ describe('Pipeline', () => {
     });
     small.process(makeRawEvent({ comment: '!end_round' })); // fills queue
     const result2 = small.process(makeRawEvent({ comment: '!pause' })); // overflows
-    expect(result2.dropped).toBe(true);
-    expect(result2.reason).toContain('overflow');
+    // The inspection queue (GET /commands) is drop-oldest once full; it must
+    // never block delivery to the game or mark events as dropped.
+    expect(result2.dropped).toBe(false);
+    expect(result2.commands.length).toBeGreaterThanOrEqual(1);
+    expect(small.commandQueue.size).toBe(1);
+    expect(small.getStats().queueOverflow).toBeGreaterThanOrEqual(1);
   });
 
   it('stats accumulation: processed, normalized, queued', () => {

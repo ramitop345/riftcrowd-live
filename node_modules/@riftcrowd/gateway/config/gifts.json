@@ -76,7 +76,7 @@
     "perUserMs": 3000,
     "perFactionMs": 2000,
     "abilityMs": 10000,
-    "cinematicMs": 30000,
+    "cinematicMs": 8000,
     "globalMs": 1000
   },
   "overflow": {

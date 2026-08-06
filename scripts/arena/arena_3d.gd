@@ -116,6 +116,10 @@ var _cinematic: CinematicDirector = null
 ## While true the arena hands the camera to the cinematic director and
 ## freezes its own shot selection.
 var _cinematic_active: bool = false
+## Queue for tier 2+ gifts waiting to play: [{faction: int, tier: int}, ...]
+## Priority: tier 3 (lion) > tier 2 (galaxy). When a cinematic finishes, the
+## highest-priority gift in the queue plays next.
+var _gift_queue: Array = []
 
 
 func _ready() -> void:
@@ -436,6 +440,7 @@ func _reset_director_state() -> void:
 	_cam_fov = _master_fov
 	_focus_timer = 0.0
 	_known_unit_ids.clear()
+	_gift_queue.clear()
 
 
 ## Cinematic push-in toward a world position (major technique, boss moments).
@@ -544,7 +549,10 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 				# immediately and lock the camera until the siege ends.
 				var parts: PackedStringArray = ev_str.split(":")
 				if parts.size() >= 2:
-					var target_wing: int = 1 if int(parts[1]) == 0 else 2
+					var sieging_faction: int = int(parts[1])
+					# The target is the ENEMY fortress: faction 0 sieges faction 1's fortress (wing 2),
+					# faction 1 sieges faction 0's fortress (wing 1).
+					var target_wing: int = 2 if sieging_faction == 0 else 1
 					_heat[target_wing] = float(_heat[target_wing]) + 6.0
 					_force_shot(target_wing)
 					_siege_lock_wing = target_wing
@@ -553,7 +561,10 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 				# so the camera can return to center. Let the wing cool fast.
 				var parts: PackedStringArray = ev_str.split(":")
 				if parts.size() >= 2:
-					var target_wing: int = 1 if int(parts[1]) == 0 else 2
+					# Same wing convention as siege_started: the locked wing is the
+					# ENEMY fortress of the recalling faction.
+					var recalled_faction: int = int(parts[1])
+					var target_wing: int = 2 if recalled_faction == 0 else 1
 					_heat[target_wing] = maxf(float(_heat[target_wing]) - 4.0, 0.0)
 					if _siege_lock_wing == target_wing:
 						_siege_lock_wing = -1
@@ -584,6 +595,9 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 ## faction plays its tier animation, staggered by id order so the squad
 ## ripples instead of snapping in unison. Tier 2+ hand the presentation to
 ## the cinematic director (galaxy meteor rain / lion supreme art).
+## If a cinematic is already playing, tier 2+ gifts are queued with priority:
+## tier 3 (lion) > tier 2 (galaxy). When the current cinematic finishes, the
+## highest-priority gift in the queue plays next.
 func _perform_technique_visuals(faction: int, tier: int) -> void:
 	print("[Cinematic] technique event: faction=%d tier=%d cinematic=%s playing=%s units=%d" % [
 		faction, tier,
@@ -591,7 +605,13 @@ func _perform_technique_visuals(faction: int, tier: int) -> void:
 		str(_cinematic.is_playing()) if _cinematic != null else "-",
 		_unit_visuals.size(),
 	])
-	if tier >= 2 and _cinematic != null and not _cinematic.is_playing():
+	if tier >= 2 and _cinematic != null:
+		# If a cinematic is already playing, queue this gift instead of cutting it.
+		if _cinematic.is_playing():
+			print("[Cinematic] tier %d gift queued (cinematic playing)" % tier)
+			_gift_queue.append({"faction": faction, "tier": tier})
+			return
+		# No cinematic playing — start this one immediately.
 		_cinematic_active = true
 		cinematic_started.emit()
 		if tier == 2:
@@ -637,10 +657,43 @@ func _perform_technique_visuals(faction: int, tier: int) -> void:
 
 ## A gift cutscene finished — hand the camera back to the arena director
 ## (its smoothing eases the shot back to the master framing) and let the
-## battle screen resume the sandbox.
+## battle screen resume the sandbox. If there are queued gifts, play the
+## highest-priority one next (tier 3 lion > tier 2 galaxy).
 func _on_cinematic_finished() -> void:
 	_cinematic_active = false
 	cinematic_finished.emit()
+	# Check the gift queue and play the next highest-priority gift.
+	_play_next_queued_gift()
+
+
+## Plays the next gift from the queue, sorted by priority (tier 3 > tier 2).
+## Called when a cinematic finishes and there may be pending gifts.
+func _play_next_queued_gift() -> void:
+	if _gift_queue.is_empty():
+		print("[Cinematic] queue empty, no gifts to play")
+		return
+	if _cinematic == null:
+		print("[Cinematic] ERROR: cinematic is null, cannot play queued gift")
+		return
+	if _cinematic.is_playing():
+		print("[Cinematic] ERROR: cinematic still playing when trying to play queued gift")
+		return
+	# Sort by tier descending (tier 3 lion first, then tier 2 galaxy).
+	_gift_queue.sort_custom(func(a, b): return int(a["tier"]) > int(b["tier"]))
+	var next_gift: Dictionary = _gift_queue.pop_front()
+	var faction: int = int(next_gift["faction"])
+	var tier: int = int(next_gift["tier"])
+	print("[Cinematic] playing queued tier %d gift for faction %d (queue size: %d)" % [tier, faction, _gift_queue.size()])
+	# Play the gift directly (bypass the queue check since we know no cinematic is playing).
+	_cinematic_active = true
+	cinematic_started.emit()
+	if tier == 2:
+		_cinematic.play_galaxy(faction, _unit_visuals)
+	else:
+		_cinematic.play_lion(faction, _unit_visuals)
+	# Verify the cinematic actually started.
+	if not _cinematic.is_playing():
+		print("[Cinematic] ERROR: cinematic failed to start after play_galaxy/play_lion call")
 
 
 ## Fortress victory beat: hard-cut to the loser's gate, run the collapse

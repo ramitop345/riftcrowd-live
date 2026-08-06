@@ -1148,6 +1148,12 @@ func _on_camera_impulse(cmd: Dictionary) -> void:
 	var metadata: Dictionary = cmd.get("metadata", {})
 	var intensity: float = float(metadata.get("intensity", 0.5))
 	var duration: float = float(metadata.get("duration", 0.3))
+	_apply_camera_shake(intensity, duration)
+
+
+## Shared camera shake (clamped) — used by CAMERA_IMPULSE commands and by the
+## gift-technique failure feedback.
+func _apply_camera_shake(intensity: float, duration: float) -> void:
 	# Clamp to reasonable values
 	intensity = clampf(intensity, 0.1, 2.0)
 	duration = clampf(duration, 0.1, 2.0)
@@ -1159,6 +1165,24 @@ func _on_camera_impulse(cmd: Dictionary) -> void:
 		_shake_intensity = intensity * 15.0
 		_shake_duration = duration
 		_shake_timer = duration
+
+
+## Resolves a team token to a sim faction index. blue = faction A (index 0),
+## red = faction B (index 1). Accepts the color keywords, the synthetic
+## faction_alpha/faction_beta ids and the current pack faction ids, so joins
+## and gift techniques always agree on which side a viewer fights for.
+## Unknown tokens (mock mode) alternate between sides.
+func _resolve_faction_index(token: String) -> int:
+	var t: String = token.to_lower()
+	var id_a: String = str(_faction_a.get("id", "")).to_lower()
+	var id_b: String = str(_faction_b.get("id", "")).to_lower()
+	if t in ["blue", "faction_alpha"] or (not id_a.is_empty() and t == id_a):
+		return 0
+	if t in ["red", "faction_beta"] or (not id_b.is_empty() and t == id_b):
+		return 1
+	var idx: int = _next_technique_faction
+	_next_technique_faction = 1 - _next_technique_faction
+	return idx
 
 
 func _on_gift_apply(cmd: Dictionary) -> void:
@@ -1182,17 +1206,7 @@ func _on_faction_join(cmd: Dictionary) -> void:
 	var metadata: Dictionary = cmd.get("metadata", {}) if typeof(cmd.get("metadata", {})) == TYPE_DICTIONARY else {}
 	var token: String = str(metadata.get("faction", str(cmd.get("factionId", "")))).to_lower()
 	# Resolve the requested side: blue = faction A (index 0), red = faction B (index 1).
-	var faction_index: int = -1
-	var id_a: String = str(_faction_a.get("id", "")).to_lower()
-	var id_b: String = str(_faction_b.get("id", "")).to_lower()
-	if token in ["blue", "faction_alpha"] or (not id_a.is_empty() and token == id_a):
-		faction_index = 0
-	elif token in ["red", "faction_beta"] or (not id_b.is_empty() and token == id_b):
-		faction_index = 1
-	else:
-		# Unknown keyword (mock mode) — alternate between sides.
-		faction_index = _next_technique_faction
-		_next_technique_faction = 1 - _next_technique_faction
+	var faction_index: int = _resolve_faction_index(token)
 	# Per-viewer cap: the same user may add at most MAX_JOINS_PER_VIEWER
 	# characters per game (every red/blue comment spawns one new character).
 	var joins: int = int(_join_counts.get(viewer_id, 0))
@@ -1255,18 +1269,23 @@ func _on_cast_technique(cmd: Dictionary) -> void:
 	var metadata: Dictionary = cmd.get("metadata", {}) if typeof(cmd.get("metadata", {})) == TYPE_DICTIONARY else {}
 	var tier: int = int(metadata.get("techniqueTier", 1))
 	var faction_id: String = str(cmd.get("factionId", ""))
-	var faction_index: int = -1
-	if faction_id == str(_faction_a.get("id", "")):
-		faction_index = 0
-	elif faction_id == str(_faction_b.get("id", "")):
-		faction_index = 1
-	else:
-		# Unknown faction (mock mode / free gifts) — alternate between sides.
-		faction_index = _next_technique_faction
-		_next_technique_faction = 1 - _next_technique_faction
+	var faction_index: int = _resolve_faction_index(faction_id)
 	var viewer: String = str(cmd.get("displayName", cmd.get("viewerId", "Viewer")))
 	var gift_name: String = str(metadata.get("giftName", "a gift"))
 	print("[Technique] CAST_TECHNIQUE received: tier=%d faction_id='%s' -> sim faction %d (%s by %s)" % [tier, faction_id, faction_index, gift_name, viewer])
+	# Real-time caster gate: a technique is performed by the sender's living
+	# fighters. If the team has nobody left, the gift cannot launch — play the
+	# camera-shake failure feedback instead. The check happens at trigger time
+	# against the authoritative sim state, so a character that joins later
+	# makes the technique available again immediately.
+	if _presenter != null and _presenter.sandbox != null and _presenter.sandbox.world != null:
+		var world: SimWorld = _presenter.sandbox.world
+		if world.count_alive(faction_index) == 0:
+			var side_name: String = "BLUE" if faction_index == 0 else "RED"
+			_spotlight_label.text = "%s's %s can't launch — no %s fighters alive!" % [viewer, gift_name, side_name]
+			print("[Technique] tier=%d blocked: faction %d has no living casters" % [tier, faction_index])
+			_apply_camera_shake(0.6, 0.4)
+			return
 	_spotlight_label.text = "%s unleashed a tier %d technique (%s)!" % [viewer, tier, gift_name]
 	# Announcer callouts for the big techniques (throttled so gift spam
 	# never stacks voice lines).

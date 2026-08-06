@@ -173,6 +173,8 @@ export interface MockInjectResponse {
   commandTypes: string[];
   dropped: boolean;
   reason: string | null;
+  /** Team auto-assigned to a gift sender without one (mock inject only). */
+  autoJoined?: string | null;
 }
 
 export interface OkResponse {

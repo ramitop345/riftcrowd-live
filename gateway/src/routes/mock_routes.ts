@@ -64,6 +64,8 @@ interface MockState {
   eventsEmitted: number;
   commandsProduced: number;
   eventsInjected: number;
+  /** Alternates the auto-assigned team for gift senders without a team. */
+  autoJoinToggle: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -87,6 +89,7 @@ export function registerMockRoutes(
     eventsEmitted: 0,
     commandsProduced: 0,
     eventsInjected: 0,
+    autoJoinToggle: 0,
   };
 
   // Data directory for recordings
@@ -252,6 +255,31 @@ export function registerMockRoutes(
     const event = scheduled.event;
     event.id = `evt_inject_${randomUUID()}`;
 
+    // Team semantics: a viewer's gifts ALWAYS go to the team they last
+    // commented (red/blue) — the join fallback below keeps the registry in
+    // sync, so commenting the other color switches sides for future gifts.
+    // Only a sender who never commented any team gets a one-time random
+    // pick here (alternating for balance). A gateway restart wipes the
+    // in-memory join state, which is why this also matters for the
+    // dashboard gift buttons. When a team is picked, a synthetic join is
+    // run through the pipeline FIRST so the JOIN_FACTION command spawns the
+    // sender's fighter before the technique arrives — otherwise the freshly
+    // assigned team has no living units and the gift would instantly fail.
+    // Real provider events are unaffected: GiftRule still requires an
+    // actual chat join there.
+    let autoJoined: string | null = null;
+    if (kind === 'gift' && director) {
+      const senderProfile = director.viewerRegistry.getOrCreate(viewerId, viewerId, displayName);
+      if (!senderProfile.isHidden && !senderProfile.factionId) {
+        autoJoined = state.autoJoinToggle % 2 === 0 ? 'blue' : 'red';
+        state.autoJoinToggle++;
+        senderProfile.factionId = autoJoined;
+        const joinScheduled = makeChatEvent({ timeMs, viewerId, displayName, comment: autoJoined });
+        joinScheduled.event.id = `evt_inject_${randomUUID()}`;
+        pipeline.process(joinScheduled.event);
+      }
+    }
+
     const result = pipeline.process(event);
 
     // Chat also feeds the director (mode votes, faction joins bookkeeping),
@@ -289,6 +317,7 @@ export function registerMockRoutes(
       commandTypes: result.commands.map((c) => c.type),
       dropped: result.dropped,
       reason: result.reason ?? null,
+      autoJoined,
     });
   });
 

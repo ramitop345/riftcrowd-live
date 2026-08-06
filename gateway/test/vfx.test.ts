@@ -413,7 +413,7 @@ describe('VFXOrchestrator', () => {
     expect(types).toContain('SUPPORTER_CALLOUT');
   });
 
-  it('gift event produces flash + camera impulse', () => {
+  it('gift event produces flash but no camera impulse', () => {
     const result = orchestrator.triggerVFX(
       makeEvent('gift', {
         gift: {
@@ -425,7 +425,9 @@ describe('VFXOrchestrator', () => {
     );
     const types = result.commands.map((c) => c.type);
     expect(types).toContain('SPAWN_VFX');
-    expect(types).toContain('CAMERA_IMPULSE');
+    // Camera shake is no longer emitted per gift: the game produces it only
+    // as failure feedback when a technique has no living casters.
+    expect(types).not.toContain('CAMERA_IMPULSE');
   });
 
   it('cinematic gift adds ability sequence', () => {
@@ -438,8 +440,8 @@ describe('VFXOrchestrator', () => {
         },
       }),
     );
-    // Should have flash + camera + ability particle
-    expect(result.commands.length).toBeGreaterThanOrEqual(3);
+    // Should have flash + ability particle (camera impulse no longer emitted)
+    expect(result.commands.length).toBeGreaterThanOrEqual(2);
   });
 
   it('subscription produces overlay + spotlight + trail', () => {
@@ -462,18 +464,20 @@ describe('VFXOrchestrator', () => {
     expect(particleCount).toBe(10);
   });
 
-  it('motion reduction disables camera impulse for gifts', () => {
+  it('gifts never emit camera impulse regardless of motion reduction', () => {
     const motionOrch = new VFXOrchestrator({
       ...VFX_DEFAULTS,
       motionReduction: true,
     });
-    const result = motionOrch.triggerVFX(
-      makeEvent('gift', {
-        gift: { id: 'gift_001', name: 'Rose', repeatCount: 1 },
-      }),
-    );
-    const impulseCmd = result.commands.find((c) => c.type === 'CAMERA_IMPULSE');
-    expect(impulseCmd).toBeUndefined();
+    for (const orch of [orchestrator, motionOrch]) {
+      const result = orch.triggerVFX(
+        makeEvent('gift', {
+          gift: { id: 'gift_001', name: 'Rose', repeatCount: 1 },
+        }),
+      );
+      const impulseCmd = result.commands.find((c) => c.type === 'CAMERA_IMPULSE');
+      expect(impulseCmd).toBeUndefined();
+    }
   });
 
   it('motion reduction shortens trail duration for shares', () => {
